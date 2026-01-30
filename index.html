@@ -3690,13 +3690,13 @@ function MainApp() {
 
   // Main app
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50">
       <Header
         onMenuOpen={() => setMenuOpen(true)}
         pageTitle={pageTitles[currentPage] || 'GATHER'}
         onAddInteraction={openLogModal}
       />
-      
+
       <SlideMenu
         isOpen={menuOpen}
         onClose={() => setMenuOpen(false)}
@@ -3705,14 +3705,14 @@ function MainApp() {
       />
 
       {/* Page content with padding for fixed header */}
-      <div className="flex-1 overflow-auto pt-16">
+      <main className="pt-16 pb-8">
         {currentPage === 'dashboard' && <DashboardPage onLogInteraction={openLogModal} onSelectFellow={handleSelectFellow} />}
         {currentPage === 'directory' && <DirectoryPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'search' && <SearchPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'activity' && <ActivityPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'cohort-comm' && <CohortCommunicationPage />}
         {currentPage === 'settings' && <SettingsPage />}
-      </div>
+      </main>
       
       <FellowProfileModal 
         fellow={selectedFellow} 
