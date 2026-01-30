@@ -1,0 +1,3376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="GATHER">
+  <meta name="theme-color" content="#E87722">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <title>GATHER</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwindcss.config = {
+      theme: {
+        extend: {
+          colors: {
+            goldin: {
+              orange: '#E87722',
+              'orange-dark': '#D56A1C',
+              gray: '#6B7280',
+              'gray-dark': '#374151',
+            }
+          },
+          fontFamily: {
+            sans: ['DM Sans', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+  
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { 
+      font-family: 'DM Sans', system-ui, sans-serif;
+      overscroll-behavior: none;
+    }
+    
+    /* Safe area for notch */
+    .safe-top { padding-top: env(safe-area-inset-top); }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+    
+    /* Smooth page transitions */
+    .page { 
+      position: absolute; 
+      inset: 0; 
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    .page-enter { opacity: 0; transform: translateX(20px); }
+    .page-exit { opacity: 0; transform: translateX(-20px); }
+    
+    /* Bottom sheet */
+    .bottom-sheet {
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .bottom-sheet.open { transform: translateY(0); }
+    
+    /* Slide menu */
+    .slide-menu {
+      transform: translateX(-100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .slide-menu.open { transform: translateX(0); }
+    
+    /* Activity item animation */
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .activity-item { animation: slideUp 0.4s ease forwards; }
+    
+    /* Onboarding animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.5s ease forwards; }
+    .fade-in-delay-1 { animation-delay: 0.1s; opacity: 0; }
+    .fade-in-delay-2 { animation-delay: 0.2s; opacity: 0; }
+    .fade-in-delay-3 { animation-delay: 0.3s; opacity: 0; }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 0; background: transparent; }
+    
+    /* Status colors */
+    .status-green { background: #10B981; }
+    .status-yellow { background: #F59E0B; }
+    .status-red { background: #EF4444; }
+    
+    /* Pull to refresh indicator */
+    .refresh-indicator {
+      transition: transform 0.2s ease;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 overflow-x-hidden">
+
+<div id="root"></div>
+
+<!-- React + Supabase -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback, createContext, useContext } = React;
+
+// ============================================
+// CONFIG & SUPABASE
+// ============================================
+const SUPABASE_URL = 'https://pwazurumpzydxyppbvee.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3YXp1cnVtcHp5ZHh5cHBidmVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MjM3MDUsImV4cCI6MjA4NTA5OTcwNX0.iGLmSpTPM84lMGGizSfBnkDCvpMZaJVaFhcRJ9cYDrs';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// GATHER Logo from Supabase Storage
+const GATHER_LOGO = 'https://pwazurumpzydxyppbvee.supabase.co/storage/v1/object/public/Photos/Gather%20logomark%20square.png';
+const GATHER_LOGO_FULL = 'https://pwazurumpzydxyppbvee.supabase.co/storage/v1/object/public/Photos/Gather%20-%20Logo.png';
+
+// ============================================
+// PERMISSION SYSTEM
+// ============================================
+const ROLES = {
+  SUPER_ADMIN: 'super_admin',
+  ADMIN: 'admin',
+  MANAGER: 'manager',
+  TEAM: 'team',
+  FELLOW: 'fellow',
+  VIEWER: 'viewer',
+};
+
+// Role hierarchy for permission checks (higher number = more permissions)
+const ROLE_LEVELS = {
+  [ROLES.VIEWER]: 0,
+  [ROLES.FELLOW]: 1,
+  [ROLES.TEAM]: 2,
+  [ROLES.MANAGER]: 3,
+  [ROLES.ADMIN]: 4,
+  [ROLES.SUPER_ADMIN]: 5,
+};
+
+// Role display labels and colors
+const ROLE_CONFIG = {
+  [ROLES.SUPER_ADMIN]: { label: 'Super Admin', color: 'bg-red-500', textColor: 'text-red-700' },
+  [ROLES.ADMIN]: { label: 'Admin', color: 'bg-purple-500', textColor: 'text-purple-700' },
+  [ROLES.MANAGER]: { label: 'Manager', color: 'bg-blue-500', textColor: 'text-blue-700' },
+  [ROLES.TEAM]: { label: 'Staff', color: 'bg-green-500', textColor: 'text-green-700' },
+  [ROLES.FELLOW]: { label: 'Fellow', color: 'bg-goldin-orange', textColor: 'text-orange-700' },
+  [ROLES.VIEWER]: { label: 'Guest', color: 'bg-gray-400', textColor: 'text-gray-600' },
+};
+
+// Check if user has at least the required role level
+function hasPermission(userRole, requiredRole) {
+  return (ROLE_LEVELS[userRole] || 0) >= (ROLE_LEVELS[requiredRole] || 0);
+}
+
+// Determine user role based on email
+async function determineUserRole(email) {
+  if (!email) return ROLES.VIEWER;
+
+  const lowerEmail = email.toLowerCase();
+
+  try {
+    // 1. Check explicit role assignment in user_roles table
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('email', lowerEmail)
+      .single();
+
+    if (roleData?.role) return roleData.role;
+
+    // 2. Check if user is a fellow
+    const { data: fellowData } = await supabase
+      .from('fellows')
+      .select('id')
+      .eq('email', lowerEmail)
+      .single();
+
+    if (fellowData) return ROLES.FELLOW;
+
+    // 3. Check domain for staff
+    if (lowerEmail.endsWith('@goldininstitute.org') ||
+        lowerEmail.endsWith('@chicagopeacefellows.org')) {
+      return ROLES.TEAM;
+    }
+
+    // 4. Default to viewer
+    return ROLES.VIEWER;
+  } catch (err) {
+    console.error('Error determining user role:', err);
+    // Fallback: check domain
+    if (lowerEmail.endsWith('@goldininstitute.org') ||
+        lowerEmail.endsWith('@chicagopeacefellows.org')) {
+      return ROLES.TEAM;
+    }
+    return ROLES.VIEWER;
+  }
+}
+
+// ============================================
+// APP CONTEXT
+// ============================================
+const AppContext = createContext();
+
+function AppProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(ROLES.VIEWER);
+  const [isOnboarded, setIsOnboarded] = useState(false);
+  const [fellows, setFellows] = useState([]);
+  const [interactions, setInteractions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notificationSettings, setNotificationSettings] = useState({
+    enabled: false,
+    dailySummary: true,
+    newActivity: true,
+    overdueAlerts: true,
+    newsAlerts: true,
+  });
+
+  // Check Supabase auth state on load
+  useEffect(() => {
+    const initAuth = async () => {
+      // Check for existing session
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        const userData = {
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+          avatar: session.user.user_metadata?.avatar_url,
+        };
+        setUser(userData);
+        localStorage.setItem('gather_user', JSON.stringify(userData));
+
+        // Fetch user role
+        const role = await determineUserRole(session.user.email);
+        setUserRole(role);
+        localStorage.setItem('gather_user_role', role);
+      } else {
+        // Check for saved guest/viewer role
+        const savedRole = localStorage.getItem('gather_user_role');
+        if (savedRole) setUserRole(savedRole);
+      }
+
+      // Check onboarding status
+      const savedOnboarded = localStorage.getItem('gather_onboarded');
+      const savedNotifs = localStorage.getItem('gather_notifications');
+
+      if (savedOnboarded) setIsOnboarded(true);
+      if (savedNotifs) setNotificationSettings(JSON.parse(savedNotifs));
+
+      setLoading(false);
+    };
+
+    initAuth();
+    
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth event:', event);
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        const userData = {
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+          avatar: session.user.user_metadata?.avatar_url,
+        };
+        setUser(userData);
+        localStorage.setItem('gather_user', JSON.stringify(userData));
+
+        // Fetch user role
+        const role = await determineUserRole(session.user.email);
+        setUserRole(role);
+        localStorage.setItem('gather_user_role', role);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setUserRole(ROLES.VIEWER);
+        setIsOnboarded(false);
+        localStorage.removeItem('gather_user');
+        localStorage.removeItem('gather_user_role');
+        localStorage.removeItem('gather_onboarded');
+      }
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const login = async (userData, skipRoleLookup = false) => {
+    setUser(userData);
+    localStorage.setItem('gather_user', JSON.stringify(userData));
+
+    // For skip/guest users, set viewer role immediately
+    if (skipRoleLookup) {
+      setUserRole(ROLES.VIEWER);
+      localStorage.setItem('gather_user_role', ROLES.VIEWER);
+    } else if (userData.email) {
+      const role = await determineUserRole(userData.email);
+      setUserRole(role);
+      localStorage.setItem('gather_user_role', role);
+    }
+  };
+  
+  const loginWithGoogle = async () => {
+    // Use explicit production URL for OAuth redirect
+    const redirectUrl = window.location.hostname === 'localhost' 
+      ? window.location.origin 
+      : 'https://gathertracker.netlify.app';
+    
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl,
+        queryParams: {
+          hd: 'goldininstitute.org', // Restrict to Goldin Institute domain
+        }
+      }
+    });
+    if (error) {
+      console.error('Google login error:', error);
+      alert('Login failed: ' + error.message);
+    }
+  };
+
+  const completeOnboarding = (notifSettings) => {
+    setNotificationSettings(notifSettings);
+    setIsOnboarded(true);
+    localStorage.setItem('gather_onboarded', 'true');
+    localStorage.setItem('gather_notifications', JSON.stringify(notifSettings));
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setUserRole(ROLES.VIEWER);
+    setIsOnboarded(false);
+    localStorage.removeItem('gather_user');
+    localStorage.removeItem('gather_user_role');
+    localStorage.removeItem('gather_onboarded');
+  };
+
+  // Permission check helper
+  const canAccess = (requiredRole) => hasPermission(userRole, requiredRole);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [fellowsRes, interactionsRes] = await Promise.all([
+        supabase.from('fellows').select('*').eq('status', 'Alumni'),
+        supabase.from('interactions').select('*').order('created_at', { ascending: false }).limit(50)
+      ]);
+      
+      if (fellowsRes.data) setFellows(fellowsRes.data);
+      if (interactionsRes.data) setInteractions(interactionsRes.data);
+    } catch (err) {
+      console.error('Fetch error:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user && isOnboarded) {
+      fetchData();
+      
+      // Real-time subscription
+      const sub = supabase
+        .channel('all-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions' }, fetchData)
+        .subscribe();
+      
+      return () => sub.unsubscribe();
+    }
+  }, [user, isOnboarded, fetchData]);
+
+  return (
+    <AppContext.Provider value={{
+      user, userRole, login, loginWithGoogle, logout, canAccess,
+      isOnboarded, completeOnboarding,
+      fellows, interactions, fetchData,
+      notificationSettings, setNotificationSettings,
+      loading
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+// ============================================
+// HELPERS
+// ============================================
+function getContactStatus(lastContact) {
+  if (!lastContact) return { color: 'red', label: 'Overdue', days: null };
+  const days = Math.floor((Date.now() - new Date(lastContact)) / (1000*60*60*24));
+  if (days <= 30) return { color: 'green', label: 'Recent', days };
+  if (days <= 90) return { color: 'yellow', label: 'Follow-up', days };
+  return { color: 'red', label: 'Overdue', days };
+}
+
+function getTimeAgo(date) {
+  const mins = Math.floor((Date.now() - new Date(date)) / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(date).toLocaleDateString();
+}
+
+function getInteractionIcon(type) {
+  const icons = {
+    'Call': '📞', 'Email': '📧', 'Meeting': '🤝', 
+    'Note': '📝', 'Event': '🎉', 'Site Visit': '🏠',
+    'News Mention': '📰'
+  };
+  return icons[type] || '💬';
+}
+
+function getProgramBadge(program) {
+  const badges = {
+    'CPF': { label: 'CPF', bg: 'bg-blue-500' },
+    'GGF': { label: 'GGF', bg: 'bg-green-500' },
+    'ESP': { label: 'ESP', bg: 'bg-purple-500' },
+  };
+  return badges[program] || { label: program, bg: 'bg-gray-500' };
+}
+
+// ============================================
+// ONBOARDING SCREENS
+// ============================================
+function WelcomeScreen({ onNext }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-8 pb-32 relative overflow-hidden" style={{ backgroundColor: '#000000' }}>
+      <div className="fade-in text-center relative z-10">
+        {/* Large logo - clean, no glow */}
+        <div className="w-56 h-56 mx-auto mb-10">
+          <img 
+            src={GATHER_LOGO}
+            alt="GATHER" 
+            className="w-full h-full object-contain"
+          />
+        </div>
+        
+        <p className="text-gray-400 text-xl mb-16">Alumni Network CRM</p>
+        
+        <button 
+          onClick={onNext}
+          className="w-full max-w-xs bg-goldin-orange text-white font-bold py-5 px-10 rounded-2xl active:scale-95 transition-all text-lg"
+        >
+          Get Started
+        </button>
+        
+        <p className="text-gray-600 text-sm mt-10">Goldin Institute Staff Portal</p>
+      </div>
+    </div>
+  );
+}
+
+function LoginScreen({ onLogin }) {
+  const { loginWithGoogle } = useContext(AppContext);
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    await loginWithGoogle();
+    // Note: Page will redirect, so no need to setGoogleLoading(false)
+  };
+
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    if (!email || !email.includes('@')) {
+      alert('Please enter a valid email address');
+      return;
+    }
+    setLoading(true);
+
+    // Send magic link email (works for staff and fellows with any email)
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: window.location.origin,
+      }
+    });
+
+    if (error) {
+      alert('Error: ' + error.message);
+      setLoading(false);
+    } else {
+      alert('Check your email for a login link!');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col p-6 pb-32 bg-white safe-top">
+      <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
+        <div className="fade-in">
+          <div className="w-24 h-24 mb-8">
+            <img 
+              src={GATHER_LOGO}
+              alt="GATHER" 
+              className="w-full h-full object-contain"
+            />
+          </div>
+          
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome back</h1>
+          <p className="text-gray-500 mb-8">Sign in with Google or email magic link</p>
+          
+          {/* Google OAuth Button */}
+          <button 
+            onClick={handleGoogleLogin}
+            disabled={googleLoading}
+            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 py-4 px-6 rounded-2xl font-medium text-gray-700 hover:border-gray-300 active:scale-98 transition mb-6 disabled:opacity-50"
+          >
+            {googleLoading ? (
+              <span>Connecting...</span>
+            ) : (
+              <>
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Sign in with Google
+              </>
+            )}
+          </button>
+          
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-white text-gray-400">or use email magic link</span>
+            </div>
+          </div>
+          
+          <form onSubmit={handleEmailLogin}>
+            <input
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border-2 border-gray-200 rounded-2xl px-4 py-4 text-gray-900 placeholder-gray-400 focus:border-goldin-orange focus:outline-none mb-4"
+              required
+            />
+            <p className="text-xs text-gray-400 mb-4 -mt-2">Staff & fellows can sign in with any email</p>
+            <button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-goldin-orange text-white font-semibold py-4 px-6 rounded-2xl active:scale-98 transition disabled:opacity-50"
+            >
+              {loading ? 'Sending link...' : 'Send Login Link'}
+            </button>
+          </form>
+          
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <button
+              onClick={() => onLogin({ email: 'guest@gathertracker.app', name: 'Guest' }, true)}
+              className="w-full bg-gray-100 text-gray-700 font-semibold py-4 px-6 rounded-2xl active:scale-95 transition"
+            >
+              Skip for now →
+            </button>
+            <p className="text-xs text-gray-400 text-center mt-3">View public directory without signing in</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotificationSetupScreen({ onComplete }) {
+  const [settings, setSettings] = useState({
+    enabled: false,
+    dailySummary: true,
+    newActivity: true,
+    overdueAlerts: true,
+    newsAlerts: true,
+  });
+  const [permissionAsked, setPermissionAsked] = useState(false);
+
+  const requestPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setSettings(s => ({ ...s, enabled: permission === 'granted' }));
+      setPermissionAsked(true);
+    } else {
+      // Notifications not supported, skip to settings
+      setPermissionAsked(true);
+    }
+  };
+
+  const toggleSetting = (key) => {
+    setSettings(s => ({ ...s, [key]: !s[key] }));
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col p-6 pb-32 bg-white safe-top overflow-auto">
+      <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
+        <div className="fade-in">
+          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mb-8">
+            <span className="text-3xl">🔔</span>
+          </div>
+          
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Stay in the loop</h1>
+          <p className="text-gray-500 mb-8">Get notified about important updates and never miss a follow-up</p>
+          
+          {!permissionAsked ? (
+            <>
+              <div className="bg-gray-50 rounded-2xl p-5 mb-6">
+                <div className="flex items-start gap-4 mb-4">
+                  <span className="text-2xl">📊</span>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Daily Summary</h3>
+                    <p className="text-sm text-gray-500">Morning overview of your priorities</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4 mb-4">
+                  <span className="text-2xl">⚡</span>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Activity Alerts</h3>
+                    <p className="text-sm text-gray-500">When team members log interactions</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-2xl">📰</span>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">News Mentions</h3>
+                    <p className="text-sm text-gray-500">When fellows appear in the news</p>
+                  </div>
+                </div>
+              </div>
+              
+              <button 
+                onClick={requestPermission}
+                className="w-full bg-goldin-orange text-white font-semibold py-5 px-6 rounded-2xl active:scale-95 transition mb-4"
+              >
+                Enable Notifications
+              </button>
+              <button 
+                onClick={() => onComplete(settings)}
+                className="w-full bg-gray-100 text-gray-600 font-semibold py-5 px-6 rounded-2xl active:scale-95 transition"
+              >
+                Maybe later
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="space-y-3 mb-8">
+                {[
+                  { key: 'dailySummary', label: 'Daily Summary', desc: '8am each morning', icon: '📊' },
+                  { key: 'newActivity', label: 'Team Activity', desc: 'When interactions are logged', icon: '⚡' },
+                  { key: 'overdueAlerts', label: 'Overdue Alerts', desc: 'When follow-ups become overdue', icon: '🔴' },
+                  { key: 'newsAlerts', label: 'News Mentions', desc: 'When fellows are in the news', icon: '📰' },
+                ].map(item => (
+                  <button
+                    key={item.key}
+                    onClick={() => toggleSetting(item.key)}
+                    className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition ${
+                      settings[item.key] ? 'border-goldin-orange bg-orange-50' : 'border-gray-200'
+                    }`}
+                  >
+                    <span className="text-2xl">{item.icon}</span>
+                    <div className="flex-1 text-left">
+                      <h3 className="font-semibold text-gray-900">{item.label}</h3>
+                      <p className="text-sm text-gray-500">{item.desc}</p>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                      settings[item.key] ? 'bg-goldin-orange border-goldin-orange' : 'border-gray-300'
+                    }`}>
+                      {settings[item.key] && (
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              
+              <button 
+                onClick={() => onComplete(settings)}
+                className="w-full bg-goldin-orange text-white font-semibold py-5 px-6 rounded-2xl active:scale-95 transition"
+              >
+                Continue to GATHER
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// MAIN APP COMPONENTS
+// ============================================
+function StatusPill({ color, count, active, onClick }) {
+  const colors = {
+    green: { bg: 'bg-green-500', text: 'text-green-700', border: 'border-green-200', lightBg: 'bg-green-50' },
+    yellow: { bg: 'bg-yellow-500', text: 'text-yellow-700', border: 'border-yellow-200', lightBg: 'bg-yellow-50' },
+    red: { bg: 'bg-red-500', text: 'text-red-700', border: 'border-red-200', lightBg: 'bg-red-50' },
+  };
+  const c = colors[color];
+  
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+        active 
+          ? `${c.bg} text-white shadow-md` 
+          : `${c.lightBg} ${c.text} border ${c.border}`
+      }`}
+    >
+      <span className={`w-2 h-2 rounded-full ${active ? 'bg-white' : c.bg}`}></span>
+      {count}
+    </button>
+  );
+}
+
+// Consistent filter bar used across all pages
+function StatusFilterBar({ statusFilter, setStatusFilter, statusCounts }) {
+  return (
+    <div className="flex gap-2 mb-4">
+      <button
+        onClick={() => setStatusFilter('')}
+        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+          !statusFilter 
+            ? 'bg-gray-900 text-white shadow-md' 
+            : 'bg-gray-100 text-gray-700 border border-gray-200'
+        }`}
+      >
+        All ({statusCounts.green + statusCounts.yellow + statusCounts.red})
+      </button>
+      <StatusPill 
+        color="green" 
+        count={statusCounts.green} 
+        active={statusFilter === 'green'} 
+        onClick={() => setStatusFilter(statusFilter === 'green' ? '' : 'green')} 
+      />
+      <StatusPill 
+        color="yellow" 
+        count={statusCounts.yellow} 
+        active={statusFilter === 'yellow'} 
+        onClick={() => setStatusFilter(statusFilter === 'yellow' ? '' : 'yellow')} 
+      />
+      <StatusPill 
+        color="red" 
+        count={statusCounts.red} 
+        active={statusFilter === 'red'} 
+        onClick={() => setStatusFilter(statusFilter === 'red' ? '' : 'red')} 
+      />
+    </div>
+  );
+}
+
+function Header({ onMenuOpen, pageTitle, onAddInteraction }) {
+  const { userRole, canAccess } = useContext(AppContext);
+  const roleConfig = ROLE_CONFIG[userRole] || ROLE_CONFIG[ROLES.VIEWER];
+
+  return (
+    <header className="bg-white border-b border-gray-100 safe-top sticky top-0 z-40">
+      <div className="flex items-center gap-3 px-4 py-3">
+        {/* Menu Button */}
+        <button
+          onClick={onMenuOpen}
+          className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-gray-100 transition"
+        >
+          <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        {/* Logo */}
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg overflow-hidden">
+            <img src={GATHER_LOGO} alt="GATHER" className="w-full h-full object-contain" />
+          </div>
+        </div>
+
+        {/* Page Title + Role Badge */}
+        <div className="flex-1 flex items-center gap-2">
+          <h1 className="text-lg font-bold text-gray-900">{pageTitle}</h1>
+          <span className={`text-xs px-2 py-0.5 rounded-full text-white ${roleConfig.color}`}>
+            {roleConfig.label}
+          </span>
+        </div>
+
+        {/* Add Interaction Button - only show for team+ */}
+        {onAddInteraction && canAccess(ROLES.TEAM) && (
+          <button
+            onClick={onAddInteraction}
+            className="w-11 h-11 flex items-center justify-center rounded-xl text-white active:scale-95 transition"
+            style={{
+              backgroundColor: '#E87722',
+              boxShadow: '0 4px 12px rgba(232, 119, 34, 0.5)'
+            }}
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
+  const { user, userRole, logout, notificationSettings, canAccess } = useContext(AppContext);
+  const roleConfig = ROLE_CONFIG[userRole] || ROLE_CONFIG[ROLES.VIEWER];
+  
+  // Menu items with optional role requirements
+  const menuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: '🏠', minRole: ROLES.TEAM },
+    { id: 'directory', label: 'Directory', icon: '👥' }, // Public
+    { id: 'search', label: 'Search', icon: '🔍' }, // Public
+    { id: 'activity', label: 'Activity', icon: '📋', minRole: ROLES.TEAM },
+    { id: 'cohort-comm', label: 'Cohort Communication', icon: '📧', minRole: ROLES.TEAM },
+  ].filter(item => !item.minRole || canAccess(item.minRole));
+  
+  // Desktop links - only show for staff
+  const desktopLinks = canAccess(ROLES.TEAM) ? [
+    { url: 'directory.html', label: 'Desktop Directory', icon: '🖥️' },
+    { url: 'dashboard.html', label: 'Desktop Dashboard', icon: '📊' },
+  ] : [];
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div 
+        className={`fixed inset-0 bg-black/40 z-50 transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+      
+      {/* Menu */}
+      <div className={`slide-menu fixed inset-y-0 left-0 w-72 bg-white z-50 shadow-2xl ${isOpen ? 'open' : ''}`}>
+        <div className="safe-top" />
+        
+        {/* User */}
+        <div className="p-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-goldin-orange rounded-xl flex items-center justify-center text-white font-bold text-lg">
+              {user?.name?.split(' ').map(n => n[0]).join('') || '?'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-900">{user?.name || 'Guest'}</h3>
+              <p className="text-sm text-gray-500 truncate">{user?.email}</p>
+              <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full text-white ${roleConfig.color}`}>
+                {roleConfig.label}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Nav */}
+        <nav className="p-3">
+          {menuItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => { onNavigate(item.id); onClose(); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                currentPage === item.id 
+                  ? 'bg-goldin-orange/10 text-goldin-orange' 
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <span className="text-xl">{item.icon}</span>
+              <span className="font-medium">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        
+        {desktopLinks.length > 0 && (
+          <>
+            <div className="border-t border-gray-100 mx-3" />
+
+            {/* Desktop Views */}
+            <nav className="p-3">
+              <p className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Desktop Views</p>
+              {desktopLinks.map(item => (
+                <a
+                  key={item.url}
+                  href={item.url}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-100 transition"
+                >
+                  <span className="text-xl">{item.icon}</span>
+                  <span className="font-medium">{item.label}</span>
+                  <svg className="w-4 h-4 ml-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              ))}
+            </nav>
+          </>
+        )}
+        
+        <div className="border-t border-gray-100 mx-3" />
+        
+        {/* Settings */}
+        <nav className="p-3">
+          <button
+            onClick={() => { onNavigate('settings'); onClose(); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+              currentPage === 'settings' 
+                ? 'bg-goldin-orange/10 text-goldin-orange' 
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            <span className="text-xl">⚙️</span>
+            <span className="font-medium">Settings</span>
+          </button>
+          
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition"
+          >
+            <span className="text-xl">🚪</span>
+            <span className="font-medium">Sign Out</span>
+          </button>
+        </nav>
+        
+        {/* Version */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 text-center text-xs text-gray-400 safe-bottom">
+          GATHER v2.0 • Goldin Institute
+        </div>
+      </div>
+    </>
+  );
+}
+
+function QuickActionButton({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="fixed bottom-6 right-4 w-16 h-16 bg-goldin-orange text-white rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-95 transition"
+      style={{ 
+        marginBottom: 'env(safe-area-inset-bottom)',
+        boxShadow: '0 8px 30px rgba(232, 119, 34, 0.5)'
+      }}
+    >
+      <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+      </svg>
+    </button>
+  );
+}
+
+function SearchBar({ value, onChange, placeholder = "Search..." }) {
+  return (
+    <div className="relative">
+      <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full pl-12 pr-4 py-3 bg-gray-100 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+      />
+    </div>
+  );
+}
+
+function ActivityItem({ activity, fellow, onClick }) {
+  if (!fellow) return null;
+  
+  const icon = getInteractionIcon(activity.interaction_type);
+  const badge = getProgramBadge(fellow.program);
+  const time = getTimeAgo(activity.created_at);
+  const staffName = activity.staff_email?.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') || 'Staff';
+  
+  return (
+    <button 
+      onClick={() => onClick && onClick(fellow)}
+      className="activity-item w-full text-left flex gap-3 p-4 bg-white rounded-2xl shadow-sm border border-gray-100 mb-3 active:bg-gray-50 transition"
+    >
+      {/* Photo */}
+      <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+        {fellow.photo_url ? (
+          <img src={fellow.photo_url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-gray-400 text-lg font-semibold">
+            {fellow.first_name?.[0]}{fellow.last_name?.[0]}
+          </div>
+        )}
+      </div>
+      
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="font-semibold text-gray-900">
+              {fellow.first_name} {fellow.last_name}
+              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${badge.bg} text-white`}>
+                {badge.label}
+              </span>
+            </p>
+            <p className="text-sm text-gray-500">
+              {icon} {activity.interaction_type} • {staffName}
+            </p>
+          </div>
+          <span className="text-xs text-gray-400 whitespace-nowrap">{time}</span>
+        </div>
+        
+        {activity.subject && (
+          <p className="text-sm text-gray-700 mt-1 font-medium">{activity.subject}</p>
+        )}
+        {activity.notes && (
+          <p className="text-sm text-gray-500 mt-1 line-clamp-2">{activity.notes}</p>
+        )}
+      </div>
+      
+      {/* Arrow */}
+      <div className="flex items-center">
+        <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+    </button>
+  );
+}
+
+// ============================================
+// PAGES
+// ============================================
+function DashboardPage({ onLogInteraction, onSelectFellow }) {
+  const { fellows, interactions, fetchData } = useContext(AppContext);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  
+  const statusCounts = useMemo(() => {
+    const counts = { green: 0, yellow: 0, red: 0 };
+    fellows.forEach(f => {
+      counts[getContactStatus(f.last_contact).color]++;
+    });
+    return counts;
+  }, [fellows]);
+  
+  const networkHealth = fellows.length > 0 
+    ? Math.round((statusCounts.green + statusCounts.yellow * 0.5) / fellows.length * 100) 
+    : 0;
+
+  // Get fellows needing attention (filtered by status)
+  const fellowsNeedingAttention = useMemo(() => {
+    return fellows
+      .filter(f => {
+        const status = getContactStatus(f.last_contact);
+        if (statusFilter && status.color !== statusFilter) return false;
+        if (search) {
+          const term = search.toLowerCase();
+          return `${f.first_name} ${f.last_name}`.toLowerCase().includes(term) ||
+                 f.organization?.toLowerCase().includes(term);
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        // Sort by status priority: red first, then yellow, then green
+        const statusOrder = { red: 0, yellow: 1, green: 2 };
+        const aStatus = getContactStatus(a.last_contact).color;
+        const bStatus = getContactStatus(b.last_contact).color;
+        return statusOrder[aStatus] - statusOrder[bStatus];
+      })
+      .slice(0, 10);
+  }, [fellows, statusFilter, search]);
+
+  // Get program distribution
+  const programStats = useMemo(() => {
+    const stats = {};
+    fellows.forEach(f => {
+      const badge = getProgramBadge(f.program);
+      if (!stats[badge.label]) stats[badge.label] = { count: 0, color: badge.bg };
+      stats[badge.label].count++;
+    });
+    return Object.entries(stats).sort((a, b) => b[1].count - a[1].count);
+  }, [fellows]);
+
+  return (
+    <div className="p-4 pb-24">
+      {/* Search */}
+      <div className="mb-4">
+        <SearchBar value={search} onChange={setSearch} placeholder="Search fellows..." />
+      </div>
+      
+      {/* Status Filter Pills */}
+      <StatusFilterBar 
+        statusFilter={statusFilter} 
+        setStatusFilter={setStatusFilter} 
+        statusCounts={statusCounts} 
+      />
+      
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm text-gray-500 mb-1">Network Health</p>
+          <p className="text-3xl font-bold text-gray-900">{networkHealth}%</p>
+          <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-green-500 to-goldin-orange rounded-full"
+              style={{ width: `${networkHealth}%` }}
+            ></div>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm text-gray-500 mb-1">Total Alumni</p>
+          <p className="text-3xl font-bold text-gray-900">{fellows.length}</p>
+          <p className="text-xs text-gray-400 mt-2">
+            {interactions.length} interactions logged
+          </p>
+        </div>
+      </div>
+      
+      {/* Program Distribution */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Program Distribution</h3>
+        <div className="space-y-2">
+          {programStats.slice(0, 4).map(([label, data]) => (
+            <div key={label} className="flex items-center gap-3">
+              <span className={`text-xs px-2 py-1 rounded-full ${data.color} text-white font-medium`}>{label}</span>
+              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full ${data.color} rounded-full`}
+                  style={{ width: `${(data.count / fellows.length) * 100}%` }}
+                ></div>
+              </div>
+              <span className="text-sm text-gray-500 font-medium">{data.count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Priority Outreach */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold text-gray-900">Priority Outreach</h2>
+          <span className="text-sm text-gray-500">{fellowsNeedingAttention.length} fellows</span>
+        </div>
+        {fellowsNeedingAttention.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 text-center border border-gray-100">
+            <span className="text-4xl mb-3 block">🎉</span>
+            <p className="text-gray-500">All caught up!</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {fellowsNeedingAttention.map(fellow => {
+              const status = getContactStatus(fellow.last_contact);
+              const badge = getProgramBadge(fellow.program);
+              return (
+                <button 
+                  key={fellow.id} 
+                  onClick={() => onSelectFellow(fellow)}
+                  className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3 active:bg-gray-50 transition text-left"
+                >
+                  <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 relative">
+                    {fellow.photo_url ? (
+                      <img src={fellow.photo_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-400 font-semibold">
+                        {fellow.first_name?.[0]}{fellow.last_name?.[0]}
+                      </div>
+                    )}
+                    <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white status-${status.color}`}></div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">
+                      {fellow.first_name} {fellow.last_name}
+                    </p>
+                    <p className="text-sm text-gray-500 truncate">{status.text}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full ${badge.bg} text-white`}>
+                    {badge.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
+  const { user, userRole, canAccess, fetchData, interactions } = useContext(AppContext);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [quickLogType, setQuickLogType] = useState(null);
+  const [quickLogNotes, setQuickLogNotes] = useState('');
+  const [quickLogSubject, setQuickLogSubject] = useState('');
+  const [quickLogSaving, setQuickLogSaving] = useState(false);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [isOpen]);
+
+  // Reset tab when modal opens for a different fellow
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab('overview');
+      setIsEditing(false);
+    }
+  }, [isOpen, fellow?.id]);
+
+  if (!fellow) return null;
+
+  const status = getContactStatus(fellow.last_contact);
+  const badge = getProgramBadge(fellow.program);
+
+  // Permission checks
+  const isStaff = canAccess(ROLES.TEAM);
+  const isAdmin = canAccess(ROLES.ADMIN);
+  const isSelf = user?.email && fellow.email && user.email.toLowerCase() === fellow.email.toLowerCase();
+  const canEdit = isStaff || isSelf;
+  const canSeeContactInfo = isStaff || isSelf;
+  const canLogInteractions = isStaff;
+
+  // Get fellow's recent interactions
+  const fellowInteractions = useMemo(() => {
+    return interactions
+      .filter(i => i.fellow_id === fellow.id)
+      .slice(0, 10);
+  }, [interactions, fellow.id]);
+
+  const onQuickLog = (type) => {
+    setQuickLogType(type);
+    setQuickLogSubject('');
+    setQuickLogNotes('');
+  };
+
+  const saveQuickLog = async () => {
+    setQuickLogSaving(true);
+    const interaction = {
+      fellow_id: fellow.id,
+      interaction_type: quickLogType,
+      subject: quickLogSubject || `${quickLogType} with ${fellow.first_name}`,
+      notes: quickLogNotes || null,
+      staff_email: user?.email || 'unknown@goldininstitute.org',
+      created_at: new Date().toISOString(),
+    };
+    
+    const { error } = await supabase.from('interactions').insert(interaction);
+    
+    if (!error) {
+      await supabase.from('fellows')
+        .update({ last_contact: new Date().toISOString() })
+        .eq('id', fellow.id);
+      fetchData();
+    }
+    
+    setQuickLogSaving(false);
+    setQuickLogType(null);
+  };
+
+  const startEditing = () => {
+    setEditData({
+      first_name: fellow.first_name || '',
+      last_name: fellow.last_name || '',
+      email: fellow.email || '',
+      phone: fellow.phone || '',
+      organization: fellow.organization || '',
+      job_title: fellow.job_title || '',
+      city: fellow.city || '',
+      country: fellow.country || '',
+      biography: fellow.biography || '',
+      linkedin: fellow.linkedin || '',
+      twitter: fellow.twitter || '',
+      website: fellow.website || '',
+      languages: fellow.languages || '',
+    });
+    setIsEditing(true);
+  };
+
+  const saveEdits = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('fellows')
+      .update(editData)
+      .eq('id', fellow.id);
+    
+    if (!error) {
+      setIsEditing(false);
+      window.location.reload();
+    } else {
+      alert('Error saving changes');
+    }
+    setSaving(false);
+  };
+
+  return (
+    <>
+      {/* Backdrop with blur */}
+      <div
+        className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-50 transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+
+      {/* Bottom Sheet - 90% height */}
+      <div className={`bottom-sheet fixed inset-x-0 bottom-0 bg-white rounded-t-3xl z-50 flex flex-col ${isOpen ? 'open' : ''}`} style={{ height: '90vh' }}>
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
+          <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
+        </div>
+
+        {/* Header with photo */}
+        <div className="px-5 pb-4 flex-shrink-0">
+          <div className="flex items-start gap-4">
+            <div className="w-20 h-20 rounded-2xl bg-gray-200 overflow-hidden flex-shrink-0 shadow-lg">
+              {fellow.photo_url ? (
+                <img src={fellow.photo_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-400 text-2xl font-semibold bg-gradient-to-br from-gray-100 to-gray-200">
+                  {fellow.first_name?.[0]}{fellow.last_name?.[0]}
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl font-bold text-gray-900">{fellow.first_name} {fellow.last_name}</h2>
+              {fellow.job_title && <p className="text-goldin-orange font-medium">{fellow.job_title}</p>}
+              <p className="text-gray-500 truncate">{fellow.organization || 'No organization'}</p>
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className={`text-xs px-2 py-0.5 rounded-full ${badge.bg} text-white font-semibold`}>{badge.label}</span>
+                {(fellow.cohort_year || fellow.year) && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 font-medium">
+                    {fellow.cohort_year || fellow.year}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 -mr-2 -mt-1 text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+          </div>
+
+          {/* Status Bar - Staff only */}
+          {isStaff && (
+            <div className={`mt-4 p-3 rounded-xl flex items-center justify-between ${
+              status.color === 'green' ? 'bg-green-50 border border-green-200' :
+              status.color === 'yellow' ? 'bg-yellow-50 border border-yellow-200' :
+              'bg-red-50 border border-red-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                <div className={`w-2.5 h-2.5 rounded-full ${
+                  status.color === 'green' ? 'bg-green-500' :
+                  status.color === 'yellow' ? 'bg-yellow-500' :
+                  'bg-red-500'
+                }`}></div>
+                <span className={`text-sm font-medium ${
+                  status.color === 'green' ? 'text-green-800' :
+                  status.color === 'yellow' ? 'text-yellow-800' :
+                  'text-red-800'
+                }`}>
+                  {status.days !== null ? `${status.days} days since contact` : 'No contact recorded'}
+                </span>
+              </div>
+              {canLogInteractions && (
+                <button
+                  onClick={() => { onClose(); onLogInteraction(fellow); }}
+                  className="text-xs px-3 py-1.5 bg-white rounded-lg border shadow-sm font-medium hover:shadow transition"
+                >
+                  + Log
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Quick Action Buttons */}
+          {!isEditing && (
+            <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
+              {canEdit && (
+                <button
+                  onClick={startEditing}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 rounded-xl text-gray-700 font-medium whitespace-nowrap active:bg-gray-200"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  Edit
+                </button>
+              )}
+
+              {canSeeContactInfo && fellow.phone && (
+                <button
+                  onClick={() => {
+                    window.open(`tel:${fellow.phone}`, '_self');
+                    if (canLogInteractions) setTimeout(() => onQuickLog('Call'), 500);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-green-100 rounded-xl text-green-700 font-medium whitespace-nowrap active:bg-green-200"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  Call
+                </button>
+              )}
+
+              {canSeeContactInfo && fellow.phone && (
+                <button
+                  onClick={() => {
+                    const cleanPhone = fellow.phone.replace(/[^0-9+]/g, '');
+                    window.open(`https://wa.me/${cleanPhone}`, '_blank');
+                    if (canLogInteractions) setTimeout(() => onQuickLog('WhatsApp'), 500);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-emerald-100 rounded-xl text-emerald-700 font-medium whitespace-nowrap active:bg-emerald-200"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                  WhatsApp
+                </button>
+              )}
+
+              {canSeeContactInfo && fellow.email && (
+                <button
+                  onClick={() => {
+                    window.open(`mailto:${fellow.email}`, '_self');
+                    if (canLogInteractions) setTimeout(() => onQuickLog('Email'), 500);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-blue-100 rounded-xl text-blue-700 font-medium whitespace-nowrap active:bg-blue-200"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Email
+                </button>
+              )}
+
+              {canSeeContactInfo && fellow.phone && (
+                <button
+                  onClick={() => {
+                    const cleanPhone = fellow.phone.replace(/[^0-9+]/g, '');
+                    window.open(`sms:${cleanPhone}`, '_self');
+                    if (canLogInteractions) setTimeout(() => onQuickLog('Text'), 500);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-purple-100 rounded-xl text-purple-700 font-medium whitespace-nowrap active:bg-purple-200"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Text
+                </button>
+              )}
+
+              {!canSeeContactInfo && (
+                <button
+                  onClick={() => alert(`To connect with ${fellow.first_name}, please sign in with a staff account or contact Goldin Institute.`)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-goldin-orange/10 rounded-xl text-goldin-orange font-medium whitespace-nowrap active:bg-goldin-orange/20"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  Request to Connect
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Tabs - Staff sees all, others see Overview only */}
+        {!isEditing && (
+          <div className="flex border-b border-gray-100 px-5">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`flex-1 py-3 text-sm font-semibold transition border-b-2 ${
+                activeTab === 'overview' ? 'text-goldin-orange border-goldin-orange' : 'text-gray-500 border-transparent'
+              }`}
+            >
+              Overview
+            </button>
+            {isStaff && (
+              <>
+                <button
+                  onClick={() => setActiveTab('activity')}
+                  className={`flex-1 py-3 text-sm font-semibold transition border-b-2 relative ${
+                    activeTab === 'activity' ? 'text-goldin-orange border-goldin-orange' : 'text-gray-500 border-transparent'
+                  }`}
+                >
+                  Activity
+                  {fellowInteractions.length > 0 && (
+                    <span className="absolute top-2 right-1/4 w-5 h-5 bg-gray-200 text-gray-600 text-xs rounded-full flex items-center justify-center">
+                      {fellowInteractions.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('notes')}
+                  className={`flex-1 py-3 text-sm font-semibold transition border-b-2 ${
+                    activeTab === 'notes' ? 'text-goldin-orange border-goldin-orange' : 'text-gray-500 border-transparent'
+                  }`}
+                >
+                  Notes
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-auto">
+          <div className="p-5">
+
+            {isEditing ? (
+              /* Edit Mode */
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1">First Name</label>
+                    <input type="text" value={editData.first_name} onChange={(e) => setEditData(d => ({ ...d, first_name: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1">Last Name</label>
+                    <input type="text" value={editData.last_name} onChange={(e) => setEditData(d => ({ ...d, last_name: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Title / Role</label>
+                  <input type="text" value={editData.job_title} onChange={(e) => setEditData(d => ({ ...d, job_title: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Organization</label>
+                  <input type="text" value={editData.organization} onChange={(e) => setEditData(d => ({ ...d, organization: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Email</label>
+                  <input type="email" value={editData.email} onChange={(e) => setEditData(d => ({ ...d, email: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Phone</label>
+                  <input type="tel" value={editData.phone} onChange={(e) => setEditData(d => ({ ...d, phone: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1">City</label>
+                    <input type="text" value={editData.city} onChange={(e) => setEditData(d => ({ ...d, city: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1">Country</label>
+                    <input type="text" value={editData.country} onChange={(e) => setEditData(d => ({ ...d, country: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Bio</label>
+                  <textarea value={editData.biography} onChange={(e) => setEditData(d => ({ ...d, biography: e.target.value }))} rows={4} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange resize-none" />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">LinkedIn URL</label>
+                  <input type="url" value={editData.linkedin} onChange={(e) => setEditData(d => ({ ...d, linkedin: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Twitter URL</label>
+                  <input type="url" value={editData.twitter} onChange={(e) => setEditData(d => ({ ...d, twitter: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Website URL</label>
+                  <input type="url" value={editData.website} onChange={(e) => setEditData(d => ({ ...d, website: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Languages (comma separated)</label>
+                  <input type="text" value={editData.languages} onChange={(e) => setEditData(d => ({ ...d, languages: e.target.value }))} placeholder="English, Spanish, French" className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                </div>
+                <div className="flex gap-3 pt-4 pb-8">
+                  <button onClick={() => setIsEditing(false)} className="flex-1 py-3 border border-gray-200 rounded-xl font-medium text-gray-600">Cancel</button>
+                  <button onClick={saveEdits} disabled={saving} className="flex-1 py-3 bg-goldin-orange text-white rounded-xl font-semibold disabled:opacity-50">{saving ? 'Saving...' : 'Save Changes'}</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* OVERVIEW TAB */}
+                {activeTab === 'overview' && (
+                  <>
+                    {/* Bio - shown first if exists */}
+                    {fellow.biography && (
+                      <div className="mb-6">
+                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">About</h3>
+                        <p className="text-gray-700 leading-relaxed whitespace-pre-line">{fellow.biography}</p>
+                      </div>
+                    )}
+
+                    {/* Contact Details */}
+                    <div className="space-y-3 mb-6">
+                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Contact</h3>
+
+                      {canSeeContactInfo && fellow.email && (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-gray-500">Email</p>
+                            <p className="text-gray-900 truncate font-medium">{fellow.email}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {canSeeContactInfo && fellow.phone && (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs text-gray-500">Phone</p>
+                            <p className="text-gray-900 font-medium">{fellow.phone}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {!canSeeContactInfo && (
+                        <div className="flex items-center gap-3 p-4 bg-gray-100 rounded-xl">
+                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm text-gray-600 font-medium">Contact info is private</p>
+                            <p className="text-xs text-gray-400">Sign in with a staff account to view</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {(fellow.city || fellow.country) && (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs text-gray-500">Location</p>
+                            <p className="text-gray-900 font-medium">{[fellow.city, fellow.country].filter(Boolean).join(', ')}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {fellow.languages && (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs text-gray-500">Languages</p>
+                            <p className="text-gray-900 font-medium">{fellow.languages}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Social Links */}
+                    {(fellow.linkedin || fellow.twitter || fellow.website || fellow.instagram || fellow.facebook) && (
+                      <div className="space-y-3 mb-6">
+                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Social & Web</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {fellow.linkedin && (
+                            <a href={fellow.linkedin.startsWith('http') ? fellow.linkedin : `https://${fellow.linkedin}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-[#0077b5] text-white rounded-xl font-medium text-sm">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                              LinkedIn
+                            </a>
+                          )}
+                          {fellow.twitter && (
+                            <a href={fellow.twitter.startsWith('http') ? fellow.twitter : `https://${fellow.twitter}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-xl font-medium text-sm">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                              X / Twitter
+                            </a>
+                          )}
+                          {fellow.instagram && (
+                            <a href={fellow.instagram.startsWith('http') ? fellow.instagram : `https://instagram.com/${fellow.instagram}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium text-sm">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                              Instagram
+                            </a>
+                          )}
+                          {fellow.facebook && (
+                            <a href={fellow.facebook.startsWith('http') ? fellow.facebook : `https://facebook.com/${fellow.facebook}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-[#1877f2] text-white rounded-xl font-medium text-sm">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                              Facebook
+                            </a>
+                          )}
+                          {fellow.website && (
+                            <a href={fellow.website.startsWith('http') ? fellow.website : `https://${fellow.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-xl font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
+                              Website
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Program Details */}
+                    <div className="space-y-3 mb-6">
+                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Program Details</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {fellow.program && (
+                          <div className="bg-gray-50 rounded-xl p-3">
+                            <p className="text-xs text-gray-500">Program</p>
+                            <p className="text-gray-900 font-semibold">{fellow.program}</p>
+                          </div>
+                        )}
+                        {(fellow.cohort_year || fellow.year || fellow.cohort) && (
+                          <div className="bg-gray-50 rounded-xl p-3">
+                            <p className="text-xs text-gray-500">Year / Cohort</p>
+                            <p className="text-gray-900 font-semibold">{fellow.cohort_year || fellow.year || fellow.cohort}</p>
+                          </div>
+                        )}
+                        {fellow.focus_area && (
+                          <div className="bg-gray-50 rounded-xl p-3 col-span-2">
+                            <p className="text-xs text-gray-500">Focus Area</p>
+                            <p className="text-gray-900 font-semibold">{fellow.focus_area}</p>
+                          </div>
+                        )}
+                        {fellow.community_area && (
+                          <div className="bg-gray-50 rounded-xl p-3 col-span-2">
+                            <p className="text-xs text-gray-500">Chicago Community Area</p>
+                            <p className="text-gray-900 font-semibold">{fellow.community_area}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ACTIVITY TAB - Staff only */}
+                {activeTab === 'activity' && isStaff && (
+                  <div className="space-y-3">
+                    {fellowInteractions.length > 0 ? (
+                      fellowInteractions.map((activity, idx) => {
+                        const icon = getInteractionIcon(activity.interaction_type);
+                        const time = getTimeAgo(activity.created_at);
+                        const staffName = activity.staff_email?.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') || 'Staff';
+                        return (
+                          <div key={activity.id || idx} className="bg-gray-50 rounded-xl p-4">
+                            <div className="flex items-start gap-3">
+                              <div className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center text-lg">
+                                {icon}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="font-semibold text-gray-900">{activity.interaction_type}</p>
+                                  <span className="text-xs text-gray-400">{time}</span>
+                                </div>
+                                <p className="text-sm text-gray-500">{staffName}</p>
+                                {activity.subject && (
+                                  <p className="text-sm text-gray-700 mt-1 font-medium">{activity.subject}</p>
+                                )}
+                                {activity.notes && (
+                                  <p className="text-sm text-gray-600 mt-1">{activity.notes}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                        </div>
+                        <p className="text-gray-500 font-medium">No activity recorded yet</p>
+                        <p className="text-gray-400 text-sm mt-1">Log an interaction to get started</p>
+                        <button
+                          onClick={() => { onClose(); onLogInteraction(fellow); }}
+                          className="mt-4 px-6 py-2 bg-goldin-orange text-white rounded-xl font-medium"
+                        >
+                          + Log Interaction
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* NOTES TAB - Staff only */}
+                {activeTab === 'notes' && isStaff && (
+                  <div className="space-y-4">
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <p className="text-amber-800 font-medium text-sm">Staff Notes Coming Soon</p>
+                          <p className="text-amber-700 text-sm mt-1">Private notes will be stored in a separate table and only visible to staff members.</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {fellow.notes && (
+                      <div className="bg-gray-50 rounded-xl p-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Legacy Notes</h4>
+                        <p className="text-gray-600 text-sm whitespace-pre-line">{fellow.notes}</p>
+                      </div>
+                    )}
+
+                    {!fellow.notes && (
+                      <div className="text-center py-8">
+                        <p className="text-gray-400">No notes for this fellow</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Quick Log Modal */}
+      {quickLogType && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-end justify-center" onClick={() => setQuickLogType(null)}>
+          <div 
+            className="bg-white rounded-t-3xl w-full max-w-lg p-6 pb-8"
+            onClick={e => e.stopPropagation()}
+            style={{ paddingBottom: 'max(32px, env(safe-area-inset-bottom))' }}
+          >
+            <div className="flex justify-center mb-4">
+              <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
+            </div>
+            
+            <h3 className="text-xl font-bold text-gray-900 mb-1">Log {quickLogType}</h3>
+            <p className="text-gray-500 mb-4">Add notes about your {quickLogType.toLowerCase()} with {fellow.first_name}</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject (optional)</label>
+                <input
+                  type="text"
+                  value={quickLogSubject}
+                  onChange={(e) => setQuickLogSubject(e.target.value)}
+                  placeholder={`${quickLogType} with ${fellow.first_name}`}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-goldin-orange"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+                <textarea
+                  value={quickLogNotes}
+                  onChange={(e) => setQuickLogNotes(e.target.value)}
+                  placeholder="What did you discuss?"
+                  rows={3}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-goldin-orange resize-none"
+                />
+              </div>
+              
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setQuickLogType(null)}
+                  className="flex-1 py-3 border border-gray-200 rounded-xl font-medium text-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveQuickLog}
+                  disabled={quickLogSaving}
+                  className="flex-1 py-3 bg-goldin-orange text-white rounded-xl font-semibold disabled:opacity-50"
+                >
+                  {quickLogSaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ============================================
+// FILTER/SORT PANEL FOR DIRECTORY
+// ============================================
+const SORT_OPTIONS = [
+  { value: 'days_desc', label: 'Days since contact (high to low)', icon: '📅' },
+  { value: 'days_asc', label: 'Days since contact (low to high)', icon: '📅' },
+  { value: 'name_asc', label: 'Name (A-Z)', icon: '🔤' },
+  { value: 'name_desc', label: 'Name (Z-A)', icon: '🔤' },
+  { value: 'year_desc', label: 'Year (newest first)', icon: '📆' },
+  { value: 'year_asc', label: 'Year (oldest first)', icon: '📆' },
+  { value: 'status_desc', label: 'Status (Red → Yellow → Green)', icon: '🚦' },
+  { value: 'status_asc', label: 'Status (Green → Yellow → Red)', icon: '🚦' },
+];
+
+const PROGRAM_OPTIONS = [
+  { value: 'CPF', label: 'CPF', color: 'bg-blue-500' },
+  { value: 'GGF', label: 'GGF', color: 'bg-green-500' },
+  { value: 'ESP', label: 'ESP', color: 'bg-purple-500' },
+];
+
+const REGION_OPTIONS = [
+  { value: 'Africa', label: 'Africa' },
+  { value: 'Asia', label: 'Asia' },
+  { value: 'Latin America', label: 'Latin America' },
+  { value: 'Europe', label: 'Europe' },
+  { value: 'Middle East', label: 'Middle East' },
+  { value: 'North America', label: 'North America' },
+];
+
+// Generate year options from 2010 to current year
+const currentYear = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: currentYear - 2009 }, (_, i) => ({
+  value: String(currentYear - i),
+  label: String(currentYear - i),
+}));
+
+function FilterSortPanel({ isOpen, onClose, filters, setFilters, sort, setSort }) {
+  const [activeTab, setActiveTab] = useState('sort');
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.programs.length > 0) count += filters.programs.length;
+    if (filters.regions.length > 0) count += filters.regions.length;
+    if (filters.years.length > 0) count += filters.years.length;
+    if (filters.statuses.length > 0) count += filters.statuses.length;
+    return count;
+  }, [filters]);
+
+  const toggleArrayFilter = (key, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: prev[key].includes(value)
+        ? prev[key].filter(v => v !== value)
+        : [...prev[key], value]
+    }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      programs: [],
+      regions: [],
+      years: [],
+      statuses: [],
+    });
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 bg-black/40 z-50 transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div className={`bottom-sheet fixed inset-x-0 bottom-0 bg-white rounded-t-3xl z-50 ${isOpen ? 'open' : ''}`} style={{ maxHeight: '80vh' }}>
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
+          <h2 className="text-lg font-bold text-gray-900">Sort & Filter</h2>
+          <div className="flex items-center gap-2">
+            {activeFilterCount > 0 && (
+              <button onClick={clearFilters} className="text-sm text-goldin-orange font-medium">
+                Clear all
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 text-2xl text-gray-400">&times;</button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100">
+          <button
+            onClick={() => setActiveTab('sort')}
+            className={`flex-1 py-3 text-sm font-semibold transition ${
+              activeTab === 'sort' ? 'text-goldin-orange border-b-2 border-goldin-orange' : 'text-gray-500'
+            }`}
+          >
+            Sort
+          </button>
+          <button
+            onClick={() => setActiveTab('filter')}
+            className={`flex-1 py-3 text-sm font-semibold transition relative ${
+              activeTab === 'filter' ? 'text-goldin-orange border-b-2 border-goldin-orange' : 'text-gray-500'
+            }`}
+          >
+            Filter
+            {activeFilterCount > 0 && (
+              <span className="absolute top-2 right-1/4 w-5 h-5 bg-goldin-orange text-white text-xs rounded-full flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4 overflow-auto" style={{ maxHeight: 'calc(80vh - 140px)' }}>
+          {activeTab === 'sort' ? (
+            <div className="space-y-2">
+              {SORT_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  onClick={() => { setSort(option.value); onClose(); }}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition ${
+                    sort === option.value
+                      ? 'bg-goldin-orange/10 border-2 border-goldin-orange'
+                      : 'bg-gray-50 border-2 border-transparent'
+                  }`}
+                >
+                  <span className="text-lg">{option.icon}</span>
+                  <span className={`flex-1 text-left ${sort === option.value ? 'text-goldin-orange font-semibold' : 'text-gray-700'}`}>
+                    {option.label}
+                  </span>
+                  {sort === option.value && (
+                    <svg className="w-5 h-5 text-goldin-orange" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Program Filter */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Program</h3>
+                <div className="flex flex-wrap gap-2">
+                  {PROGRAM_OPTIONS.map(option => (
+                    <button
+                      key={option.value}
+                      onClick={() => toggleArrayFilter('programs', option.value)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+                        filters.programs.includes(option.value)
+                          ? `${option.color} text-white`
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Region Filter (for GGF/ESP) */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Region</h3>
+                <div className="flex flex-wrap gap-2">
+                  {REGION_OPTIONS.map(option => (
+                    <button
+                      key={option.value}
+                      onClick={() => toggleArrayFilter('regions', option.value)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                        filters.regions.includes(option.value)
+                          ? 'bg-goldin-orange text-white'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Year Filter */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Year</h3>
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-auto">
+                  {YEAR_OPTIONS.map(option => (
+                    <button
+                      key={option.value}
+                      onClick={() => toggleArrayFilter('years', option.value)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                        filters.years.includes(option.value)
+                          ? 'bg-goldin-orange text-white'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Status</h3>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'green', label: 'Recent', color: 'bg-green-500' },
+                    { value: 'yellow', label: 'Follow-up', color: 'bg-yellow-500' },
+                    { value: 'red', label: 'Overdue', color: 'bg-red-500' },
+                  ].map(option => (
+                    <button
+                      key={option.value}
+                      onClick={() => toggleArrayFilter('statuses', option.value)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition flex items-center gap-2 ${
+                        filters.statuses.includes(option.value)
+                          ? `${option.color} text-white`
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${filters.statuses.includes(option.value) ? 'bg-white' : option.color}`}></span>
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Apply Button (filter tab only) */}
+        {activeTab === 'filter' && (
+          <div className="p-4 border-t border-gray-100 safe-bottom">
+            <button
+              onClick={onClose}
+              className="w-full py-4 bg-goldin-orange text-white font-bold rounded-2xl active:scale-98 transition"
+            >
+              Apply Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function DirectoryPage({ onSelectFellow }) {
+  const { fellows, userRole, canAccess } = useContext(AppContext);
+  const [search, setSearch] = useState('');
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [sort, setSort] = useState('days_desc'); // Default: days since contact (high to low)
+  const [filters, setFilters] = useState({
+    programs: [],
+    regions: [],
+    years: [],
+    statuses: [],
+  });
+
+  // Count active filters for badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.programs.length > 0) count += filters.programs.length;
+    if (filters.regions.length > 0) count += filters.regions.length;
+    if (filters.years.length > 0) count += filters.years.length;
+    if (filters.statuses.length > 0) count += filters.statuses.length;
+    return count;
+  }, [filters]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { green: 0, yellow: 0, red: 0 };
+    fellows.forEach(f => {
+      counts[getContactStatus(f.last_contact).color]++;
+    });
+    return counts;
+  }, [fellows]);
+
+  // Filter and sort fellows
+  const filtered = useMemo(() => {
+    let result = fellows.filter(f => {
+      // Search filter
+      const term = search.toLowerCase();
+      const matchSearch = !search ||
+        `${f.first_name} ${f.last_name}`.toLowerCase().includes(term) ||
+        f.organization?.toLowerCase().includes(term) ||
+        f.city?.toLowerCase().includes(term) ||
+        f.country?.toLowerCase().includes(term);
+
+      // Program filter
+      const matchProgram = filters.programs.length === 0 ||
+        filters.programs.includes(f.program);
+
+      // Region filter
+      const matchRegion = filters.regions.length === 0 ||
+        filters.regions.includes(f.region);
+
+      // Year filter
+      const matchYear = filters.years.length === 0 ||
+        filters.years.includes(String(f.cohort_year || f.year));
+
+      // Status filter
+      const fellowStatus = getContactStatus(f.last_contact).color;
+      const matchStatus = filters.statuses.length === 0 ||
+        filters.statuses.includes(fellowStatus);
+
+      return matchSearch && matchProgram && matchRegion && matchYear && matchStatus;
+    });
+
+    // Sort
+    result.sort((a, b) => {
+      switch (sort) {
+        case 'days_desc': {
+          const aDays = a.last_contact ? Math.floor((Date.now() - new Date(a.last_contact)) / (1000*60*60*24)) : 9999;
+          const bDays = b.last_contact ? Math.floor((Date.now() - new Date(b.last_contact)) / (1000*60*60*24)) : 9999;
+          return bDays - aDays;
+        }
+        case 'days_asc': {
+          const aDays = a.last_contact ? Math.floor((Date.now() - new Date(a.last_contact)) / (1000*60*60*24)) : 9999;
+          const bDays = b.last_contact ? Math.floor((Date.now() - new Date(b.last_contact)) / (1000*60*60*24)) : 9999;
+          return aDays - bDays;
+        }
+        case 'name_asc':
+          return `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`);
+        case 'name_desc':
+          return `${b.last_name} ${b.first_name}`.localeCompare(`${a.last_name} ${a.first_name}`);
+        case 'year_desc':
+          return (b.cohort_year || b.year || 0) - (a.cohort_year || a.year || 0);
+        case 'year_asc':
+          return (a.cohort_year || a.year || 0) - (b.cohort_year || b.year || 0);
+        case 'status_desc': {
+          const statusOrder = { red: 0, yellow: 1, green: 2 };
+          return statusOrder[getContactStatus(a.last_contact).color] - statusOrder[getContactStatus(b.last_contact).color];
+        }
+        case 'status_asc': {
+          const statusOrder = { green: 0, yellow: 1, red: 2 };
+          return statusOrder[getContactStatus(a.last_contact).color] - statusOrder[getContactStatus(b.last_contact).color];
+        }
+        default:
+          return 0;
+      }
+    });
+
+    return result;
+  }, [fellows, search, filters, sort]);
+
+  // Check if user can see status info (staff only)
+  const canSeeStatus = canAccess(ROLES.TEAM);
+
+  return (
+    <div className="p-4 pb-24">
+      {/* Search + Filter Button */}
+      <div className="flex gap-2 mb-4">
+        <div className="flex-1 relative">
+          <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search alumni..."
+            className="w-full pl-12 pr-4 py-3 bg-gray-100 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+          />
+        </div>
+        <button
+          onClick={() => setFilterPanelOpen(true)}
+          className="relative w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center hover:bg-gray-200 transition"
+        >
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          {activeFilterCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-goldin-orange text-white text-xs font-bold rounded-full flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Active filters summary */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {filters.programs.map(p => (
+            <span key={p} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">{p}</span>
+          ))}
+          {filters.regions.map(r => (
+            <span key={r} className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">{r}</span>
+          ))}
+          {filters.years.map(y => (
+            <span key={y} className="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded-full">{y}</span>
+          ))}
+          {filters.statuses.map(s => (
+            <span key={s} className={`text-xs px-2 py-1 rounded-full ${
+              s === 'green' ? 'bg-green-100 text-green-700' :
+              s === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
+              'bg-red-100 text-red-700'
+            }`}>{s === 'green' ? 'Recent' : s === 'yellow' ? 'Follow-up' : 'Overdue'}</span>
+          ))}
+          <button
+            onClick={() => setFilters({ programs: [], regions: [], years: [], statuses: [] })}
+            className="text-xs px-2 py-1 text-goldin-orange font-medium"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Count + Sort indicator */}
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm text-gray-500">{filtered.length} alumni</p>
+        <p className="text-xs text-gray-400">
+          Sorted by: {SORT_OPTIONS.find(o => o.value === sort)?.label.split(' (')[0]}
+        </p>
+      </div>
+
+      {/* List */}
+      <div className="space-y-2">
+        {filtered.map(fellow => {
+          const status = getContactStatus(fellow.last_contact);
+          const badge = getProgramBadge(fellow.program);
+          return (
+            <button
+              key={fellow.id}
+              onClick={() => onSelectFellow(fellow)}
+              className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3 active:bg-gray-50 transition text-left"
+            >
+              <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 relative">
+                {fellow.photo_url ? (
+                  <img src={fellow.photo_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 font-semibold">
+                    {fellow.first_name?.[0]}{fellow.last_name?.[0]}
+                  </div>
+                )}
+                {canSeeStatus && (
+                  <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white status-${status.color}`}></div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-900 truncate">
+                  {fellow.first_name} {fellow.last_name}
+                </p>
+                <p className="text-sm text-gray-500 truncate">{fellow.organization || 'No organization'}</p>
+              </div>
+              {/* Program + Year Pills */}
+              <div className="flex flex-col gap-1 items-end flex-shrink-0">
+                <span className={`text-xs px-2 py-0.5 rounded-full ${badge.bg} text-white font-semibold`}>
+                  {badge.label}
+                </span>
+                {(fellow.cohort_year || fellow.year) && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 font-medium">
+                    {fellow.cohort_year || fellow.year}
+                  </span>
+                )}
+              </div>
+              <svg className="w-5 h-5 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          );
+        })}
+
+        {filtered.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-400 text-lg">No alumni found</p>
+            <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
+          </div>
+        )}
+      </div>
+
+      {/* Filter Panel */}
+      <FilterSortPanel
+        isOpen={filterPanelOpen}
+        onClose={() => setFilterPanelOpen(false)}
+        filters={filters}
+        setFilters={setFilters}
+        sort={sort}
+        setSort={setSort}
+      />
+    </div>
+  );
+}
+
+// Activity Page - shows recent interactions
+function ActivityPage({ onSelectFellow }) {
+  const { fellows, interactions } = useContext(AppContext);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  
+  const statusCounts = useMemo(() => {
+    const counts = { green: 0, yellow: 0, red: 0 };
+    fellows.forEach(f => {
+      counts[getContactStatus(f.last_contact).color]++;
+    });
+    return counts;
+  }, [fellows]);
+  
+  // Filter interactions based on search and status
+  const filteredInteractions = useMemo(() => {
+    return interactions.filter(activity => {
+      const fellow = fellows.find(f => f.id === activity.fellow_id);
+      if (!fellow) return false;
+      
+      // Search filter
+      if (search) {
+        const term = search.toLowerCase();
+        const matchName = `${fellow.first_name} ${fellow.last_name}`.toLowerCase().includes(term);
+        const matchSubject = activity.subject?.toLowerCase().includes(term);
+        const matchNotes = activity.notes?.toLowerCase().includes(term);
+        if (!matchName && !matchSubject && !matchNotes) return false;
+      }
+      
+      // Status filter
+      if (statusFilter) {
+        const fellowStatus = getContactStatus(fellow.last_contact).color;
+        if (fellowStatus !== statusFilter) return false;
+      }
+      
+      return true;
+    });
+  }, [interactions, fellows, search, statusFilter]);
+
+  return (
+    <div className="p-4 pb-24">
+      {/* Search */}
+      <div className="mb-4">
+        <SearchBar value={search} onChange={setSearch} placeholder="Search activity..." />
+      </div>
+      
+      {/* Status Filter Pills */}
+      <StatusFilterBar 
+        statusFilter={statusFilter} 
+        setStatusFilter={setStatusFilter} 
+        statusCounts={statusCounts} 
+      />
+      
+      {/* Count */}
+      <p className="text-sm text-gray-500 mb-3">{filteredInteractions.length} interactions</p>
+      
+      {/* Activity List */}
+      {filteredInteractions.length === 0 ? (
+        <div className="bg-white rounded-2xl p-8 text-center border border-gray-100">
+          <span className="text-4xl mb-3 block">📋</span>
+          <p className="text-gray-500">No activity found</p>
+        </div>
+      ) : (
+        filteredInteractions.map((activity, i) => (
+          <ActivityItem 
+            key={activity.id} 
+            activity={activity} 
+            fellow={fellows.find(f => f.id === activity.fellow_id)}
+            onClick={onSelectFellow}
+            style={{ animationDelay: `${i * 0.05}s` }}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+// Search Page - Advanced search with sort and filter
+function SearchPage({ onSelectFellow }) {
+  const { fellows } = useContext(AppContext);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [programFilter, setProgramFilter] = useState('');
+  const [countryFilter, setCountryFilter] = useState('');
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState('asc');
+  
+  const statusCounts = useMemo(() => {
+    const counts = { green: 0, yellow: 0, red: 0 };
+    fellows.forEach(f => {
+      counts[getContactStatus(f.last_contact).color]++;
+    });
+    return counts;
+  }, [fellows]);
+
+  // Get unique programs and countries for filters
+  const programs = useMemo(() => {
+    const set = new Set(fellows.map(f => f.program).filter(Boolean));
+    return Array.from(set).sort();
+  }, [fellows]);
+
+  const countries = useMemo(() => {
+    const set = new Set(fellows.map(f => f.country).filter(Boolean));
+    return Array.from(set).sort();
+  }, [fellows]);
+
+  // Filter and sort fellows
+  const filteredFellows = useMemo(() => {
+    let result = fellows.filter(f => {
+      // Search filter
+      if (search) {
+        const term = search.toLowerCase();
+        const matchName = `${f.first_name} ${f.last_name}`.toLowerCase().includes(term);
+        const matchOrg = f.organization?.toLowerCase().includes(term);
+        const matchCity = f.city?.toLowerCase().includes(term);
+        const matchCountry = f.country?.toLowerCase().includes(term);
+        if (!matchName && !matchOrg && !matchCity && !matchCountry) return false;
+      }
+      
+      // Status filter
+      if (statusFilter && getContactStatus(f.last_contact).color !== statusFilter) return false;
+      
+      // Program filter
+      if (programFilter && f.program !== programFilter) return false;
+      
+      // Country filter
+      if (countryFilter && f.country !== countryFilter) return false;
+      
+      return true;
+    });
+
+    // Sort
+    result.sort((a, b) => {
+      let comparison = 0;
+      switch (sortBy) {
+        case 'name':
+          comparison = `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`);
+          break;
+        case 'organization':
+          comparison = (a.organization || '').localeCompare(b.organization || '');
+          break;
+        case 'status':
+          const statusOrder = { red: 0, yellow: 1, green: 2 };
+          comparison = statusOrder[getContactStatus(a.last_contact).color] - statusOrder[getContactStatus(b.last_contact).color];
+          break;
+        case 'last_contact':
+          comparison = new Date(b.last_contact || 0) - new Date(a.last_contact || 0);
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [fellows, search, statusFilter, programFilter, countryFilter, sortBy, sortOrder]);
+
+  return (
+    <div className="p-4 pb-24">
+      {/* Search Bar */}
+      <div className="mb-4">
+        <SearchBar value={search} onChange={setSearch} placeholder="Search name, organization, city..." />
+      </div>
+      
+      {/* Status Filter Pills */}
+      <StatusFilterBar 
+        statusFilter={statusFilter} 
+        setStatusFilter={setStatusFilter} 
+        statusCounts={statusCounts} 
+      />
+      
+      {/* Advanced Filters */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Filters & Sort</h3>
+        
+        <div className="grid grid-cols-2 gap-3">
+          {/* Program Filter */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Program</label>
+            <select
+              value={programFilter}
+              onChange={(e) => setProgramFilter(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+            >
+              <option value="">All Programs</option>
+              {programs.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Country Filter */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Country</label>
+            <select
+              value={countryFilter}
+              onChange={(e) => setCountryFilter(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+            >
+              <option value="">All Countries</option>
+              {countries.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Sort By */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Sort By</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+            >
+              <option value="name">Name</option>
+              <option value="organization">Organization</option>
+              <option value="status">Status (Urgent First)</option>
+              <option value="last_contact">Last Contact</option>
+            </select>
+          </div>
+          
+          {/* Sort Order */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Order</label>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+            >
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </div>
+        </div>
+        
+        {/* Clear Filters */}
+        {(programFilter || countryFilter || statusFilter) && (
+          <button 
+            onClick={() => { setProgramFilter(''); setCountryFilter(''); setStatusFilter(''); }}
+            className="mt-3 text-sm text-goldin-orange font-medium"
+          >
+            Clear all filters
+          </button>
+        )}
+      </div>
+      
+      {/* Results Count */}
+      <p className="text-sm text-gray-500 mb-3">{filteredFellows.length} results</p>
+      
+      {/* Results List */}
+      <div className="space-y-2">
+        {filteredFellows.map(fellow => {
+          const status = getContactStatus(fellow.last_contact);
+          const badge = getProgramBadge(fellow.program);
+          return (
+            <button 
+              key={fellow.id} 
+              onClick={() => onSelectFellow(fellow)}
+              className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3 active:bg-gray-50 transition text-left"
+            >
+              <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 relative">
+                {fellow.photo_url ? (
+                  <img src={fellow.photo_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 font-semibold">
+                    {fellow.first_name?.[0]}{fellow.last_name?.[0]}
+                  </div>
+                )}
+                <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white status-${status.color}`}></div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-900 truncate">
+                  {fellow.first_name} {fellow.last_name}
+                </p>
+                <p className="text-sm text-gray-500 truncate">{fellow.organization || 'No organization'}</p>
+                {fellow.country && <p className="text-xs text-gray-400">{fellow.city ? `${fellow.city}, ` : ''}{fellow.country}</p>}
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-full ${badge.bg} text-white`}>
+                {badge.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Cohort Communication Page - Bulk email to cohorts (Demo/Test Mode)
+function CohortCommunicationPage() {
+  const { fellows } = useContext(AppContext);
+  const [selectedCohorts, setSelectedCohorts] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [subject, setSubject] = useState('');
+  const [content, setContent] = useState('');
+  const [isBold, setIsBold] = useState(false);
+  const [isItalic, setIsItalic] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [sending, setSending] = useState(false);
+  
+  const statusCounts = useMemo(() => {
+    const counts = { green: 0, yellow: 0, red: 0 };
+    fellows.forEach(f => {
+      counts[getContactStatus(f.last_contact).color]++;
+    });
+    return counts;
+  }, [fellows]);
+
+  // Get unique cohorts
+  const cohorts = useMemo(() => {
+    const set = new Set(fellows.map(f => f.cohort).filter(Boolean));
+    return Array.from(set).sort();
+  }, [fellows]);
+
+  // Get recipients based on selected cohorts and status filter
+  const recipients = useMemo(() => {
+    return fellows.filter(f => {
+      if (selectedCohorts.length > 0 && !selectedCohorts.includes(f.cohort)) return false;
+      if (statusFilter && getContactStatus(f.last_contact).color !== statusFilter) return false;
+      return f.email; // Only include fellows with email
+    });
+  }, [fellows, selectedCohorts, statusFilter]);
+
+  const toggleCohort = (cohort) => {
+    setSelectedCohorts(prev => 
+      prev.includes(cohort) 
+        ? prev.filter(c => c !== cohort)
+        : [...prev, cohort]
+    );
+  };
+
+  const handleSend = () => {
+    if (!subject.trim() || !content.trim()) {
+      alert('Please fill in subject and content');
+      return;
+    }
+    if (recipients.length === 0) {
+      alert('No recipients selected');
+      return;
+    }
+    
+    setSending(true);
+    
+    // Demo mode - just show success after delay
+    setTimeout(() => {
+      alert(`[DEMO MODE] Email would be sent to ${recipients.length} recipients:\n\nSubject: ${subject}\n\nThis is a demo. No actual emails were sent.`);
+      setSending(false);
+    }, 1500);
+  };
+
+  return (
+    <div className="p-4 pb-24">
+      {/* Demo Banner */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-3 mb-4 flex items-center gap-2">
+        <span className="text-xl">🧪</span>
+        <div>
+          <p className="font-semibold text-yellow-800 text-sm">Demo Mode</p>
+          <p className="text-yellow-700 text-xs">No emails will actually be sent</p>
+        </div>
+      </div>
+      
+      {/* Status Filter Pills */}
+      <StatusFilterBar 
+        statusFilter={statusFilter} 
+        setStatusFilter={setStatusFilter} 
+        statusCounts={statusCounts} 
+      />
+      
+      {/* Cohort Selection */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">Select Cohorts</h3>
+          <button 
+            onClick={() => setSelectedCohorts(selectedCohorts.length === cohorts.length ? [] : [...cohorts])}
+            className="text-xs text-goldin-orange font-medium"
+          >
+            {selectedCohorts.length === cohorts.length ? 'Deselect All' : 'Select All'}
+          </button>
+        </div>
+        
+        <div className="flex flex-wrap gap-2 max-h-32 overflow-auto">
+          {cohorts.map(cohort => (
+            <button
+              key={cohort}
+              onClick={() => toggleCohort(cohort)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                selectedCohorts.includes(cohort)
+                  ? 'bg-goldin-orange text-white'
+                  : 'bg-gray-100 text-gray-700'
+              }`}
+            >
+              {cohort}
+            </button>
+          ))}
+        </div>
+        
+        <p className="mt-3 text-sm text-gray-500">
+          <span className="font-semibold text-goldin-orange">{recipients.length}</span> recipients with email addresses
+        </p>
+      </div>
+      
+      {/* Email Composition */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Compose Email</h3>
+        
+        {/* Subject */}
+        <div className="mb-4">
+          <label className="block text-xs text-gray-500 mb-1">Subject</label>
+          <input
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Enter email subject..."
+            className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+          />
+        </div>
+        
+        {/* Formatting Toolbar */}
+        <div className="flex items-center gap-2 mb-2">
+          <button
+            onClick={() => setIsBold(!isBold)}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition ${
+              isBold ? 'bg-goldin-orange text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            B
+          </button>
+          <button
+            onClick={() => setIsItalic(!isItalic)}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm italic transition ${
+              isItalic ? 'bg-goldin-orange text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            I
+          </button>
+          <div className="flex-1"></div>
+          <button
+            onClick={() => setShowPreview(!showPreview)}
+            className="text-xs text-goldin-orange font-medium"
+          >
+            {showPreview ? 'Edit' : 'Preview'}
+          </button>
+        </div>
+        
+        {/* Content */}
+        {showPreview ? (
+          <div 
+            className="w-full border border-gray-200 rounded-xl p-4 min-h-[200px] bg-gray-50"
+            style={{ fontWeight: isBold ? 'bold' : 'normal', fontStyle: isItalic ? 'italic' : 'normal' }}
+          >
+            {content || <span className="text-gray-400">No content yet...</span>}
+          </div>
+        ) : (
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Write your message here..."
+            rows={8}
+            className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30 resize-none"
+            style={{ fontWeight: isBold ? 'bold' : 'normal', fontStyle: isItalic ? 'italic' : 'normal' }}
+          />
+        )}
+      </div>
+      
+      {/* Send Button */}
+      <button
+        onClick={handleSend}
+        disabled={sending || recipients.length === 0 || !subject.trim() || !content.trim()}
+        className="w-full bg-goldin-orange text-white font-bold py-4 rounded-2xl active:scale-98 transition disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {sending ? 'Sending...' : `Send to ${recipients.length} Recipients`}
+      </button>
+      
+      {/* Recipients Preview */}
+      {recipients.length > 0 && (
+        <div className="mt-4">
+          <h4 className="text-sm font-semibold text-gray-700 mb-2">Recipients ({recipients.length})</h4>
+          <div className="bg-gray-50 rounded-xl p-3 max-h-40 overflow-auto">
+            <div className="flex flex-wrap gap-1">
+              {recipients.slice(0, 20).map(r => (
+                <span key={r.id} className="text-xs bg-white px-2 py-1 rounded-full text-gray-600 border border-gray-200">
+                  {r.first_name} {r.last_name}
+                </span>
+              ))}
+              {recipients.length > 20 && (
+                <span className="text-xs text-gray-500 px-2 py-1">+{recipients.length - 20} more</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SettingsPage() {
+  const { user, notificationSettings, setNotificationSettings, logout } = useContext(AppContext);
+  
+  const toggleSetting = (key) => {
+    const updated = { ...notificationSettings, [key]: !notificationSettings[key] };
+    setNotificationSettings(updated);
+    localStorage.setItem('gather_notifications', JSON.stringify(updated));
+  };
+
+  const handleLogout = async () => {
+    if (confirm('Are you sure you want to sign out?')) {
+      await logout();
+    }
+  };
+
+  return (
+    <div className="p-4 pb-24">
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+      
+      {/* Profile */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Profile</h2>
+        <div className="flex items-center gap-4">
+          {user?.avatar ? (
+            <img src={user.avatar} alt="" className="w-16 h-16 rounded-2xl object-cover" />
+          ) : (
+            <div className="w-16 h-16 bg-goldin-orange rounded-2xl flex items-center justify-center text-white text-2xl font-bold">
+              {user?.name?.split(' ').map(n => n[0]).join('') || 'G'}
+            </div>
+          )}
+          <div>
+            <p className="font-semibold text-gray-900 text-lg">{user?.name || 'Guest User'}</p>
+            <p className="text-gray-500">{user?.email || 'Not signed in'}</p>
+            {user?.email?.includes('guest') && (
+              <p className="text-xs text-amber-600 mt-1">⚠️ Using guest mode - sign in for full features</p>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Notifications */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Notifications</h2>
+        
+        {[
+          { key: 'dailySummary', label: 'Daily Summary', desc: 'Morning overview at 8am' },
+          { key: 'newActivity', label: 'Team Activity', desc: 'When interactions are logged' },
+          { key: 'overdueAlerts', label: 'Overdue Alerts', desc: 'When follow-ups become overdue' },
+          { key: 'newsAlerts', label: 'News Mentions', desc: 'When fellows appear in news' },
+        ].map(item => (
+          <div key={item.key} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+            <div>
+              <p className="font-medium text-gray-900">{item.label}</p>
+              <p className="text-sm text-gray-500">{item.desc}</p>
+            </div>
+            <button
+              onClick={() => toggleSetting(item.key)}
+              className={`w-12 h-7 rounded-full transition-colors ${
+                notificationSettings[item.key] ? 'bg-goldin-orange' : 'bg-gray-200'
+              }`}
+            >
+              <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                notificationSettings[item.key] ? 'translate-x-6' : 'translate-x-1'
+              }`}></div>
+            </button>
+          </div>
+        ))}
+      </div>
+      
+      {/* About */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">About</h2>
+        <div className="space-y-3">
+          <div className="flex justify-between">
+            <span className="text-gray-600">Version</span>
+            <span className="text-gray-900 font-medium">2.0.0 (PWA)</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">Organization</span>
+            <span className="text-gray-900 font-medium">Goldin Institute</span>
+          </div>
+        </div>
+      </div>
+      
+      {/* Sign Out */}
+      <button
+        onClick={handleLogout}
+        className="w-full bg-red-50 text-red-600 font-semibold py-4 rounded-2xl"
+      >
+        Sign Out
+      </button>
+    </div>
+  );
+}
+
+// ============================================
+// LOG INTERACTION MODAL
+// ============================================
+function LogInteractionModal({ isOpen, onClose, preSelectedFellow }) {
+  const { fellows, fetchData, user } = useContext(AppContext);
+  const [step, setStep] = useState(1); // 1: select fellow, 2: form
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFellow, setSelectedFellow] = useState(null);
+  const [formData, setFormData] = useState({
+    interaction_type: 'Call',
+    subject: '',
+    notes: '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  // Handle pre-selected fellow
+  useEffect(() => {
+    if (isOpen && preSelectedFellow) {
+      setSelectedFellow(preSelectedFellow);
+      setStep(2);
+    }
+  }, [isOpen, preSelectedFellow]);
+
+  const filteredFellows = useMemo(() => {
+    if (!searchTerm) return fellows.slice(0, 20);
+    const term = searchTerm.toLowerCase();
+    return fellows.filter(f => 
+      `${f.first_name} ${f.last_name}`.toLowerCase().includes(term) ||
+      f.organization?.toLowerCase().includes(term)
+    ).slice(0, 20);
+  }, [fellows, searchTerm]);
+
+  const handleSubmit = async () => {
+    if (!selectedFellow) return;
+    setIsSubmitting(true);
+    
+    const interaction = {
+      fellow_id: selectedFellow.id,
+      interaction_type: formData.interaction_type,
+      subject: formData.subject || null,
+      notes: formData.notes || null,
+      staff_email: user?.email || 'unknown@goldininstitute.org',
+      created_at: new Date().toISOString(),
+    };
+    
+    const { error } = await supabase.from('interactions').insert(interaction);
+    
+    if (!error) {
+      await supabase.from('fellows')
+        .update({ last_contact: new Date().toISOString() })
+        .eq('id', selectedFellow.id);
+      
+      setSuccess(true);
+      setTimeout(() => {
+        fetchData();
+        onClose();
+        // Reset state
+        setStep(1);
+        setSearchTerm('');
+        setSelectedFellow(null);
+        setFormData({ interaction_type: 'Call', subject: '', notes: '' });
+        setSuccess(false);
+        setIsSubmitting(false);
+      }, 1500);
+    } else {
+      setIsSubmitting(false);
+      alert('Error saving interaction');
+    }
+  };
+
+  const reset = () => {
+    setStep(1);
+    setSearchTerm('');
+    setSelectedFellow(null);
+    setFormData({ interaction_type: 'Call', subject: '', notes: '' });
+    setSuccess(false);
+    setIsSubmitting(false);
+  };
+
+  useEffect(() => {
+    if (!isOpen) reset();
+  }, [isOpen]);
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isOpen]);
+
+  return (
+    <>
+      {/* Full screen backdrop - blocks all interaction with content behind */}
+      <div 
+        className={`fixed inset-0 bg-black/60 z-50 transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+      
+      {/* Full screen modal container */}
+      <div className={`fixed inset-0 z-50 flex flex-col justify-end pointer-events-none ${isOpen ? '' : ''}`}>
+        {/* Bottom Sheet */}
+        <div 
+          className={`bottom-sheet bg-white rounded-t-3xl max-h-[90vh] overflow-hidden pointer-events-auto ${isOpen ? 'open' : ''}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Handle */}
+          <div className="flex justify-center pt-3 pb-2">
+            <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
+          </div>
+          
+          {success ? (
+            <div className="p-12 text-center">
+              <div className="text-6xl mb-4">✅</div>
+              <p className="text-xl font-semibold text-gray-900">Logged!</p>
+            </div>
+          ) : step === 1 ? (
+            <>
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
+                <h2 className="text-xl font-bold text-gray-900">Log Interaction</h2>
+                <button onClick={onClose} className="p-2 text-2xl text-gray-400">&times;</button>
+              </div>
+              
+              {/* Search */}
+              <div className="p-4">
+                <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search fellow..." />
+              </div>
+              
+              {/* Fellow List */}
+              <div className="max-h-[50vh] overflow-auto px-4 pb-safe">
+                {filteredFellows.map(fellow => {
+                  const status = getContactStatus(fellow.last_contact);
+                  return (
+                    <button
+                      key={fellow.id}
+                      onClick={() => { setSelectedFellow(fellow); setStep(2); }}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition"
+                    >
+                      <div className="w-11 h-11 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 relative">
+                        {fellow.photo_url ? (
+                          <img src={fellow.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400 font-medium">
+                            {fellow.first_name?.[0]}{fellow.last_name?.[0]}
+                          </div>
+                      )}
+                      <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white status-${status.color}`}></div>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="font-semibold text-gray-900">{fellow.first_name} {fellow.last_name}</p>
+                      <p className="text-sm text-gray-500">{fellow.organization || 'No organization'}</p>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 pb-3 border-b border-gray-100">
+              <button onClick={() => setStep(1)} className="p-1">
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div className="flex-1">
+                <h2 className="text-lg font-bold text-gray-900">{selectedFellow?.first_name} {selectedFellow?.last_name}</h2>
+                <p className="text-sm text-gray-500">{selectedFellow?.organization}</p>
+              </div>
+              <button onClick={onClose} className="p-2 text-2xl text-gray-400">&times;</button>
+            </div>
+            
+            {/* Form */}
+            <div className="p-4 space-y-4 overflow-auto max-h-[60vh]">
+              {/* Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'Call', icon: '📞' },
+                    { value: 'Email', icon: '📧' },
+                    { value: 'Meeting', icon: '🤝' },
+                    { value: 'Note', icon: '📝' },
+                    { value: 'Event', icon: '🎉' },
+                    { value: 'Site Visit', icon: '🏠' },
+                  ].map(type => {
+                    const isSelected = formData.interaction_type === type.value;
+                    return (
+                      <button
+                        key={type.value}
+                        onClick={() => setFormData(d => ({ ...d, interaction_type: type.value }))}
+                        className="p-3 rounded-xl text-center transition border-2"
+                        style={{
+                          backgroundColor: isSelected ? '#E87722' : '#f3f4f6',
+                          color: isSelected ? '#ffffff' : '#374151',
+                          borderColor: isSelected ? '#E87722' : '#f3f4f6',
+                          boxShadow: isSelected ? '0 4px 12px rgba(232, 119, 34, 0.3)' : 'none'
+                        }}
+                      >
+                        <span className="text-xl block mb-1">{type.icon}</span>
+                        <span className="text-xs font-semibold">{type.value}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              {/* Subject */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Subject (optional)</label>
+                <input
+                  type="text"
+                  value={formData.subject}
+                  onChange={(e) => setFormData(d => ({ ...d, subject: e.target.value }))}
+                  placeholder="e.g., Quarterly check-in"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                />
+              </div>
+              
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData(d => ({ ...d, notes: e.target.value }))}
+                  placeholder="What did you discuss?"
+                  rows={4}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30 resize-none"
+                />
+              </div>
+            </div>
+            
+            {/* Submit */}
+            <div className="p-4 border-t border-gray-100 bg-white safe-bottom">
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="w-full font-bold py-4 rounded-2xl active:scale-98 transition disabled:opacity-50"
+                style={{ 
+                  backgroundColor: '#E87722',
+                  color: '#ffffff',
+                  boxShadow: '0 4px 14px rgba(232, 119, 34, 0.5)' 
+                }}
+              >
+                {isSubmitting ? 'Saving...' : '✓ Log Interaction'}
+              </button>
+            </div>
+          </>
+        )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ============================================
+// MAIN APP
+// ============================================
+function MainApp() {
+  const { user, userRole, isOnboarded, loading, login, completeOnboarding, canAccess } = useContext(AppContext);
+  const [onboardingStep, setOnboardingStep] = useState(() => {
+    // Initialize based on existing state
+    const savedUser = localStorage.getItem('gather_user');
+    const savedOnboarded = localStorage.getItem('gather_onboarded');
+    if (savedUser && savedOnboarded) return 3; // Fully onboarded
+    if (savedUser) return 2; // User exists but not onboarded
+    return 0;
+  });
+  // Default page based on role: staff sees dashboard, others see directory
+  const getDefaultPage = () => {
+    const savedRole = localStorage.getItem('gather_user_role');
+    return hasPermission(savedRole || ROLES.VIEWER, ROLES.TEAM) ? 'dashboard' : 'directory';
+  };
+  const [currentPage, setCurrentPage] = useState(getDefaultPage);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logModalOpen, setLogModalOpen] = useState(false);
+  const [selectedFellow, setSelectedFellow] = useState(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+
+  // Update onboarding step when user state changes (e.g., after OAuth return)
+  useEffect(() => {
+    if (user && isOnboarded) {
+      setOnboardingStep(3);
+    } else if (user && !isOnboarded) {
+      setOnboardingStep(2);
+    }
+  }, [user, isOnboarded]);
+
+  const handleSelectFellow = (fellow) => {
+    setSelectedFellow(fellow);
+    setProfileModalOpen(true);
+  };
+
+  const handleLogFromProfile = (fellow) => {
+    setSelectedFellow(fellow);
+    setProfileModalOpen(false);
+    setLogModalOpen(true);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="w-12 h-12 bg-goldin-orange rounded-2xl p-2 animate-pulse">
+          <img src={GATHER_LOGO} alt="" className="w-full h-full" />
+        </div>
+      </div>
+    );
+  }
+
+  // Onboarding flow
+  if (!user || !isOnboarded) {
+    if (onboardingStep === 0) {
+      return <WelcomeScreen onNext={() => setOnboardingStep(1)} />;
+    }
+    if (onboardingStep === 1 || !user) {
+      return <LoginScreen onLogin={(userData, skipRoleLookup = false) => { login(userData, skipRoleLookup); setOnboardingStep(2); }} />;
+    }
+    if (onboardingStep === 2 || !isOnboarded) {
+      return <NotificationSetupScreen onComplete={completeOnboarding} />;
+    }
+  }
+
+  // Page titles
+  const pageTitles = {
+    dashboard: 'Dashboard',
+    directory: 'Directory',
+    search: 'Search',
+    activity: 'Activity',
+    'cohort-comm': 'Cohort Communication',
+    settings: 'Settings'
+  };
+
+  const openLogModal = () => {
+    setSelectedFellow(null);
+    setLogModalOpen(true);
+  };
+
+  // Main app
+  return (
+    <div className="min-h-screen bg-gray-50 overflow-auto">
+      <Header 
+        onMenuOpen={() => setMenuOpen(true)} 
+        pageTitle={pageTitles[currentPage] || 'GATHER'} 
+        onAddInteraction={openLogModal}
+      />
+      
+      <SlideMenu 
+        isOpen={menuOpen} 
+        onClose={() => setMenuOpen(false)}
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+      />
+      
+      {currentPage === 'dashboard' && <DashboardPage onLogInteraction={openLogModal} onSelectFellow={handleSelectFellow} />}
+      {currentPage === 'directory' && <DirectoryPage onSelectFellow={handleSelectFellow} />}
+      {currentPage === 'search' && <SearchPage onSelectFellow={handleSelectFellow} />}
+      {currentPage === 'activity' && <ActivityPage onSelectFellow={handleSelectFellow} />}
+      {currentPage === 'cohort-comm' && <CohortCommunicationPage />}
+      {currentPage === 'settings' && <SettingsPage />}
+      
+      <FellowProfileModal 
+        fellow={selectedFellow} 
+        isOpen={profileModalOpen} 
+        onClose={() => setProfileModalOpen(false)}
+        onLogInteraction={handleLogFromProfile}
+      />
+      
+      <LogInteractionModal 
+        isOpen={logModalOpen} 
+        onClose={() => setLogModalOpen(false)} 
+        preSelectedFellow={selectedFellow}
+      />
+    </div>
+  );
+}
+
+// ============================================
+// ROOT
+// ============================================
+function App() {
+  return (
+    <AppProvider>
+      <MainApp />
+    </AppProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+<!-- Register Service Worker -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+  });
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Dashboard | GATHER</title>
+    <meta name="description" content="GATHER CRM Staff Dashboard - Track alumni engagement and team activity">
+    <!-- GATHER Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23f97316'/%3E%3Ctext x='50' y='65' font-size='50' text-anchor='middle' fill='white' font-family='Arial Black'%3EG%3C/text%3E%3C/svg%3E">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'goldin-orange': '#f97316',
+                        'goldin-orange-dark': '#ea580c',
+                        'goldin-gray': '#6b7280',
+                        'goldin-gray-dark': '#374151',
+                        'goldin-gray-light': '#9ca3af'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: #f1f5f9; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+    
+    <script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// Supabase client
+const SUPABASE_URL = 'https://pwazurumpzydxyppbvee.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3YXp1cnVtcHp5ZHh5cHBidmVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MjM3MDUsImV4cCI6MjA4NTA5OTcwNX0.iGLmSpTPM84lMGGizSfBnkDCvpMZaJVaFhcRJ9cYDrs';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// GATHER Logo as base64
+const GATHER_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF0WlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNi4wLWMwMDIgNzkuMTY0MzUyLCAyMDIwLzAxLzMwLTE1OjUwOjM4ICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIgeG1sbnM6cGhvdG9zaG9wPSJodHRwOi8vbnMuYWRvYmUuY29tL3Bob3Rvc2hvcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjEuMSAoV2luZG93cykiIHhtcDpDcmVhdGVEYXRlPSIyMDI0LTAxLTE1VDEwOjAwOjAwLTA2OjAwIiB4bXA6TW9kaWZ5RGF0ZT0iMjAyNC0wMS0xNVQxMDowMDowMC0wNjowMCIgeG1wOk1ldGFkYXRhRGF0ZT0iMjAyNC0wMS0xNVQxMDowMDowMC0wNjowMCIgZGM6Zm9ybWF0PSJpbWFnZS9wbmciIHBob3Rvc2hvcDpDb2xvck1vZGU9IjMiIHBob3Rvc2hvcDpJQ0NQcm9maWxlPSJzUkdCIElFQzYxOTY2LTIuMSIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDo2YjI4OTAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDAiIHhtcE1NOkRvY3VtZW50SUQ9InhtcC5kaWQ6NmIyODkwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiB4bXBNTTpPcmlnaW5hbERvY3VtZW50SUQ9InhtcC5kaWQ6NmIyODkwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIj4gPHhtcE1NOkhpc3Rvcnk+IDxyZGY6U2VxPiA8cmRmOmxpIHN0RXZ0OmFjdGlvbj0iY3JlYXRlZCIgc3RFdnQ6aW5zdGFuY2VJRD0ieG1wLmlpZDo2YjI4OTAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDAiIHN0RXZ0OndoZW49IjIwMjQtMDEtMTVUMTA6MDA6MDAtMDY6MDAiIHN0RXZ0OnNvZnR3YXJlQWdlbnQ9IkFkb2JlIFBob3Rvc2hvcCAyMS4xIChXaW5kb3dzKSIvPiA8L3JkZjpTZXE+IDwveG1wTU06SGlzdG9yeT4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz7FIRCzAAAKQklEQVR4nO2de3BU1R3HP3dz7+4mu8kmJJCEJCQxQAhQASGgoFRRBFGxVbTWKh1HbdVa69h22k6n/cNOO9NOp512OvXRWq2OD7Q+0Pqq+KiCYkGCDwgEeUNIQnZJstnd7L33nv6xS0xCNgnZ3WTv3f3O/GZmd3d2f+d3v/ec3znn3nO1NncJYc7g8oHzJmQ5nT8VArYR5gfRNc1qD8Li4ATQKaVcFJjhOAz8FxgAPgt4gGbgQSHEY8AHALqu0+Z2s8LjYabnJHIuJKgIvgr8S0p5p6ZpfyOC8TI1n3NFMM5jZoQQ+IBfR8bsVqD3VNAH1wN/BH4AvAbcIaV8ERgphHgSuAnoBe6TUv46sr1fPiYhxMuReA8A85HyMeAeIUSblHKuPJN5wD3Ao8D9wG9OE8YRIWUDcp7QdTsHgMfOEMs+QCelPB94HvhlZLl+CPwucD9wF7Bc07TnALsQ4nop5TWROoaAeyLH/gpYBzyIlM8LIX4L/FwI8TOgMRLbOqAJeJYzJTyFDuBK4D+B/ZFt/xT4FfB74BfAw8BK4G3gduAR4L+AZcjwTz5mhghxA3K2G7gNKf8C/IZwrP8G/DTymq8DjwHvAE8BtyHltVLK3wJtwMNSykeQ8ifAU8AjyPAPgPCJ1YQa4FykeBZYCfwZ+ANwL0L8k3AtPwH+CDwMPA1cDHyAlC8hRAtwD3L2b4EbgFuBP0kpd0opt0op7wZ+hiQQQmwF7gT+LqU8JIT4LXAN8A/gUYR4DLgjEs+vkPJJ4FHJKU6NTxFhYoSZkBBBhFiKlM8K8ecTtXwf+J0Q4l2kuBNpfj7yWvg+sB1YK4S4j3AsbgJulFLeLKW8FRlugfAJCvwAIf4K3IicDbwuhPihEOIOwoY/Sbjmx5DybqR8SQjxMCc7vAF4BPg1UjYixH+Au4BHgX9H9vE34PfAw8BvTqzz+8DvkPI+IYQfuFBK+U/C8bsLuE1KuUwI8SAwDyk3EI7/KuRs4AHgQeC/gXuBm4UQTwJ+hPhh5PUPIMQDkvBJehk4n/AJuv/E+4QQdwK/llLeCJwDnBMJdhVwF/BL4AHCJ/rPQoi/AL8ifBLvI2x8PyL8xnoQQjwNXAn8C/gN8BPgP4B7kfJBhLiLcN19EnhUSvmwEOJR4IFILKdE6j8OXI4QjwP3E47zbUh5g5TyYaRcB/xISrkK+CNwB/BL4O/A74QQDxN2jv+WUt4O3I6UNyHEA8DjQogXkbIRIdYR7ulfSCnvF0L8BfgRQvwBuE1K+XPgYeB3wJ1SykuQ8j5gvZDyNinlw0h5jhDiEWC9EOLHyJnAncj5wGPAr4CHkfKPlLM/EqIA+AnhE3EHcC9wF0L8EfgV8AdgLXAbchZwqxDiNiHErVLKW4UQ9wEPIcQDyDBIWQM8hBB/Bh4AHgN+CYQIP1S4W0r5EFA/wXoeRIi/EI5/DeGT9mfgt0IISdhZ7pRS/gQhHgP+G/g9cCtC/JpwjG4UQtxC+ETdjBA/FUL8Fvg18CdgLULcSjjm9wIPIMT9hO34FSnlWqS8C/gvIcQfCZ+Yu6SUvwSeBP4E/EIIER6LoEMI8VfgduBBwrW4S0p5K/BX4CfA3cBdUsqfA08APwV+CdyDlLcixL2ET+ztQogHgJullDcDdwsh7iF8cp4E7gIellL+HvhxZJ0fB9ZLKX8O/Bm4Syn/A7hDSnkn4Vr/E/gJUj4KrBVCrJVSPgj8BvgL8DBSPkjYxH6OlI8D90sp7wHuA36NlH8H7gJ+B/xOSvlT4E/AvUj5MPAX4NdI+Zvh+x7ZhyuBe4QQf0bK24DbgT8T7g//XSOEWA9cA/wdIT4E7pBS3okQfwAellI+hBBPAb8BfgP8TUpZC9wjhPgzcBdSnouUtxDu+NcixI+BtZHl/onw8K8B+D1SPgj8GvhVZP2/EO6brAX+ADwopVyLlL8CHgL+LITYBjQKIdYC9wghfkM4TncADwI/FUL8mXB/6OfAY0LKnwsh7gP+DfgTQvwKeAj4I+Ga/AlYT7j2/5FSPhrZ5q+A3yPl/cC9wN1CiN8BD0gpHwFuBx5CyruA+4SU9yHE74HfSinvBH6CED8Gfi2l/BVSPhmpw+PA00j5e+DXwMOEDe83hE/uH4C1SHk74Y74t8DDJ+r2E+C+SD1+DjwkpXxICHE/4drfihDrgeullA8A/wXcBjwopfwbcAdS/oQTQ9uE+M3wvwVnM2OWFOJewmZ5K/AL4E4hxF8Jd7BPIMRfCJ/42wgb/O2EG4FrkXIt8FMhxH3AI8DdSPkn4FHg14T7HHdH6vZ7hPg5J0d0DxPu4P+IsHP9VEr5P8B9wM+llPcBjwC/Ado01VgTXb4gMBIhjp5Y54S6/2pi3X8BnIeU65HyAcIu9mdgPeHTcT9w+4l9iSTGWynl3Uh5L3AbQvyQ8Il5APi1EOJPwE+APwC/AH4K3Ec49vcR7pRv48T+C4/EuFNKuQ4p7yDsIj+SUv4P4RHrnUj5C+B3wG+BXwkhHgL+AqxHyh8iwycceBA55keEjflewm59H+FhYz8BfkG4o7ueE0Pjfon8DeGJG48DPxZC/An4E+EG5o9SyhuQ8gHCo+GfE+6gfyGl/CPhq5N7kfI3SPlrIcTDwK+AP0bW/QFhd/orYROqJRzj+4Dfcur0/T1I+SvgD4SD/XPCZvQrpPwtYXf6M+GTdD/hk/B74B6E+CuhK4t7kPJXSPl7wqZ2K2EXeYTwleojwB8JNxD/Q8oHgeullHcD/4OUv0PKtcCthB3gl4Rr/CPgfillTSSWawmbzB+FEA8h5a8JT+/4GVL+nrBr3I4QPwHWSymvB+4D7gD+ADwC/A64WwjxV+B3SPkr4MfAz4CHEOJu4LfAeuBOKeVPCbvrg0h5N/Ar4I9Syl8DP+HkxJI7EOKnwK+Q8n7CJ/p+4GfAr6WU/wn8AbjjxDL/Cfwn4VMZAD4D/pFwx/h/gN8IPVzjHwE3EHaMm6WU/w/4HXCLEOInkdd/QHhU9zPgTinlg4T7AT8XQtyLlH8l3Ge4V0r5S+DXwKNI+VPgIcLOcyvhE3wv4Y73bsJm+zPgbqS8k/DJvItwR/0YcBdC/IpwR/0Q4VHh/URufn0XCM8GiPQ3bpZS3oYQjxPu7/yakyPlnxGpzfD4JuX9SLkeuBUpf0k43n8GfiylvJtwR34X4VHn3YRHnnch5U+A/wLuQ4hHgD8RHqHeCfwaKe8m3EG/m/DgwhOEpyj8BrgbeAIpH0DK3xAeFd5GuDG4g/DQ/X8Dv0LKPxDuOP8K+BVS/iHyutsJ1+5nSPkQ8FdkuBG4W0r5c8J9kh8DjwH3I8TjhB3kDsIn4DfArwkPSvwCeFRKeZcQ4gGE+DPhEfaPkfJxwq5xB0L8ifAo9B7Cn1U9cOJE308k/j8nbLq/IGzkfyE8uvwl4RHkrwn3dx4Ffko4dquBZ5HyVoS4ByHuAW6NxOV3hPtCNwP3A3cg5X8SP/Gae4G7gTuB3xI+Ob8i3Ae5h/DsxzuR8p+Ea/8oYZf5JfBr4Lakm7i3nNjGfYRP5v+o6FDlr5Hy18Av/h8cEu0P6v0UOQAAAABJRU5ErkJggg==";
+
+// Mock current user (will be replaced with auth)
+const CURRENT_USER = {
+  email: 'travis@goldininstitute.org',
+  name: 'Travis Rejman',
+  role: 'Admin',
+  avatar: null
+};
+
+// Utility functions
+function formatDate(dateStr) {
+  if (!dateStr) return 'Never';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return date.toLocaleDateString('en-US', { weekday: 'long' });
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+function formatFullDate(dateStr) {
+  if (!dateStr) return 'Never';
+  return new Date(dateStr).toLocaleDateString('en-US', { 
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
+  });
+}
+
+function getContactStatus(lastContact) {
+  if (!lastContact) return { color: 'red', label: 'Never contacted', days: Infinity };
+  const days = Math.floor((new Date() - new Date(lastContact)) / (1000 * 60 * 60 * 24));
+  if (days <= 30) return { color: 'green', label: 'Recent', days };
+  if (days <= 90) return { color: 'yellow', label: 'Follow-up needed', days };
+  return { color: 'red', label: 'Overdue', days };
+}
+
+function getActivityIcon(type, initiatedVia) {
+  if (initiatedVia === 'mailchimp') return '📨';
+  const icons = {
+    'Email': '📧',
+    'Call': '📞',
+    'Meeting': '🤝',
+    'Note': '📝',
+    'Event': '🎉',
+    'Site Visit': '🏠',
+    'SMS': '💬',
+  };
+  return icons[type] || '💬';
+}
+
+function getProgramBadge(program) {
+  if (!program) return null;
+  if (program.includes('CPF') || program.includes('Chicago')) {
+    return { label: 'CPF', bgColor: 'bg-blue-600' };
+  }
+  if (program.includes('GGF') || program.includes('Global')) {
+    return { label: 'GGF', bgColor: 'bg-emerald-600' };
+  }
+  return { label: program.substring(0, 3), bgColor: 'bg-gray-600' };
+}
+
+// Navigation Sidebar
+function Sidebar({ activeTab, setActiveTab }) {
+  const navItems = [
+    { id: 'dashboard', icon: '🏠', label: 'Dashboard' },
+    { id: 'directory', icon: '👥', label: 'Directory', href: 'index.html' },
+    { id: 'insights', icon: '📈', label: 'Insights' },
+    { id: 'tasks', icon: '📋', label: 'Tasks' },
+    { id: 'communications', icon: '📧', label: 'Communications' },
+  ];
+
+  return (
+    <aside className="w-16 md:w-56 bg-white border-r flex flex-col flex-shrink-0 shadow-sm">
+      {/* Logo - matches directory header */}
+      <div className="p-4 border-b bg-gradient-to-r from-goldin-orange to-goldin-orange-dark">
+        <a href="index.html" className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-white rounded-lg p-1.5 flex-shrink-0 shadow-md">
+            <img src={GATHER_LOGO} alt="GATHER" className="w-full h-full" />
+          </div>
+          <div className="hidden md:block">
+            <h1 className="font-bold text-white">GATHER</h1>
+            <p className="text-xs text-white/80">Staff Dashboard</p>
+          </div>
+        </a>
+      </div>
+      
+      {/* Navigation */}
+      <nav className="flex-1 py-4">
+        {navItems.map(item => (
+          item.href ? (
+            <a key={item.id} href={item.href}
+               className="flex items-center gap-3 px-4 py-3 text-goldin-gray hover:bg-goldin-orange/5 hover:text-goldin-orange transition-colors">
+              <span className="text-xl">{item.icon}</span>
+              <span className="hidden md:block text-sm font-medium">{item.label}</span>
+            </a>
+          ) : (
+            <button key={item.id} onClick={() => setActiveTab(item.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
+                      activeTab === item.id 
+                        ? 'bg-goldin-orange/10 text-goldin-orange border-r-3 border-goldin-orange font-semibold' 
+                        : 'text-goldin-gray hover:bg-goldin-orange/5 hover:text-goldin-orange'
+                    }`}>
+              <span className="text-xl">{item.icon}</span>
+              <span className="hidden md:block text-sm font-medium">{item.label}</span>
+            </button>
+          )
+        ))}
+      </nav>
+      
+      {/* Mode Toggle */}
+      <div className="p-4 border-t hidden md:block">
+        <div className="bg-gray-50 rounded-xl p-3">
+          <select className="w-full bg-transparent text-sm font-medium text-goldin-gray-dark focus:outline-none cursor-pointer">
+            <option value="alumni">👥 Alumni Network</option>
+            <option value="fellows" disabled>🎓 Current Fellows</option>
+          </select>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+// Header
+function Header({ user, fellows }) {
+  // Calculate status counts for mini pills
+  const statusCounts = useMemo(() => {
+    const counts = { green: 0, yellow: 0, red: 0 };
+    (fellows || []).forEach(f => {
+      const status = getContactStatus(f.last_contact);
+      counts[status.color]++;
+    });
+    return counts;
+  }, [fellows]);
+
+  return (
+    <header className="bg-white border-b px-6 py-3 flex items-center justify-between shadow-sm">
+      <div>
+        <h2 className="text-lg font-semibold text-goldin-gray-dark">Welcome back, {user.name.split(' ')[0]}</h2>
+        <p className="text-sm text-goldin-gray">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+      </div>
+      <div className="flex items-center gap-4">
+        {/* Mini status pills - matches directory */}
+        <div className="hidden md:flex items-center gap-1.5">
+          <a href="index.html?status=green" className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-full text-xs font-medium border border-green-200 hover:bg-green-100 transition-colors">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            {statusCounts.green}
+          </a>
+          <a href="index.html?status=yellow" className="flex items-center gap-1 px-2 py-1 bg-yellow-50 text-yellow-700 rounded-full text-xs font-medium border border-yellow-200 hover:bg-yellow-100 transition-colors">
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+            {statusCounts.yellow}
+          </a>
+          <a href="index.html?status=red" className="flex items-center gap-1 px-2 py-1 bg-red-50 text-red-700 rounded-full text-xs font-medium border border-red-200 hover:bg-red-100 transition-colors">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+            {statusCounts.red}
+          </a>
+        </div>
+        {/* Notifications */}
+        <button className="relative p-2 hover:bg-gray-100 rounded-xl transition-colors">
+          <span className="text-xl">🔔</span>
+          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+        </button>
+        {/* User menu */}
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 bg-gradient-to-br from-goldin-orange to-goldin-orange-dark rounded-xl flex items-center justify-center text-white font-semibold shadow-md">
+            {user.name.split(' ').map(n => n[0]).join('')}
+          </div>
+          <span className="text-sm font-medium text-goldin-gray-dark hidden md:block">{user.name}</span>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+// Metric Card
+function MetricCard({ value, label, icon, color, highlight, onClick }) {
+  const colorClasses = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    green: 'bg-green-50 text-green-600 border-green-100',
+    yellow: 'bg-yellow-50 text-yellow-600 border-yellow-100',
+    red: 'bg-red-50 text-red-600 border-red-100',
+    gray: 'bg-gray-50 text-gray-600 border-gray-100',
+  };
+  
+  const dotColors = {
+    blue: 'bg-blue-500',
+    green: 'bg-green-500',
+    yellow: 'bg-yellow-500',
+    red: 'bg-red-500',
+    gray: 'bg-gray-500',
+  };
+
+  return (
+    <button 
+      onClick={onClick}
+      disabled={!onClick}
+      className={`p-5 rounded-2xl border-2 transition-all ${
+        onClick ? 'hover:shadow-lg hover:border-goldin-orange hover:-translate-y-0.5 cursor-pointer' : 'cursor-default'
+      } ${highlight ? 'ring-2 ring-red-400 ring-offset-2 animate-pulse' : ''} bg-white ${colorClasses[color] || colorClasses.gray}`}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            {color && color !== 'blue' && color !== 'gray' && (
+              <span className={`w-3 h-3 rounded-full ${dotColors[color]}`}></span>
+            )}
+            <span className="text-3xl font-bold text-goldin-gray-dark">{value}</span>
+          </div>
+          <p className="text-sm text-goldin-gray font-medium">{label}</p>
+        </div>
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl ${colorClasses[color] || colorClasses.gray}`}>
+          {icon}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// Engagement Snapshot
+function EngagementSnapshot({ fellows, interactions, onFilterByStatus }) {
+  const stats = useMemo(() => {
+    const statusCounts = { green: 0, yellow: 0, red: 0 };
+    fellows.forEach(f => {
+      const status = getContactStatus(f.last_contact);
+      statusCounts[status.color]++;
+    });
+    
+    // Count interactions this month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonth = interactions.filter(i => new Date(i.created_at) >= startOfMonth).length;
+    
+    // Health score: % contacted in last 90 days
+    const healthScore = fellows.length > 0 
+      ? Math.round(((statusCounts.green + statusCounts.yellow) / fellows.length) * 100)
+      : 0;
+    
+    return { thisMonth, ...statusCounts, healthScore };
+  }, [fellows, interactions]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border p-6">
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="font-bold text-lg text-goldin-gray-dark">📊 Engagement Snapshot</h2>
+        <span className="text-sm text-goldin-gray bg-gray-50 px-3 py-1 rounded-full">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <MetricCard 
+          value={stats.thisMonth} 
+          label="Contacts This Month" 
+          icon="📊" 
+          color="blue" 
+        />
+        <MetricCard 
+          value={stats.green} 
+          label="Recent (≤30d)" 
+          icon="🟢" 
+          color="green"
+          onClick={() => onFilterByStatus('green')}
+        />
+        <MetricCard 
+          value={stats.yellow} 
+          label="Follow-up (31-90d)" 
+          icon="🟡" 
+          color="yellow"
+          onClick={() => onFilterByStatus('yellow')}
+        />
+        <MetricCard 
+          value={stats.red} 
+          label="Overdue (90d+)" 
+          icon="🔴" 
+          color="red"
+          highlight={stats.red > 50}
+          onClick={() => onFilterByStatus('red')}
+        />
+        <MetricCard 
+          value={`${stats.healthScore}%`} 
+          label="Network Health" 
+          icon="💚" 
+          color={stats.healthScore >= 70 ? 'green' : stats.healthScore >= 50 ? 'yellow' : 'red'}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Engagement Trend Chart
+function EngagementTrendChart({ interactions }) {
+  const chartData = useMemo(() => {
+    const last30Days = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dayStr = date.toISOString().split('T')[0];
+      const count = interactions.filter(int => 
+        int.created_at && int.created_at.startsWith(dayStr)
+      ).length;
+      last30Days.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        count,
+        fullDate: dayStr
+      });
+    }
+    return last30Days;
+  }, [interactions]);
+
+  const thisMonth = chartData.reduce((sum, d) => sum + d.count, 0);
+  
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border p-6 h-full">
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="font-bold text-lg text-goldin-gray-dark flex items-center gap-2">
+          📈 Engagement Trend
+        </h2>
+        <select className="text-sm border border-gray-200 rounded-xl px-3 py-1.5 text-goldin-gray bg-gray-50 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30">
+          <option>Last 30 days</option>
+        </select>
+      </div>
+      
+      <div className="h-44 flex items-end gap-1 px-2">
+        {chartData.slice(-14).map((d, i) => {
+          const maxCount = Math.max(...chartData.map(x => x.count), 1);
+          const height = (d.count / maxCount) * 100;
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+              <div 
+                className="w-full bg-gradient-to-t from-goldin-orange to-orange-300 rounded-t-lg transition-all group-hover:from-goldin-orange-dark group-hover:to-goldin-orange cursor-pointer group-hover:shadow-lg"
+                style={{ height: `${Math.max(height, 6)}%` }}
+                title={`${d.date}: ${d.count} interactions`}
+              />
+              {i % 2 === 0 && (
+                <span className="text-xs text-gray-400 truncate w-full text-center">{d.date.split(' ')[1]}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      
+      <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
+        <div className="flex items-baseline gap-2">
+          <span className="text-3xl font-bold text-goldin-gray-dark">{thisMonth}</span>
+          <span className="text-sm text-goldin-gray">interactions this period</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Your Priorities Panel
+function YourPriorities({ interactions, fellows }) {
+  const priorities = useMemo(() => {
+    const now = new Date();
+    const tasks = { overdue: [], today: [], thisWeek: [] };
+    
+    // Find fellows with follow-up dates
+    interactions.filter(i => i.follow_up_date && !i.follow_up_done).forEach(i => {
+      const dueDate = new Date(i.follow_up_date);
+      const diffDays = Math.floor((dueDate - now) / (1000 * 60 * 60 * 24));
+      const fellow = fellows.find(f => f.id === i.fellow_id);
+      
+      const task = { ...i, fellow, diffDays };
+      
+      if (diffDays < 0) tasks.overdue.push(task);
+      else if (diffDays === 0) tasks.today.push(task);
+      else if (diffDays <= 7) tasks.thisWeek.push(task);
+    });
+    
+    // Find incomplete notes
+    const incompleteNotes = interactions.filter(i => i.completed === false).slice(0, 3);
+    
+    return { ...tasks, incompleteNotes };
+  }, [interactions, fellows]);
+
+  const totalTasks = priorities.overdue.length + priorities.today.length + priorities.thisWeek.length;
+
+  const PrioritySection = ({ title, items, color, icon }) => {
+    if (items.length === 0) return null;
+    const colorClasses = {
+      red: 'text-red-600 bg-red-50',
+      orange: 'text-orange-600 bg-orange-50',
+      blue: 'text-blue-600 bg-blue-50',
+    };
+    
+    return (
+      <div className="mb-4">
+        <div className={`flex items-center gap-2 text-sm font-medium ${colorClasses[color].split(' ')[0]} mb-2`}>
+          <span>{icon}</span>
+          <span>{title}</span>
+          <span className={`text-xs px-1.5 py-0.5 rounded ${colorClasses[color]}`}>{items.length}</span>
+        </div>
+        <ul className="space-y-2">
+          {items.slice(0, 3).map(task => (
+            <li key={task.id} className="text-sm flex items-center gap-2 text-goldin-gray-dark">
+              <input type="checkbox" className="rounded border-gray-300" />
+              <span className="truncate">
+                {task.interaction_type || 'Contact'}{' '}
+                <span className="text-goldin-orange">
+                  {task.fellow ? `${task.fellow.first_name} ${task.fellow.last_name}` : 'Unknown'}
+                </span>
+              </span>
+            </li>
+          ))}
+          {items.length > 3 && (
+            <li className="text-xs text-goldin-gray">+ {items.length - 3} more</li>
+          )}
+        </ul>
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border h-full">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <h2 className="font-bold text-lg text-goldin-gray-dark flex items-center gap-2">
+          🎯 Your Priorities
+          {totalTasks > 0 && (
+            <span className="bg-gradient-to-r from-goldin-orange to-goldin-orange-dark text-white text-xs px-2.5 py-1 rounded-full font-semibold shadow-sm">
+              {totalTasks}
+            </span>
+          )}
+        </h2>
+      </div>
+      
+      <div className="p-5">
+        <PrioritySection title="Overdue" items={priorities.overdue} color="red" icon="🚨" />
+        <PrioritySection title="Due Today" items={priorities.today} color="orange" icon="⚡" />
+        <PrioritySection title="This Week" items={priorities.thisWeek} color="blue" icon="📅" />
+        
+        {priorities.incompleteNotes.length > 0 && (
+          <div className="pt-3 border-t">
+            <div className="flex items-center gap-2 text-sm text-amber-600 mb-2">
+              <span>📝</span>
+              <span className="font-medium">{priorities.incompleteNotes.length} incomplete notes</span>
+            </div>
+            <p className="text-xs text-goldin-gray">Complete your interaction notes for better tracking</p>
+          </div>
+        )}
+        
+        {totalTasks === 0 && priorities.incompleteNotes.length === 0 && (
+          <div className="text-center py-6">
+            <span className="text-4xl">🎉</span>
+            <p className="text-sm text-goldin-gray mt-2">All caught up!</p>
+          </div>
+        )}
+        
+        <button className="w-full text-center text-sm text-goldin-orange hover:underline pt-4">
+          View All Tasks →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Activity Feed Item
+function ActivityFeedItem({ activity, fellows }) {
+  const fellow = fellows.find(f => f.id === activity.fellow_id);
+  const icon = getActivityIcon(activity.interaction_type, activity.initiated_via);
+  const badge = fellow ? getProgramBadge(fellow.program) : null;
+  const time = formatTime(activity.created_at);
+  
+  const actionVerb = {
+    'Email': 'emailed',
+    'Call': 'called',
+    'Meeting': 'met with',
+    'Note': 'added note for',
+    'Event': 'logged event with',
+    'Site Visit': 'visited',
+  }[activity.interaction_type] || 'contacted';
+
+  const staffName = activity.staff_email 
+    ? activity.staff_email.split('@')[0].replace('.', ' ').split(' ').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ')
+    : 'Unknown';
+
+  return (
+    <div className="px-6 py-4 hover:bg-gray-50 transition-colors group slide-in">
+      <div className="flex gap-4">
+        {/* Icon */}
+        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xl">
+          {icon}
+        </div>
+        
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm">
+              <span className="font-semibold text-goldin-gray-dark">{staffName}</span>
+              {' '}
+              {fellow ? (
+                <>
+                  {actionVerb}{' '}
+                  <span className="font-medium text-goldin-orange">{fellow.first_name} {fellow.last_name}</span>
+                  {badge && (
+                    <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded ${badge.bgColor} text-white`}>
+                      {badge.label}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>logged {(activity.interaction_type || 'activity').toLowerCase()}</>
+              )}
+            </p>
+            <span className="text-xs text-gray-400 whitespace-nowrap">{time}</span>
+          </div>
+          
+          {activity.subject && (
+            <p className="text-sm text-goldin-gray-dark mt-0.5 font-medium">{activity.subject}</p>
+          )}
+          
+          {activity.notes && (
+            <p className="text-sm text-goldin-gray mt-1 line-clamp-2">
+              "{activity.notes.substring(0, 150)}{activity.notes.length > 150 ? '...' : ''}"
+            </p>
+          )}
+          
+          <div className="flex items-center gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button className="text-xs text-goldin-gray hover:text-goldin-orange">
+              View Details →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Activity Feed
+function ActivityFeed({ interactions, fellows, loading }) {
+  const [filter, setFilter] = useState('all');
+  
+  const filteredInteractions = useMemo(() => {
+    if (filter === 'all') return interactions;
+    if (filter === 'mine') return interactions.filter(i => i.staff_email === CURRENT_USER.email);
+    return interactions.filter(i => i.interaction_type === filter);
+  }, [interactions, filter]);
+  
+  // Group by date
+  const groupedActivities = useMemo(() => {
+    const groups = {};
+    filteredInteractions.slice(0, 50).forEach(activity => {
+      const label = formatDate(activity.created_at);
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(activity);
+    });
+    return groups;
+  }, [filteredInteractions]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+        <h2 className="font-bold text-lg text-goldin-gray-dark flex items-center gap-2">
+          🕐 Team Activity
+          {interactions.length > 0 && (
+            <span className="text-xs text-goldin-gray font-normal bg-gray-100 px-2 py-0.5 rounded-full">({interactions.length} total)</span>
+          )}
+        </h2>
+        <div className="flex items-center gap-2">
+          <select 
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            className="text-sm border border-gray-200 rounded-xl px-3 py-1.5 text-goldin-gray bg-gray-50 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+          >
+            <option value="all">All Activity</option>
+            <option value="mine">My Activity</option>
+            <option value="Email">📧 Emails</option>
+            <option value="Call">📞 Calls</option>
+            <option value="Meeting">🤝 Meetings</option>
+            <option value="Note">📝 Notes</option>
+          </select>
+          <button className="p-2 hover:bg-gray-100 rounded-xl text-goldin-gray transition-colors" title="Refresh">
+            ↻
+          </button>
+        </div>
+      </div>
+      
+      {/* Feed Content */}
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
+        {loading ? (
+          <div className="p-6 space-y-4">
+            {[1,2,3].map(i => (
+              <div key={i} className="animate-pulse flex gap-4">
+                <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : Object.keys(groupedActivities).length === 0 ? (
+          <div className="text-center py-12">
+            <span className="text-4xl">📭</span>
+            <p className="text-goldin-gray mt-2">No activity yet</p>
+            <p className="text-sm text-goldin-gray-light mt-1">Interactions will appear here as they happen</p>
+          </div>
+        ) : (
+          Object.entries(groupedActivities).map(([dateLabel, items]) => (
+            <div key={dateLabel}>
+              {/* Date Divider */}
+              <div className="sticky top-0 bg-gray-50 px-6 py-2 border-b z-10">
+                <span className="text-xs font-semibold text-goldin-gray uppercase tracking-wider">
+                  {dateLabel}
+                </span>
+              </div>
+              
+              {/* Activities for this date */}
+              <div className="divide-y">
+                {items.map(activity => (
+                  <ActivityFeedItem key={activity.id} activity={activity} fellows={fellows} />
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Log Interaction Modal
+// Searchable Fellow Selector Component
+function FellowSearchSelect({ fellows, value, onChange }) {
+  const [search, setSearch] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  
+  const selectedFellow = fellows.find(f => f.id === value);
+  
+  const filtered = useMemo(() => {
+    if (!search.trim()) return fellows.slice(0, 50); // Show first 50 if no search
+    const searchLower = search.toLowerCase();
+    return fellows.filter(f => 
+      f.first_name?.toLowerCase().includes(searchLower) ||
+      f.last_name?.toLowerCase().includes(searchLower) ||
+      `${f.first_name} ${f.last_name}`.toLowerCase().includes(searchLower) ||
+      `${f.last_name}, ${f.first_name}`.toLowerCase().includes(searchLower)
+    ).slice(0, 20);
+  }, [fellows, search]);
+
+  const handleSelect = (fellow) => {
+    onChange(fellow.id);
+    setSearch('');
+    setIsOpen(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' && filtered[highlightedIndex]) {
+      e.preventDefault();
+      handleSelect(filtered[highlightedIndex]);
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      {/* Selected Fellow Display or Search Input */}
+      {selectedFellow && !isOpen ? (
+        <div 
+          className="w-full border rounded-lg px-3 py-2 bg-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-100"
+          onClick={() => setIsOpen(true)}
+        >
+          <span>
+            <span className="font-medium">{selectedFellow.last_name}, {selectedFellow.first_name}</span>
+            {selectedFellow.program && (
+              <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-goldin-orange/10 text-goldin-orange">
+                {getProgramBadge(selectedFellow.program)?.label || selectedFellow.program}
+              </span>
+            )}
+          </span>
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange(''); }}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setIsOpen(true); setHighlightedIndex(0); }}
+            onFocus={() => setIsOpen(true)}
+            onKeyDown={handleKeyDown}
+            placeholder="Search by name..."
+            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-goldin-orange/50"
+            autoComplete="off"
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+        </div>
+      )}
+      
+      {/* Dropdown Results */}
+      {isOpen && (
+        <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-gray-500 text-sm">No fellows found</div>
+          ) : (
+            filtered.map((fellow, index) => (
+              <div
+                key={fellow.id}
+                className={`px-3 py-2 cursor-pointer flex items-center justify-between ${
+                  index === highlightedIndex ? 'bg-goldin-orange/10' : 'hover:bg-gray-50'
+                }`}
+                onClick={() => handleSelect(fellow)}
+                onMouseEnter={() => setHighlightedIndex(index)}
+              >
+                <span>
+                  <span className="font-medium">{fellow.last_name}</span>, {fellow.first_name}
+                </span>
+                {fellow.program && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                    {getProgramBadge(fellow.program)?.label || fellow.program}
+                  </span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+      
+      {/* Click outside to close */}
+      {isOpen && (
+        <div className="fixed inset-0 z-0" onClick={() => setIsOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+function LogInteractionModal({ isOpen, onClose, fellows, onSubmit }) {
+  const [formData, setFormData] = useState({
+    fellow_id: '',
+    interaction_type: 'Call',
+    subject: '',
+    notes: '',
+    interaction_date: new Date().toISOString().split('T')[0],
+    follow_up_date: '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.fellow_id) return;
+    setIsSubmitting(true);
+    setError(null);
+    
+    const interaction = {
+      fellow_id: formData.fellow_id,
+      interaction_type: formData.interaction_type,
+      subject: formData.subject || null,
+      notes: formData.notes || null,
+      interaction_date: formData.interaction_date,
+      follow_up_date: formData.follow_up_date || null,
+      staff_email: CURRENT_USER.email,
+      auto_logged: false,
+      follow_up_done: false,
+      created_at: new Date().toISOString(),
+    };
+    
+    console.log('Inserting interaction:', interaction);
+    const { data, error: insertError } = await supabase.from('interactions').insert(interaction).select();
+    console.log('Insert result:', { data, error: insertError });
+    
+    if (insertError) {
+      console.error('Insert error:', insertError);
+      setError(insertError.message || 'Failed to save interaction');
+      setIsSubmitting(false);
+      return;
+    }
+    
+    // Update last_contact for the fellow
+    await supabase
+      .from('fellows')
+      .update({ last_contact: new Date().toISOString() })
+      .eq('id', formData.fellow_id);
+    
+    setSuccess(true);
+    setTimeout(() => {
+      onSubmit();
+      onClose();
+      setSuccess(false);
+      setError(null);
+      setIsSubmitting(false);
+      setFormData({
+        fellow_id: '',
+        interaction_type: 'Call',
+        subject: '',
+        notes: '',
+        interaction_date: new Date().toISOString().split('T')[0],
+        follow_up_date: '',
+      });
+    }, 1500);
+  };
+
+  if (!isOpen) return null;
+
+  // Sort fellows by last name for the search
+  const sortedFellows = [...fellows].sort((a, b) => 
+    (a.last_name || '').localeCompare(b.last_name || '')
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl fade-in" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-xl font-bold text-goldin-gray-dark">Log Interaction</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg text-2xl leading-none">&times;</button>
+        </div>
+        
+        {success ? (
+          <div className="p-12 text-center">
+            <div className="text-5xl mb-4">✅</div>
+            <p className="text-lg font-medium text-green-600">Interaction logged!</p>
+          </div>
+        ) : (
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              ⚠️ {error}
+            </div>
+          )}
+          {/* Fellow Search */}
+          <div>
+            <label className="block text-sm font-medium text-goldin-gray-dark mb-1">Fellow *</label>
+            <FellowSearchSelect 
+              fellows={sortedFellows}
+              value={formData.fellow_id}
+              onChange={(id) => setFormData({...formData, fellow_id: id})}
+            />
+          </div>
+          
+          {/* Type and Date */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-goldin-gray-dark mb-1">Type *</label>
+              <select 
+                value={formData.interaction_type}
+                onChange={e => setFormData({...formData, interaction_type: e.target.value})}
+                className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-goldin-orange/50"
+              >
+                <option value="Call">📞 Call</option>
+                <option value="Email">📧 Email</option>
+                <option value="Meeting">🤝 Meeting</option>
+                <option value="Site Visit">🏠 Site Visit</option>
+                <option value="Note">📝 Note</option>
+                <option value="Event">🎉 Event</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-goldin-gray-dark mb-1">Date *</label>
+              <input 
+                type="date"
+                value={formData.interaction_date}
+                onChange={e => setFormData({...formData, interaction_date: e.target.value})}
+                className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-goldin-orange/50"
+                required
+              />
+            </div>
+          </div>
+          
+          {/* Subject */}
+          <div>
+            <label className="block text-sm font-medium text-goldin-gray-dark mb-1">Subject</label>
+            <input 
+              type="text"
+              value={formData.subject}
+              onChange={e => setFormData({...formData, subject: e.target.value})}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-goldin-orange/50"
+              placeholder="e.g., Quarterly check-in, Grant follow-up"
+            />
+          </div>
+          
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-medium text-goldin-gray-dark mb-1">Notes</label>
+            <textarea 
+              value={formData.notes}
+              onChange={e => setFormData({...formData, notes: e.target.value})}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-goldin-orange/50"
+              rows={3}
+              placeholder="Summary of the conversation..."
+            />
+          </div>
+          
+          {/* Follow-up Date */}
+          <div>
+            <label className="block text-sm font-medium text-goldin-gray-dark mb-1">Follow-up Date (optional)</label>
+            <input 
+              type="date"
+              value={formData.follow_up_date}
+              onChange={e => setFormData({...formData, follow_up_date: e.target.value})}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-goldin-orange/50"
+            />
+          </div>
+          
+          {/* Submit */}
+          <div className="flex justify-end gap-3 pt-4">
+            <button 
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-goldin-gray hover:bg-gray-100 rounded-lg"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-goldin-orange text-white rounded-lg hover:bg-goldin-orange-dark disabled:opacity-50 transition-colors"
+            >
+              {isSubmitting ? 'Saving...' : 'Log Interaction'}
+            </button>
+          </div>
+        </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Quick Actions
+function QuickActions({ onLogInteraction }) {
+  return (
+    <div className="flex gap-3">
+      <button 
+        onClick={onLogInteraction}
+        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-goldin-orange to-goldin-orange-dark text-white rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-md font-semibold"
+      >
+        <span className="text-lg">+</span>
+        <span>Log Interaction</span>
+      </button>
+      <button className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-gray-200 text-goldin-gray-dark rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm font-medium">
+        <span>📧</span>
+        <span className="hidden md:inline">Send Bulk Email</span>
+      </button>
+    </div>
+  );
+}
+
+// Main Dashboard
+function Dashboard() {
+  const [fellows, setFellows] = useState([]);
+  const [interactions, setInteractions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [showLogModal, setShowLogModal] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    
+    // Fetch fellows
+    const { data: fellowsData } = await supabase
+      .from('fellows')
+      .select('*')
+      .order('last_name');
+    
+    // Fetch interactions
+    const { data: interactionsData } = await supabase
+      .from('interactions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    
+    if (fellowsData) setFellows(fellowsData);
+    if (interactionsData) setInteractions(interactionsData);
+    
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    
+    // Set up real-time subscription
+    const subscription = supabase
+      .channel('interactions-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'interactions' },
+        (payload) => {
+          console.log('Real-time update:', payload);
+          fetchData(); // Refresh data
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchData]);
+
+  const handleFilterByStatus = (status) => {
+    // Navigate to directory with filter
+    window.location.href = `index.html?status=${status}`;
+  };
+
+  // Calculate status counts for mobile header
+  const statusCounts = useMemo(() => {
+    const counts = { green: 0, yellow: 0, red: 0 };
+    fellows.forEach(f => {
+      const status = getContactStatus(f.last_contact);
+      counts[status.color]++;
+    });
+    return counts;
+  }, [fellows]);
+
+  return (
+    <div className="flex h-screen bg-gray-50">
+      {/* Mobile Header - visible on small screens */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50">
+        <header className="bg-gradient-to-r from-goldin-orange to-goldin-orange-dark text-white shadow-lg">
+          {/* Row 1: Logo, Pills, Toggle */}
+          <div className="px-3 py-2 flex items-center justify-between gap-2">
+            {/* Logo */}
+            <div className="w-9 h-9 bg-white rounded-lg p-1 shadow-md flex-shrink-0">
+              <img src={GATHER_LOGO} alt="GATHER" className="w-full h-full" />
+            </div>
+            
+            {/* Status Pills - Compact */}
+            <div className="flex items-center gap-1">
+              <a 
+                href="index.html?status=green"
+                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-white text-green-700 border border-green-200"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                <span>{statusCounts.green}</span>
+              </a>
+              <a 
+                href="index.html?status=yellow"
+                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-white text-yellow-700 border border-yellow-200"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+                <span>{statusCounts.yellow}</span>
+              </a>
+              <a 
+                href="index.html?status=red"
+                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-white text-red-700 border border-red-200"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                <span>{statusCounts.red}</span>
+              </a>
+            </div>
+            
+            {/* Directory Toggle Button */}
+            <a 
+              href="index.html" 
+              className="w-9 h-9 flex items-center justify-center bg-white/15 hover:bg-white/25 rounded-lg transition-colors"
+              title="Alumni Directory"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </a>
+          </div>
+          
+          {/* Row 2: Add Button + Title */}
+          <div className="px-3 pb-2 flex items-center gap-2">
+            {/* Add Interaction Button */}
+            <button 
+              onClick={() => setShowLogModal(true)}
+              className="w-9 h-9 flex-shrink-0 flex items-center justify-center bg-white text-goldin-orange rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95"
+              title="Log Interaction"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+            
+            {/* Dashboard Title */}
+            <div className="flex-1">
+              <h1 className="text-white font-bold">Staff Dashboard</h1>
+              <p className="text-white/70 text-xs">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+            </div>
+          </div>
+        </header>
+      </div>
+
+      {/* Sidebar - hidden on mobile */}
+      <div className="hidden md:block">
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      </div>
+      
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden md:pt-0 pt-[104px]">
+        {/* Header - hidden on mobile */}
+        <div className="hidden md:block">
+          <Header user={CURRENT_USER} fellows={fellows} />
+        </div>
+        
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          {/* Quick Actions */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-goldin-gray-dark">Dashboard</h1>
+              <p className="text-sm text-goldin-gray">Track alumni engagement</p>
+            </div>
+            <div className="hidden md:block">
+              <QuickActions onLogInteraction={() => setShowLogModal(true)} />
+            </div>
+          </div>
+          
+          {/* Engagement Snapshot */}
+          <div className="mb-6">
+            <EngagementSnapshot 
+              fellows={fellows} 
+              interactions={interactions}
+              onFilterByStatus={handleFilterByStatus}
+            />
+          </div>
+          
+          {/* Charts and Priorities Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="lg:col-span-2">
+              <EngagementTrendChart interactions={interactions} />
+            </div>
+            <div>
+              <YourPriorities interactions={interactions} fellows={fellows} />
+            </div>
+          </div>
+          
+          {/* Activity Feed */}
+          <div className="h-[500px]">
+            <ActivityFeed 
+              interactions={interactions} 
+              fellows={fellows}
+              loading={loading}
+            />
+          </div>
+        </main>
+      </div>
+      
+      {/* Log Interaction Modal */}
+      <LogInteractionModal 
+        isOpen={showLogModal}
+        onClose={() => setShowLogModal(false)}
+        fellows={fellows}
+        onSubmit={fetchData}
+      />
+    </div>
+  );
+}
+
+// Render
+ReactDOM.createRoot(document.getElementById('root')).render(<Dashboard />);
+    </script>
+</body>
+</html>
