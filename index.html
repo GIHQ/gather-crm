@@ -496,10 +496,10 @@ function FocusAreasEditor({ fellow, onUpdate }) {
   // Group tags by category
   const tagsByCategory = useMemo(() => {
     const grouped = {};
-    focusCategories.forEach(cat => {
+    (focusCategories || []).forEach(cat => {
       grouped[cat.id] = {
         category: cat,
-        tags: focusTags.filter(tag => tag.category_id === cat.id)
+        tags: (focusTags || []).filter(tag => tag.category_id === cat.id)
       };
     });
     return grouped;
@@ -631,7 +631,7 @@ function FocusAreasEditor({ fellow, onUpdate }) {
           </div>
         )}
 
-        {focusCategories.filter(categoryApplies).map(category => {
+        {(focusCategories || []).filter(categoryApplies).map(category => {
           const categoryTags = tagsByCategory[category.id]?.tags || [];
           const selectedInCategory = categoryTags.filter(tag => selectedTags[tag.id]);
 
@@ -668,7 +668,7 @@ function FocusAreasEditor({ fellow, onUpdate }) {
   // Edit mode
   return (
     <div className="space-y-6">
-      {focusCategories.filter(categoryApplies).map(category => {
+      {(focusCategories || []).filter(categoryApplies).map(category => {
         const categoryTags = tagsByCategory[category.id]?.tags || [];
         const isCommunityAreas = category.slug === 'community-areas';
 
