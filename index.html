@@ -435,9 +435,9 @@ function getInteractionIcon(type) {
 
 function getProgramBadge(program) {
   const badges = {
-    'CPF': { label: 'CPF', bg: 'bg-blue-500' },
-    'GGF': { label: 'GGF', bg: 'bg-green-500' },
-    'ESP': { label: 'ESP', bg: 'bg-purple-500' },
+    'CPF': { label: 'CPF', bg: 'bg-blue-500' },           // Chicago - Blue
+    'GGF': { label: 'GGF', bg: 'bg-goldin-orange' },      // Global English - Bright Orange
+    'ESP': { label: 'ESP', bg: 'bg-orange-700' },         // Global Spanish - Dark Orange
   };
   return badges[program] || { label: program, bg: 'bg-gray-500' };
 }
@@ -2270,9 +2270,9 @@ const SORT_OPTIONS = [
 ];
 
 const PROGRAM_OPTIONS = [
-  { value: 'CPF', label: 'CPF', color: 'bg-blue-500' },
-  { value: 'GGF', label: 'GGF', color: 'bg-green-500' },
-  { value: 'ESP', label: 'ESP', color: 'bg-purple-500' },
+  { value: 'CPF', label: 'CPF', color: 'bg-blue-500' },        // Chicago - Blue
+  { value: 'GGF', label: 'GGF', color: 'bg-goldin-orange' },   // Global English - Bright Orange
+  { value: 'ESP', label: 'ESP', color: 'bg-orange-700' },      // Global Spanish - Dark Orange
 ];
 
 const REGION_OPTIONS = [
