@@ -601,11 +601,12 @@ function FocusAreasEditor({ fellow, onUpdate }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
             </svg>
           </div>
-          <p className="text-gray-500 mb-4">No focus areas added yet</p>
+          <p className="text-gray-600 mb-4">No focus areas added yet</p>
           {canEditFocusAreas && (
             <button
               onClick={() => setIsEditing(true)}
-              className="px-6 py-2 bg-goldin-orange text-white rounded-xl font-medium"
+              style={{ backgroundColor: '#E87722' }}
+              className="px-6 py-3 text-white rounded-xl font-semibold shadow-md"
             >
               + Add Focus Areas
             </button>
@@ -668,60 +669,66 @@ function FocusAreasEditor({ fellow, onUpdate }) {
   // Edit mode
   return (
     <div className="space-y-6">
+      {(focusCategories || []).length === 0 && (
+        <div className="text-center py-8 bg-yellow-50 rounded-xl border border-yellow-200">
+          <p className="text-yellow-800 font-medium">Loading categories...</p>
+          <p className="text-yellow-600 text-sm mt-1">If this persists, check Supabase RLS policies.</p>
+        </div>
+      )}
       {(focusCategories || []).filter(categoryApplies).map(category => {
         const categoryTags = tagsByCategory[category.id]?.tags || [];
         const isCommunityAreas = category.slug === 'community-areas';
 
         return (
-          <div key={category.id} className="bg-gray-50 rounded-xl p-4">
-            <h4 className="text-sm font-semibold text-gray-700 mb-1">{category.name}</h4>
-            <p className="text-xs text-gray-500 mb-3">
+          <div key={category.id} className="bg-gray-100 rounded-xl p-4 border border-gray-200">
+            <h4 className="text-base font-bold text-gray-800 mb-1">{category.name}</h4>
+            <p className="text-sm text-gray-600 mb-3">
               {isCommunityAreas
                 ? 'Select areas where you work. Mark one as primary (★).'
                 : `Select all that apply`}
             </p>
 
-            <div className="flex flex-wrap gap-2 mb-3">
-              {categoryTags.map(tag => {
-                const isSelected = selectedTags[tag.id];
-                const isPrimary = tag.id === primaryCommunityArea && isCommunityAreas;
+            {categoryTags.length === 0 ? (
+              <p className="text-gray-500 text-sm italic mb-3">No tags available in this category</p>
+            ) : (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {categoryTags.map(tag => {
+                  const isSelected = selectedTags[tag.id];
+                  const isPrimary = tag.id === primaryCommunityArea && isCommunityAreas;
 
-                return (
-                  <button
-                    key={tag.id}
-                    onClick={() => {
-                      if (isCommunityAreas && isSelected && !isPrimary) {
-                        // If clicking a selected community area, make it primary
-                        handlePrimaryChange(tag.id);
-                      } else {
-                        toggleTag(tag.id);
-                        // If deselecting primary, clear it
-                        if (isPrimary && isSelected) {
-                          setPrimaryCommunityArea(null);
-                        }
-                        // If selecting first community area, make it primary
-                        if (isCommunityAreas && !isSelected) {
-                          const currentlySelected = categoryTags.filter(t => selectedTags[t.id]);
-                          if (currentlySelected.length === 0) {
-                            setPrimaryCommunityArea(tag.id);
+                  return (
+                    <button
+                      key={tag.id}
+                      onClick={() => {
+                        if (isCommunityAreas && isSelected && !isPrimary) {
+                          handlePrimaryChange(tag.id);
+                        } else {
+                          toggleTag(tag.id);
+                          if (isPrimary && isSelected) {
+                            setPrimaryCommunityArea(null);
+                          }
+                          if (isCommunityAreas && !isSelected) {
+                            const currentlySelected = categoryTags.filter(t => selectedTags[t.id]);
+                            if (currentlySelected.length === 0) {
+                              setPrimaryCommunityArea(tag.id);
+                            }
                           }
                         }
-                      }
-                    }}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                      isSelected
-                        ? isPrimary
-                          ? 'bg-goldin-orange text-white'
-                          : 'bg-blue-500 text-white'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                  >
-                    {isPrimary && <span className="mr-1">★</span>}
-                    {tag.name}
-                  </button>
-                );
-              })}
-            </div>
+                      }}
+                      style={isSelected ? { backgroundColor: isPrimary ? '#E87722' : '#3B82F6' } : {}}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                        isSelected
+                          ? 'text-white shadow-sm'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
+                      }`}
+                    >
+                      {isPrimary && <span className="mr-1">★</span>}
+                      {tag.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Add new tag input */}
             <div className="flex gap-2">
@@ -730,7 +737,7 @@ function FocusAreasEditor({ fellow, onUpdate }) {
                 value={newTagInputs[category.id] || ''}
                 onChange={(e) => setNewTagInputs(prev => ({ ...prev, [category.id]: e.target.value }))}
                 placeholder={`Add new ${category.name.toLowerCase().replace(/s$/, '')}...`}
-                className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-goldin-orange"
+                className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:border-orange-500"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -741,7 +748,7 @@ function FocusAreasEditor({ fellow, onUpdate }) {
               <button
                 onClick={() => handleNewTagAdd(category.id, newTagInputs[category.id] || '')}
                 disabled={!newTagInputs[category.id]?.trim()}
-                className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-300"
+                className="px-3 py-2 bg-gray-300 text-gray-700 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-400"
               >
                 Add
               </button>
@@ -751,10 +758,10 @@ function FocusAreasEditor({ fellow, onUpdate }) {
       })}
 
       {/* Save/Cancel buttons */}
-      <div className="flex gap-3 pt-2">
+      <div className="flex gap-3 pt-4">
         <button
           onClick={() => setIsEditing(false)}
-          className="flex-1 py-3 border border-gray-200 rounded-xl font-medium text-gray-600"
+          className="flex-1 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 bg-white"
         >
           Cancel
         </button>
@@ -764,7 +771,8 @@ function FocusAreasEditor({ fellow, onUpdate }) {
             setIsEditing(false);
           }}
           disabled={saving}
-          className="flex-1 py-3 bg-goldin-orange text-white rounded-xl font-semibold disabled:opacity-50"
+          style={{ backgroundColor: '#E87722' }}
+          className="flex-1 py-3 text-white rounded-xl font-semibold disabled:opacity-50 shadow-md"
         >
           {saving ? 'Saving...' : 'Save'}
         </button>
