@@ -229,6 +229,8 @@ function AppProvider({ children }) {
     overdueAlerts: true,
     newsAlerts: true,
   });
+  const [focusCategories, setFocusCategories] = useState([]);
+  const [focusTags, setFocusTags] = useState([]);
 
   // Check Supabase auth state on load
   useEffect(() => {
@@ -357,13 +359,17 @@ function AppProvider({ children }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [fellowsRes, interactionsRes] = await Promise.all([
+      const [fellowsRes, interactionsRes, categoriesRes, tagsRes] = await Promise.all([
         supabase.from('fellows').select('*').eq('status', 'Alumni'),
-        supabase.from('interactions').select('*').order('created_at', { ascending: false }).limit(50)
+        supabase.from('interactions').select('*').order('created_at', { ascending: false }).limit(50),
+        supabase.from('focus_categories').select('*').order('sort_order'),
+        supabase.from('focus_tags').select('*').eq('approved', true).order('name')
       ]);
-      
+
       if (fellowsRes.data) setFellows(fellowsRes.data);
       if (interactionsRes.data) setInteractions(interactionsRes.data);
+      if (categoriesRes.data) setFocusCategories(categoriesRes.data);
+      if (tagsRes.data) setFocusTags(tagsRes.data);
     } catch (err) {
       console.error('Fetch error:', err);
     }
@@ -388,6 +394,7 @@ function AppProvider({ children }) {
       user, userRole, login, loginWithGoogle, logout, canAccess,
       isOnboarded, completeOnboarding,
       fellows, interactions, fetchData,
+      focusCategories, focusTags,
       notificationSettings, setNotificationSettings,
       loading
     }}>
@@ -433,6 +440,337 @@ function getProgramBadge(program) {
     'ESP': { label: 'ESP', bg: 'bg-purple-500' },
   };
   return badges[program] || { label: program, bg: 'bg-gray-500' };
+}
+
+// ============================================
+// FOCUS AREAS EDITOR
+// ============================================
+function FocusAreasEditor({ fellow, onUpdate }) {
+  const { focusCategories, focusTags, canAccess, user } = useContext(AppContext);
+  const [fellowTags, setFellowTags] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [selectedTags, setSelectedTags] = useState({});
+  const [primaryCommunityArea, setPrimaryCommunityArea] = useState(null);
+  const [newTagInputs, setNewTagInputs] = useState({});
+
+  const isStaff = canAccess(ROLES.TEAM);
+  const isSelf = user?.email && fellow.email && user.email.toLowerCase() === fellow.email.toLowerCase();
+  const canEditFocusAreas = isStaff || isSelf;
+
+  // Fetch fellow's current tags
+  useEffect(() => {
+    const fetchFellowTags = async () => {
+      if (!fellow?.id) return;
+      setLoading(true);
+      try {
+        const { data } = await supabase
+          .from('fellow_focus_tags')
+          .select('tag_id, is_primary')
+          .eq('fellow_id', fellow.id);
+
+        if (data) {
+          setFellowTags(data);
+          // Initialize selected tags state
+          const initial = {};
+          data.forEach(ft => {
+            if (!initial[ft.tag_id]) {
+              initial[ft.tag_id] = true;
+            }
+            if (ft.is_primary) {
+              setPrimaryCommunityArea(ft.tag_id);
+            }
+          });
+          setSelectedTags(initial);
+        }
+      } catch (err) {
+        console.error('Error fetching fellow tags:', err);
+      }
+      setLoading(false);
+    };
+
+    fetchFellowTags();
+  }, [fellow?.id]);
+
+  // Group tags by category
+  const tagsByCategory = useMemo(() => {
+    const grouped = {};
+    focusCategories.forEach(cat => {
+      grouped[cat.id] = {
+        category: cat,
+        tags: focusTags.filter(tag => tag.category_id === cat.id)
+      };
+    });
+    return grouped;
+  }, [focusCategories, focusTags]);
+
+  // Check if category applies to fellow's program
+  const categoryApplies = (category) => {
+    if (!category.applicable_programs) return true;
+    return category.applicable_programs.includes(fellow.program);
+  };
+
+  const toggleTag = (tagId) => {
+    setSelectedTags(prev => ({
+      ...prev,
+      [tagId]: !prev[tagId]
+    }));
+  };
+
+  const handlePrimaryChange = (tagId) => {
+    setPrimaryCommunityArea(tagId);
+  };
+
+  const handleNewTagAdd = async (categoryId, tagName) => {
+    if (!tagName.trim()) return;
+
+    // Create new tag (pending approval if not admin)
+    const slug = tagName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const isAdmin = canAccess(ROLES.ADMIN);
+
+    const { data, error } = await supabase
+      .from('focus_tags')
+      .insert({
+        category_id: categoryId,
+        name: tagName.trim(),
+        slug,
+        approved: isAdmin,
+        created_by: user?.email
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      // Auto-select the new tag
+      setSelectedTags(prev => ({ ...prev, [data.id]: true }));
+      // Clear input
+      setNewTagInputs(prev => ({ ...prev, [categoryId]: '' }));
+      // Refresh will happen on save
+    }
+  };
+
+  const saveChanges = async () => {
+    setSaving(true);
+    try {
+      // Delete existing tags for this fellow
+      await supabase
+        .from('fellow_focus_tags')
+        .delete()
+        .eq('fellow_id', fellow.id);
+
+      // Insert new tags
+      const tagsToInsert = Object.entries(selectedTags)
+        .filter(([_, selected]) => selected)
+        .map(([tagId]) => ({
+          fellow_id: fellow.id,
+          tag_id: tagId,
+          is_primary: tagId === primaryCommunityArea
+        }));
+
+      if (tagsToInsert.length > 0) {
+        await supabase.from('fellow_focus_tags').insert(tagsToInsert);
+      }
+
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      console.error('Error saving focus tags:', err);
+      alert('Error saving changes');
+    }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-2 border-goldin-orange border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  // View mode - just show selected tags
+  if (!isEditing) {
+    const selectedTagIds = Object.keys(selectedTags).filter(id => selectedTags[id]);
+    const hasAnyTags = selectedTagIds.length > 0;
+
+    if (!hasAnyTags) {
+      return (
+        <div className="text-center py-8">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+          </div>
+          <p className="text-gray-500 mb-4">No focus areas added yet</p>
+          {canEditFocusAreas && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="px-6 py-2 bg-goldin-orange text-white rounded-xl font-medium"
+            >
+              + Add Focus Areas
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Edit button */}
+        {canEditFocusAreas && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-goldin-orange hover:bg-orange-50 rounded-xl transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+              Edit
+            </button>
+          </div>
+        )}
+
+        {focusCategories.filter(categoryApplies).map(category => {
+          const categoryTags = tagsByCategory[category.id]?.tags || [];
+          const selectedInCategory = categoryTags.filter(tag => selectedTags[tag.id]);
+
+          if (selectedInCategory.length === 0) return null;
+
+          return (
+            <div key={category.id}>
+              <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">{category.name}</h4>
+              <div className="flex flex-wrap gap-2">
+                {selectedInCategory.map(tag => {
+                  const isPrimary = tag.id === primaryCommunityArea && category.slug === 'community-areas';
+                  return (
+                    <span
+                      key={tag.id}
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium ${
+                        isPrimary
+                          ? 'bg-goldin-orange text-white'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {isPrimary && <span className="text-xs">★</span>}
+                      {tag.name}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Edit mode
+  return (
+    <div className="space-y-6">
+      {focusCategories.filter(categoryApplies).map(category => {
+        const categoryTags = tagsByCategory[category.id]?.tags || [];
+        const isCommunityAreas = category.slug === 'community-areas';
+
+        return (
+          <div key={category.id} className="bg-gray-50 rounded-xl p-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-1">{category.name}</h4>
+            <p className="text-xs text-gray-500 mb-3">
+              {isCommunityAreas
+                ? 'Select areas where you work. Mark one as primary (★).'
+                : `Select all that apply`}
+            </p>
+
+            <div className="flex flex-wrap gap-2 mb-3">
+              {categoryTags.map(tag => {
+                const isSelected = selectedTags[tag.id];
+                const isPrimary = tag.id === primaryCommunityArea && isCommunityAreas;
+
+                return (
+                  <button
+                    key={tag.id}
+                    onClick={() => {
+                      if (isCommunityAreas && isSelected && !isPrimary) {
+                        // If clicking a selected community area, make it primary
+                        handlePrimaryChange(tag.id);
+                      } else {
+                        toggleTag(tag.id);
+                        // If deselecting primary, clear it
+                        if (isPrimary && isSelected) {
+                          setPrimaryCommunityArea(null);
+                        }
+                        // If selecting first community area, make it primary
+                        if (isCommunityAreas && !isSelected) {
+                          const currentlySelected = categoryTags.filter(t => selectedTags[t.id]);
+                          if (currentlySelected.length === 0) {
+                            setPrimaryCommunityArea(tag.id);
+                          }
+                        }
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                      isSelected
+                        ? isPrimary
+                          ? 'bg-goldin-orange text-white'
+                          : 'bg-blue-500 text-white'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    {isPrimary && <span className="mr-1">★</span>}
+                    {tag.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Add new tag input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newTagInputs[category.id] || ''}
+                onChange={(e) => setNewTagInputs(prev => ({ ...prev, [category.id]: e.target.value }))}
+                placeholder={`Add new ${category.name.toLowerCase().replace(/s$/, '')}...`}
+                className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-goldin-orange"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleNewTagAdd(category.id, newTagInputs[category.id] || '');
+                  }
+                }}
+              />
+              <button
+                onClick={() => handleNewTagAdd(category.id, newTagInputs[category.id] || '')}
+                disabled={!newTagInputs[category.id]?.trim()}
+                className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-300"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Save/Cancel buttons */}
+      <div className="flex gap-3 pt-2">
+        <button
+          onClick={() => setIsEditing(false)}
+          className="flex-1 py-3 border border-gray-200 rounded-xl font-medium text-gray-600"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={async () => {
+            await saveChanges();
+            setIsEditing(false);
+          }}
+          disabled={saving}
+          className="flex-1 py-3 bg-goldin-orange text-white rounded-xl font-semibold disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ============================================
@@ -1486,7 +1824,7 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
           )}
         </div>
 
-        {/* Tabs - Staff sees all, others see Overview only */}
+        {/* Tabs - Focus Areas visible to all, Activity/Notes staff only */}
         {!isEditing && (
           <div className="flex border-b border-gray-100 px-5">
             <button
@@ -1496,6 +1834,14 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
               }`}
             >
               Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('focus')}
+              className={`flex-1 py-3 text-sm font-semibold transition border-b-2 ${
+                activeTab === 'focus' ? 'text-goldin-orange border-goldin-orange' : 'text-gray-500 border-transparent'
+              }`}
+            >
+              Focus Areas
             </button>
             {isStaff && (
               <>
@@ -1752,6 +2098,14 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                       </div>
                     </div>
                   </>
+                )}
+
+                {/* FOCUS AREAS TAB */}
+                {activeTab === 'focus' && (
+                  <FocusAreasEditor
+                    fellow={fellow}
+                    onUpdate={() => fetchData()}
+                  />
                 )}
 
                 {/* ACTIVITY TAB - Staff only */}
