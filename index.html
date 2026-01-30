@@ -235,35 +235,46 @@ function AppProvider({ children }) {
   // Check Supabase auth state on load
   useEffect(() => {
     const initAuth = async () => {
-      // Check for existing session
-      const { data: { session } } = await supabase.auth.getSession();
+      try {
+        // Check for existing session
+        const { data: { session } } = await supabase.auth.getSession();
 
-      if (session?.user) {
-        const userData = {
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
-          avatar: session.user.user_metadata?.avatar_url,
-        };
-        setUser(userData);
-        localStorage.setItem('gather_user', JSON.stringify(userData));
+        if (session?.user) {
+          const userData = {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+            avatar: session.user.user_metadata?.avatar_url,
+          };
+          setUser(userData);
+          localStorage.setItem('gather_user', JSON.stringify(userData));
 
-        // Fetch user role
-        const role = await determineUserRole(session.user.email);
-        setUserRole(role);
-        localStorage.setItem('gather_user_role', role);
-      } else {
-        // Check for saved guest/viewer role
-        const savedRole = localStorage.getItem('gather_user_role');
-        if (savedRole) setUserRole(savedRole);
+          // Fetch user role
+          const role = await determineUserRole(session.user.email);
+          setUserRole(role);
+          localStorage.setItem('gather_user_role', role);
+        } else {
+          // Check for saved guest/viewer role
+          const savedRole = localStorage.getItem('gather_user_role');
+          if (savedRole) setUserRole(savedRole);
+        }
+
+        // Check onboarding status
+        const savedOnboarded = localStorage.getItem('gather_onboarded');
+        const savedNotifs = localStorage.getItem('gather_notifications');
+
+        if (savedOnboarded) setIsOnboarded(true);
+        if (savedNotifs) {
+          try {
+            setNotificationSettings(JSON.parse(savedNotifs));
+          } catch (e) {
+            console.error('Error parsing notification settings:', e);
+            localStorage.removeItem('gather_notifications');
+          }
+        }
+      } catch (err) {
+        console.error('Error initializing auth:', err);
       }
-
-      // Check onboarding status
-      const savedOnboarded = localStorage.getItem('gather_onboarded');
-      const savedNotifs = localStorage.getItem('gather_notifications');
-
-      if (savedOnboarded) setIsOnboarded(true);
-      if (savedNotifs) setNotificationSettings(JSON.parse(savedNotifs));
 
       setLoading(false);
     };
@@ -3652,9 +3663,9 @@ function MainApp() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="w-12 h-12 bg-goldin-orange rounded-2xl p-2 animate-pulse">
-          <img src={GATHER_LOGO} alt="" className="w-full h-full" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-16 h-16 rounded-2xl p-2 animate-pulse" style={{ backgroundColor: '#E87722' }}>
+          <img src={GATHER_LOGO} alt="Loading..." className="w-full h-full" />
         </div>
       </div>
     );
