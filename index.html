@@ -1221,6 +1221,14 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
     }
   }, [isOpen, fellow?.id]);
 
+  // Get fellow's recent interactions (must be before early return to satisfy hooks rules)
+  const fellowInteractions = useMemo(() => {
+    if (!fellow) return [];
+    return (interactions || [])
+      .filter(i => i.fellow_id === fellow.id)
+      .slice(0, 10);
+  }, [interactions, fellow?.id]);
+
   if (!fellow) return null;
 
   const status = getContactStatus(fellow.last_contact);
@@ -1233,13 +1241,6 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
   const canEdit = isStaff || isSelf;
   const canSeeContactInfo = isStaff || isSelf;
   const canLogInteractions = isStaff;
-
-  // Get fellow's recent interactions
-  const fellowInteractions = useMemo(() => {
-    return interactions
-      .filter(i => i.fellow_id === fellow.id)
-      .slice(0, 10);
-  }, [interactions, fellow.id]);
 
   const onQuickLog = (type) => {
     setQuickLogType(type);
