@@ -1467,95 +1467,291 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
     };
   }, [fellows, networkHealth]);
 
-  const trendData = useMemo(() => {
-    const dataPoints = timeRange === 'week' ? 7 : timeRange === 'month' ? 4 : timeRange === 'quarter' ? 12 : 12;
-    const labels = timeRange === 'week'
-      ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-      : timeRange === 'month'
-      ? ['Week 1', 'Week 2', 'Week 3', 'Week 4']
-      : timeRange === 'quarter'
-      ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].slice(0, 12)
-      : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // Calculate health score as if measured on a specific date
+  const calculateHealthAtDate = (fellowList, asOfDate) => {
+    if (fellowList.length === 0) return 0;
+    let green = 0, yellow = 0;
+    fellowList.forEach(f => {
+      if (!f.last_contact) return; // No contact = red
+      const daysSince = Math.floor((asOfDate - new Date(f.last_contact)) / (1000 * 60 * 60 * 24));
+      if (daysSince <= 30) green++;
+      else if (daysSince <= 90) yellow++;
+      // else red (not counted)
+    });
+    return Math.round((green + yellow * 0.5) / fellowList.length * 100);
+  };
 
-    // Generate trend data for each series
-    const generateSeries = (targetHealth, seed) => {
-      const data = [];
-      let current = Math.max(30, targetHealth - 20 + seed);
-      for (let i = 0; i < dataPoints; i++) {
-        const variance = (Math.sin(i * 1.5 + seed) * 6) + (Math.cos(i * 0.8 + seed * 2) * 4);
-        current = current + (targetHealth - current) * 0.25 + variance;
-        current = Math.max(0, Math.min(100, current));
-        data.push(Math.round(current));
-      }
-      data[data.length - 1] = targetHealth;
-      return data;
-    };
+  const trendData = useMemo(() => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    // Only week view has real data - others show "not enough data"
+    const hasRealData = timeRange === 'week';
+
+    if (!hasRealData) {
+      // Return null data for non-week views
+      const dataPoints = timeRange === 'month' ? 4 : 12;
+      const labels = timeRange === 'month'
+        ? ['Week 1', 'Week 2', 'Week 3', 'Week 4']
+        : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return {
+        labels: labels.slice(0, dataPoints),
+        all: null, CPF: null, GGF: null, ESP: null,
+        noData: true
+      };
+    }
+
+    // Generate real data for past 7 days
+    const labels = [];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const allData = [], cpfData = [], ggfData = [], espData = [];
+
+    const cpfFellows = fellows.filter(f => getProgramBadge(f.program).label === 'CPF');
+    const ggfFellows = fellows.filter(f => getProgramBadge(f.program).label === 'GGF');
+    const espFellows = fellows.filter(f => getProgramBadge(f.program).label === 'ESP');
+
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      labels.push(dayNames[date.getDay()]);
+
+      allData.push(calculateHealthAtDate(fellows, date));
+      cpfData.push(calculateHealthAtDate(cpfFellows, date));
+      ggfData.push(calculateHealthAtDate(ggfFellows, date));
+      espData.push(calculateHealthAtDate(espFellows, date));
+    }
 
     return {
-      labels: labels.slice(0, dataPoints),
-      all: generateSeries(programCurrentHealth.all, 0),
-      CPF: generateSeries(programCurrentHealth.CPF, 1),
-      GGF: generateSeries(programCurrentHealth.GGF, 2),
-      ESP: generateSeries(programCurrentHealth.ESP, 3),
+      labels,
+      all: allData,
+      CPF: cpfData,
+      GGF: ggfData,
+      ESP: espData,
+      noData: false
     };
-  }, [timeRange, programCurrentHealth]);
+  }, [timeRange, fellows]);
 
   // AI-powered suggestions for Help Me Connect
   const aiSuggestions = useMemo(() => {
     const suggestions = [];
+    const usedFellowIds = new Set();
 
-    // Find fellows with recent news mentions
+    // Helper to avoid suggesting same fellow twice
+    const addSuggestion = (suggestion) => {
+      if (suggestion.fellow && usedFellowIds.has(suggestion.fellow.id)) return false;
+      if (suggestion.fellow) usedFellowIds.add(suggestion.fellow.id);
+      suggestions.push(suggestion);
+      return true;
+    };
+
+    // 1. Recent news mentions - congratulate them
     const newsInteractions = interactions.filter(i =>
       i.interaction_type === 'News Mention' &&
-      new Date(i.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      new Date(i.created_at) > new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
     );
     newsInteractions.slice(0, 2).forEach(news => {
       const fellow = fellows.find(f => f.id === news.fellow_id);
       if (fellow) {
-        suggestions.push({
+        addSuggestion({
           type: 'congratulate',
           icon: '🎉',
-          title: `Congratulate ${fellow.first_name} ${fellow.last_name}`,
-          description: news.subject || 'on their recent news feature',
+          title: `Congratulate ${fellow.first_name} on their news feature`,
+          description: news.subject || 'Recently featured in the media',
           fellow,
           action: 'Send congratulations'
         });
       }
     });
 
-    // Find fellows with upcoming birthdays (mock - would need DOB field)
-    const redFellows = fellows.filter(f => getContactStatus(f.last_contact).color === 'red');
-    if (redFellows.length > 0) {
-      const randomFellow = redFellows[Math.floor(Math.random() * redFellows.length)];
-      suggestions.push({
-        type: 'birthday',
-        icon: '🎂',
-        title: `Call ${randomFellow.first_name} ${randomFellow.last_name}`,
-        description: 'Overdue for a check-in',
-        fellow: randomFellow,
-        action: 'Schedule call'
-      });
-    }
+    // 2. Upcoming birthdays (check if DOB field exists)
+    const today = new Date();
+    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    fellows.forEach(f => {
+      if (f.date_of_birth || f.dob || f.birthday) {
+        const dobStr = f.date_of_birth || f.dob || f.birthday;
+        const dob = new Date(dobStr);
+        const thisYearBday = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+        if (thisYearBday >= today && thisYearBday <= nextWeek) {
+          const daysUntil = Math.ceil((thisYearBday - today) / (1000 * 60 * 60 * 24));
+          addSuggestion({
+            type: 'birthday',
+            icon: '🎂',
+            title: `${fellow.first_name}'s birthday ${daysUntil === 0 ? 'is today!' : `in ${daysUntil} day${daysUntil > 1 ? 's' : ''}`}`,
+            description: 'Send a card or birthday message',
+            fellow: f,
+            action: 'Send birthday wishes'
+          });
+        }
+      }
+    });
 
-    // Find fellows to introduce based on shared interests/programs
-    const cpfFellows = fellows.filter(f => getProgramBadge(f.program).label === 'CPF');
-    const ggfFellows = fellows.filter(f => getProgramBadge(f.program).label === 'GGF');
-    if (cpfFellows.length > 0 && ggfFellows.length > 0) {
-      const fellow1 = cpfFellows[Math.floor(Math.random() * cpfFellows.length)];
-      const fellow2 = ggfFellows[Math.floor(Math.random() * ggfFellows.length)];
-      if (fellow1.id !== fellow2.id) {
-        suggestions.push({
-          type: 'introduce',
-          icon: '🤝',
-          title: `Introduce ${fellow1.first_name} and ${fellow2.first_name}`,
-          description: 'Both work in community organizing',
-          fellows: [fellow1, fellow2],
-          action: 'Draft introduction'
+    // 3. Geographic proximity - fellows in same city
+    const fellowsByCity = {};
+    fellows.forEach(f => {
+      if (f.city) {
+        const city = f.city.toLowerCase().trim();
+        if (!fellowsByCity[city]) fellowsByCity[city] = [];
+        fellowsByCity[city].push(f);
+      }
+    });
+    Object.entries(fellowsByCity).forEach(([city, cityFellows]) => {
+      if (cityFellows.length >= 2 && suggestions.length < 6) {
+        const [f1, f2] = cityFellows.slice(0, 2);
+        if (!usedFellowIds.has(f1.id) && !usedFellowIds.has(f2.id)) {
+          addSuggestion({
+            type: 'coffee',
+            icon: '☕',
+            title: `Connect ${f1.first_name} & ${f2.first_name}`,
+            description: `Both are in ${f1.city} - suggest a coffee meetup`,
+            fellows: [f1, f2],
+            action: 'Suggest meetup'
+          });
+        }
+      }
+    });
+
+    // 4. Long time no contact - prioritize by days overdue
+    const overdueAlumni = fellows
+      .filter(f => getContactStatus(f.last_contact).color === 'red')
+      .map(f => ({
+        ...f,
+        daysSince: f.last_contact
+          ? Math.floor((Date.now() - new Date(f.last_contact)) / (1000 * 60 * 60 * 24))
+          : 999
+      }))
+      .sort((a, b) => b.daysSince - a.daysSince);
+
+    overdueAlumni.slice(0, 3).forEach(fellow => {
+      if (suggestions.length < 6) {
+        addSuggestion({
+          type: 'checkin',
+          icon: '📞',
+          title: `Check in with ${fellow.first_name} ${fellow.last_name}`,
+          description: fellow.daysSince === 999
+            ? 'No contact on record - time to reach out!'
+            : `Last contact was ${fellow.daysSince} days ago`,
+          fellow,
+          action: 'Schedule call'
         });
+      }
+    });
+
+    // 5. Shared focus areas - introduce fellows with matching interests
+    const fellowsWithTags = fellows.filter(f => f.focus_tags?.length > 0 || f.interests);
+    if (fellowsWithTags.length >= 2) {
+      for (let i = 0; i < fellowsWithTags.length && suggestions.length < 6; i++) {
+        for (let j = i + 1; j < fellowsWithTags.length && suggestions.length < 6; j++) {
+          const f1 = fellowsWithTags[i];
+          const f2 = fellowsWithTags[j];
+          if (usedFellowIds.has(f1.id) || usedFellowIds.has(f2.id)) continue;
+
+          // Check for matching organization type or similar roles
+          if (f1.organization && f2.organization &&
+              f1.job_title && f2.job_title &&
+              (f1.job_title.toLowerCase().includes('director') && f2.job_title.toLowerCase().includes('director'))) {
+            addSuggestion({
+              type: 'introduce',
+              icon: '🤝',
+              title: `Introduce ${f1.first_name} and ${f2.first_name}`,
+              description: 'Both are organizational leaders - potential collaboration',
+              fellows: [f1, f2],
+              action: 'Draft introduction'
+            });
+            break;
+          }
+        }
       }
     }
 
-    return suggestions.slice(0, 3);
+    // 6. Cross-program introductions
+    const cpfFellows = fellows.filter(f => getProgramBadge(f.program).label === 'CPF' && !usedFellowIds.has(f.id));
+    const ggfFellows = fellows.filter(f => getProgramBadge(f.program).label === 'GGF' && !usedFellowIds.has(f.id));
+    const espFellows = fellows.filter(f => getProgramBadge(f.program).label === 'ESP' && !usedFellowIds.has(f.id));
+
+    if (cpfFellows.length > 0 && ggfFellows.length > 0 && suggestions.length < 6) {
+      const f1 = cpfFellows[Math.floor(Math.random() * cpfFellows.length)];
+      const f2 = ggfFellows[Math.floor(Math.random() * ggfFellows.length)];
+      addSuggestion({
+        type: 'introduce',
+        icon: '🌍',
+        title: `Bridge CPF & GGF: ${f1.first_name} meets ${f2.first_name}`,
+        description: 'Connect local Chicago work with global perspectives',
+        fellows: [f1, f2],
+        action: 'Draft introduction'
+      });
+    }
+
+    // 7. Cohort anniversary check
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    fellows.forEach(f => {
+      if (f.cohort_year && suggestions.length < 6) {
+        const yearsAgo = currentYear - parseInt(f.cohort_year);
+        if (yearsAgo > 0 && yearsAgo % 5 === 0) { // 5, 10, 15 year anniversaries
+          addSuggestion({
+            type: 'anniversary',
+            icon: '🎊',
+            title: `${f.first_name}'s ${yearsAgo}-year fellowship anniversary`,
+            description: `Class of ${f.cohort_year} - celebrate their journey!`,
+            fellow: f,
+            action: 'Send recognition'
+          });
+        }
+      }
+    });
+
+    // 8. Yellow status - gentle nudge before they go red
+    const yellowFellows = fellows
+      .filter(f => getContactStatus(f.last_contact).color === 'yellow' && !usedFellowIds.has(f.id))
+      .slice(0, 2);
+
+    yellowFellows.forEach(fellow => {
+      if (suggestions.length < 6) {
+        addSuggestion({
+          type: 'nudge',
+          icon: '💛',
+          title: `Touch base with ${fellow.first_name} soon`,
+          description: 'Contact due in the next few weeks',
+          fellow,
+          action: 'Quick check-in'
+        });
+      }
+    });
+
+    // Ensure we always have at least 3 suggestions
+    // If we don't have enough, add general engagement suggestions
+    if (suggestions.length < 3) {
+      const greenFellows = fellows.filter(f =>
+        getContactStatus(f.last_contact).color === 'green' && !usedFellowIds.has(f.id)
+      );
+
+      greenFellows.slice(0, 3 - suggestions.length).forEach(fellow => {
+        addSuggestion({
+          type: 'deepen',
+          icon: '💬',
+          title: `Deepen connection with ${fellow.first_name}`,
+          description: fellow.organization ? `Learn more about their work at ${fellow.organization}` : 'Share an interesting article or resource',
+          fellow,
+          action: 'Share resource'
+        });
+      });
+    }
+
+    // Final fallback - if still not enough, suggest general actions
+    while (suggestions.length < 3) {
+      suggestions.push({
+        type: 'general',
+        icon: '✨',
+        title: suggestions.length === 0 ? 'Start logging interactions' :
+               suggestions.length === 1 ? 'Update fellow profiles' : 'Plan a group event',
+        description: suggestions.length === 0 ? 'Track your conversations to get personalized suggestions' :
+                     suggestions.length === 1 ? 'Complete profiles enable better connection suggestions' :
+                     'Bring fellows together for networking',
+        action: 'Get started'
+      });
+    }
+
+    return suggestions.slice(0, 5);
   }, [fellows, interactions]);
 
   // Multi-line SVG graph
@@ -1707,12 +1903,22 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
             ))}
           </div>
         </div>
-        {renderGraph()}
-        <div className="flex justify-between text-xs text-gray-400 mt-1 px-1">
-          {trendData.labels.map((label, i) => (
-            <span key={i}>{label}</span>
-          ))}
-        </div>
+        {trendData.noData ? (
+          <div className="h-36 flex flex-col items-center justify-center text-center">
+            <span className="text-2xl mb-2">📊</span>
+            <p className="text-sm font-medium" style={{ color: '#6B7280' }}>Not enough historical data</p>
+            <p className="text-xs" style={{ color: '#9CA3AF' }}>Select "Week" to see real trend data</p>
+          </div>
+        ) : (
+          <>
+            {renderGraph()}
+            <div className="flex justify-between text-xs mt-1 px-1" style={{ color: '#9CA3AF' }}>
+              {trendData.labels.map((label, i) => (
+                <span key={i}>{label}</span>
+              ))}
+            </div>
+          </>
+        )}
         {/* Legend */}
         <div className="flex flex-wrap items-center justify-center gap-4 mt-3 pt-3 border-t border-gray-100">
           <div className="flex items-center gap-1.5">
