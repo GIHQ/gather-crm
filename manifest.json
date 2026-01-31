@@ -1,25 +1,31 @@
 {
-  "name": "Alumni App - GATHER Network",
-  "short_name": "Alumni App",
+  "name": "GATHER Network",
+  "short_name": "GATHER",
   "description": "Goldin Institute Alumni Directory & Relationship Management",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
+  "background_color": "#ffffff",
   "theme_color": "#E87722",
   "orientation": "portrait-primary",
   "scope": "/",
   "icons": [
     {
-      "src": "alumni-app-icon-192.png",
+      "src": "Gathericon.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "alumni-app-icon-512.png",
+      "src": "Gathericon.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "Gathericon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
   "categories": ["business", "productivity"],

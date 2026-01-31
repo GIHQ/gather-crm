@@ -2,8 +2,9 @@
 -- Run in Supabase SQL Editor after 003_focus_tags.sql
 
 -- Create fellow_focus_tags junction table
+-- Note: fellow_id is text to match fellows.id column type
 CREATE TABLE IF NOT EXISTS fellow_focus_tags (
-  fellow_id uuid NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
+  fellow_id text NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
   tag_id uuid NOT NULL REFERENCES focus_tags(id) ON DELETE CASCADE,
   is_primary boolean DEFAULT false,  -- For community areas: primary vs secondary
   notes text,  -- Optional notes about this tag for this fellow
@@ -50,7 +51,7 @@ CREATE POLICY "Staff can manage all fellow tags" ON fellow_focus_tags
   );
 
 -- Function to get all tags for a fellow organized by category
-CREATE OR REPLACE FUNCTION get_fellow_tags(p_fellow_id uuid)
+CREATE OR REPLACE FUNCTION get_fellow_tags(p_fellow_id text)
 RETURNS TABLE (
   category_name text,
   category_slug text,
@@ -83,7 +84,7 @@ $$ LANGUAGE plpgsql STABLE;
 -- Function to search fellows by tags
 CREATE OR REPLACE FUNCTION search_fellows_by_tags(p_tag_ids uuid[])
 RETURNS TABLE (
-  fellow_id uuid,
+  fellow_id text,
   match_count int
 ) AS $$
 BEGIN
