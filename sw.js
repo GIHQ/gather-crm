@@ -1,5 +1,5 @@
 // GATHER PWA Service Worker
-const CACHE_NAME = 'gather-v2.0.0';
+const CACHE_NAME = 'gather-v2.1.0';
 const OFFLINE_URL = '/gather-mobile.html';
 
 // Assets to cache on install
@@ -44,52 +44,63 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - network-first for HTML, cache-first for assets
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
-  
+
   // Skip Supabase API calls (always fetch fresh)
   if (event.request.url.includes('supabase.co')) return;
-  
+
+  // For HTML files and navigation - always try network first
+  const isHTML = event.request.url.endsWith('.html') ||
+                 event.request.mode === 'navigate' ||
+                 event.request.headers.get('accept')?.includes('text/html');
+
+  if (isHTML) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          // Cache the fresh response
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME)
+              .then((cache) => cache.put(event.request, responseToCache));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // Network failed, try cache
+          return caches.match(event.request)
+            .then((cachedResponse) => cachedResponse || caches.match(OFFLINE_URL));
+        })
+    );
+    return;
+  }
+
+  // For other assets - cache first, then network
   event.respondWith(
     caches.match(event.request)
       .then((cachedResponse) => {
         if (cachedResponse) {
-          // Return cached response but also fetch fresh version
-          event.waitUntil(
-            fetch(event.request)
-              .then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200) {
-                  caches.open(CACHE_NAME)
-                    .then((cache) => cache.put(event.request, networkResponse));
-                }
-              })
-              .catch(() => {})
-          );
           return cachedResponse;
         }
-        
+
         // Not in cache, fetch from network
         return fetch(event.request)
           .then((networkResponse) => {
             if (!networkResponse || networkResponse.status !== 200) {
               return networkResponse;
             }
-            
+
             // Cache the response
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME)
               .then((cache) => cache.put(event.request, responseToCache));
-            
+
             return networkResponse;
           })
-          .catch(() => {
-            // Network failed, try to serve offline page
-            if (event.request.mode === 'navigate') {
-              return caches.match(OFFLINE_URL);
-            }
-          });
+          .catch(() => {});
       })
   );
 });
