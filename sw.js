@@ -1,5 +1,5 @@
 // GATHER PWA Service Worker
-const CACHE_NAME = 'gather-v2.1.0';
+const CACHE_NAME = 'gather-v2.2.0';
 const OFFLINE_URL = '/gather-mobile.html';
 
 // Assets to cache on install

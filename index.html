@@ -192,6 +192,82 @@ async function saveActivity(fellowId, result) {
 }
 
 // ============================================
+// TRANSLATION SYSTEM (Google Translate API)
+// ============================================
+const GOOGLE_TRANSLATE_API_KEY = ''; // User must provide their API key
+
+const SUPPORTED_LANGUAGES = [
+  { code: 'en', name: 'English', native: 'English' },
+  { code: 'es', name: 'Spanish', native: 'Español' },
+  { code: 'fr', name: 'French', native: 'Français' },
+  { code: 'ar', name: 'Arabic', native: 'العربية', rtl: true },
+  { code: 'sw', name: 'Swahili', native: 'Kiswahili' },
+  { code: 'zh', name: 'Chinese', native: '中文' },
+];
+
+// UI strings to translate (add all translatable text here)
+const UI_STRINGS = [
+  'Dashboard', 'Directory', 'Search', 'Activity', 'Settings', 'Cohort Communication',
+  'Network Health', 'fellows', 'Last contact', 'Add Interaction', 'Log Interaction',
+  'Help Me Connect', 'News', 'Interactions', 'Recent', 'Follow-up', 'Overdue',
+  'Save', 'Cancel', 'Close', 'Edit', 'Delete', 'Submit', 'Loading...', 'Continue',
+  'Sign Out', 'My Profile', 'Notifications', 'Coming Soon', 'All', 'View all',
+  'No results found', 'Search fellows...', 'Name', 'Organization', 'Email', 'Phone',
+  'City', 'Country', 'Biography', 'Job Title', 'Program', 'days ago', 'Today',
+  'This week', 'This month', 'Get Started', 'Welcome to', 'Sign in with Google',
+  'Or use email', 'Skip for now', 'View public directory without signing in',
+  'Stay in the loop', 'Get notified about important updates', 'Enable Notifications',
+  'Maybe later', 'Daily Summary', 'Activity Alerts', 'News Mentions', 'Overdue Alerts',
+  'Morning overview of your priorities', 'When team members log interactions',
+  'When fellows appear in the news', 'When follow-ups become overdue',
+  'Continue to GATHER', 'Choose your language', 'Select your preferred language',
+  'News Scanner', 'Scan All Fellows', 'Quick Scan', 'Scanning...', 'Language',
+  'Change your display language', 'No fellow profile found', 'Edit your fellow profile',
+  'Manage your alerts'
+];
+
+// Translation cache to avoid repeated API calls
+const translationCache = new Map();
+
+// Batch translate multiple strings
+async function batchTranslate(texts, targetLang) {
+  if (targetLang === 'en' || !GOOGLE_TRANSLATE_API_KEY) return {};
+
+  // Filter texts not in cache
+  const uncached = texts.filter(t => !translationCache.has(`${targetLang}:${t}`));
+
+  if (uncached.length > 0) {
+    try {
+      const response = await fetch(
+        `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q: uncached, target: targetLang, source: 'en' })
+        }
+      );
+      const data = await response.json();
+
+      if (data.data?.translations) {
+        data.data.translations.forEach((t, i) => {
+          translationCache.set(`${targetLang}:${uncached[i]}`, t.translatedText);
+        });
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+    }
+  }
+
+  // Build result from cache
+  const result = {};
+  texts.forEach(text => {
+    const cached = translationCache.get(`${targetLang}:${text}`);
+    if (cached) result[text] = cached;
+  });
+  return result;
+}
+
+// ============================================
 // PERMISSION SYSTEM
 // ============================================
 const ROLES = {
@@ -294,6 +370,8 @@ function AppProvider({ children }) {
   const [focusCategories, setFocusCategories] = useState([]);
   const [focusTags, setFocusTags] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [language, setLanguage] = useState('en');
+  const [translations, setTranslations] = useState({});
 
   // Check Supabase auth state on load
   useEffect(() => {
@@ -334,6 +412,15 @@ function AppProvider({ children }) {
             console.error('Error parsing notification settings:', e);
             localStorage.removeItem('gather_notifications');
           }
+        }
+
+        // Load saved language preference
+        const savedLang = localStorage.getItem('gather_language');
+        if (savedLang && SUPPORTED_LANGUAGES.some(l => l.code === savedLang)) {
+          setLanguage(savedLang);
+          // Set RTL for Arabic
+          document.documentElement.dir = savedLang === 'ar' ? 'rtl' : 'ltr';
+          document.documentElement.lang = savedLang;
         }
       } catch (err) {
         console.error('Error initializing auth:', err);
@@ -428,6 +515,30 @@ function AppProvider({ children }) {
     localStorage.removeItem('gather_onboarded');
   };
 
+  // Change language and load translations
+  const changeLanguage = async (langCode) => {
+    setLanguage(langCode);
+    localStorage.setItem('gather_language', langCode);
+
+    // Set RTL for Arabic
+    document.documentElement.dir = langCode === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = langCode;
+
+    // Load translations
+    if (langCode !== 'en' && GOOGLE_TRANSLATE_API_KEY) {
+      const trans = await batchTranslate(UI_STRINGS, langCode);
+      setTranslations(trans);
+    } else {
+      setTranslations({});
+    }
+  };
+
+  // Translation helper function
+  const t = useCallback((text) => {
+    if (language === 'en') return text;
+    return translations[text] || text;
+  }, [language, translations]);
+
   // Permission check helper
   const canAccess = (requiredRole) => hasPermission(userRole, requiredRole);
 
@@ -472,6 +583,7 @@ function AppProvider({ children }) {
       fellows, interactions, activities, fetchData,
       focusCategories, focusTags,
       notificationSettings, setNotificationSettings,
+      language, changeLanguage, t,
       loading
     }}>
       {children}
@@ -1127,6 +1239,175 @@ function NotificationSetupScreen({ onComplete }) {
               <button 
                 onClick={() => onComplete(settings)}
                 className="w-full bg-goldin-orange text-white font-semibold py-5 px-6 rounded-2xl active:scale-95 transition"
+              >
+                Continue to GATHER
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Combined Language + Notification Onboarding Screen
+function OnboardingSetupScreen({ onComplete }) {
+  const [step, setStep] = useState(1); // 1 = language, 2 = notifications
+  const [selectedLang, setSelectedLang] = useState('en');
+  const [notifSettings, setNotifSettings] = useState({
+    enabled: false,
+    dailySummary: true,
+    newActivity: true,
+    overdueAlerts: true,
+    newsAlerts: true,
+  });
+  const [permissionAsked, setPermissionAsked] = useState(false);
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setNotifSettings(s => ({ ...s, enabled: permission === 'granted' }));
+    }
+    setPermissionAsked(true);
+  };
+
+  const handleComplete = () => {
+    onComplete(selectedLang, notifSettings);
+  };
+
+  // Step 1: Language Selection
+  if (step === 1) {
+    return (
+      <div className="min-h-screen flex flex-col p-6 pb-32 bg-white safe-top overflow-auto">
+        <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
+          <div className="fade-in">
+            <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mb-8">
+              <span className="text-3xl">🌍</span>
+            </div>
+
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Choose your language</h1>
+            <p className="text-gray-500 mb-8">Select your preferred language for the app</p>
+
+            <div className="grid grid-cols-2 gap-3 mb-8">
+              {SUPPORTED_LANGUAGES.map(lang => (
+                <button
+                  key={lang.code}
+                  onClick={() => setSelectedLang(lang.code)}
+                  className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                    selectedLang === lang.code
+                      ? 'border-goldin-orange bg-orange-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <p className="font-semibold text-gray-900">{lang.native}</p>
+                  <p className="text-sm text-gray-500">{lang.name}</p>
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setStep(2)}
+              className="w-full text-white font-semibold py-5 px-6 rounded-2xl active:scale-95 transition"
+              style={{ backgroundColor: '#E87722' }}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 2: Notification Opt-in
+  return (
+    <div className="min-h-screen flex flex-col p-6 pb-32 bg-white safe-top overflow-auto">
+      <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
+        <div className="fade-in">
+          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mb-8">
+            <span className="text-3xl">🔔</span>
+          </div>
+
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Stay in the loop</h1>
+          <p className="text-gray-500 mb-8">Get notified about important updates and never miss a follow-up</p>
+
+          {!permissionAsked ? (
+            <>
+              <div className="bg-gray-50 rounded-2xl p-5 mb-6">
+                <div className="flex items-start gap-4 mb-4">
+                  <span className="text-2xl">📊</span>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Daily Summary</h3>
+                    <p className="text-sm text-gray-500">Morning overview of your priorities</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4 mb-4">
+                  <span className="text-2xl">⚡</span>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Activity Alerts</h3>
+                    <p className="text-sm text-gray-500">When team members log interactions</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-2xl">📰</span>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">News Mentions</h3>
+                    <p className="text-sm text-gray-500">When fellows appear in the news</p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={requestNotificationPermission}
+                className="w-full text-white font-semibold py-5 px-6 rounded-2xl active:scale-95 transition mb-4"
+                style={{ backgroundColor: '#E87722' }}
+              >
+                Enable Notifications
+              </button>
+              <button
+                onClick={handleComplete}
+                className="w-full bg-gray-100 text-gray-600 font-semibold py-5 px-6 rounded-2xl active:scale-95 transition"
+              >
+                Maybe later
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="space-y-3 mb-8">
+                {[
+                  { key: 'dailySummary', label: 'Daily Summary', desc: '8am each morning', icon: '📊' },
+                  { key: 'newActivity', label: 'Team Activity', desc: 'When interactions are logged', icon: '⚡' },
+                  { key: 'overdueAlerts', label: 'Overdue Alerts', desc: 'When follow-ups become overdue', icon: '🔴' },
+                  { key: 'newsAlerts', label: 'News Mentions', desc: 'When fellows are in the news', icon: '📰' },
+                ].map(item => (
+                  <button
+                    key={item.key}
+                    onClick={() => setNotifSettings(s => ({ ...s, [item.key]: !s[item.key] }))}
+                    className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition ${
+                      notifSettings[item.key] ? 'border-goldin-orange bg-orange-50' : 'border-gray-200'
+                    }`}
+                  >
+                    <span className="text-2xl">{item.icon}</span>
+                    <div className="flex-1 text-left">
+                      <h3 className="font-semibold text-gray-900">{item.label}</h3>
+                      <p className="text-sm text-gray-500">{item.desc}</p>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                      notifSettings[item.key] ? 'bg-goldin-orange border-goldin-orange' : 'border-gray-300'
+                    }`}>
+                      {notifSettings[item.key] && (
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={handleComplete}
+                className="w-full text-white font-semibold py-5 px-6 rounded-2xl active:scale-95 transition"
+                style={{ backgroundColor: '#E87722' }}
               >
                 Continue to GATHER
               </button>
@@ -3874,16 +4155,18 @@ function CohortCommunicationPage() {
 }
 
 function SettingsPage() {
-  const { user, userRole, fellows, fetchData, logout, canAccess } = useContext(AppContext);
+  const { user, userRole, fellows, fetchData, logout, canAccess, language, changeLanguage, t } = useContext(AppContext);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [myFellow, setMyFellow] = useState(null);
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanResults, setScanResults] = useState(null);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
 
   const isStaff = canAccess(ROLES.TEAM);
   const isTravis = user?.email?.toLowerCase() === 'travis@goldininstitute.org';
+  const currentLang = SUPPORTED_LANGUAGES.find(l => l.code === language) || SUPPORTED_LANGUAGES[0];
 
   // Check daily scan limit for non-Travis users
   const getDailyScanCount = () => {
@@ -4026,6 +4309,55 @@ function SettingsPage() {
           <span className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded-full font-medium">Coming Soon</span>
         </div>
       </button>
+
+      {/* Language Selector */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+              <span className="text-xl">🌍</span>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">{t('Language')}</p>
+              <p className="text-sm text-gray-500">{t('Change your display language')}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setLangMenuOpen(!langMenuOpen)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-100 active:bg-gray-200 transition"
+          >
+            <span className="text-sm font-medium text-gray-700">{currentLang.native}</span>
+            <svg className={`w-4 h-4 text-gray-500 transition ${langMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Language dropdown */}
+        {langMenuOpen && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="grid grid-cols-2 gap-2">
+              {SUPPORTED_LANGUAGES.map(lang => (
+                <button
+                  key={lang.code}
+                  onClick={() => {
+                    changeLanguage(lang.code);
+                    setLangMenuOpen(false);
+                  }}
+                  className={`p-3 rounded-xl text-left transition ${
+                    language === lang.code
+                      ? 'bg-orange-50 border-2 border-goldin-orange'
+                      : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
+                  }`}
+                >
+                  <p className="font-medium text-gray-900">{lang.native}</p>
+                  <p className="text-xs text-gray-500">{lang.name}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* My Profile */}
       <button
@@ -4565,7 +4897,7 @@ function LogInteractionModal({ isOpen, onClose, preSelectedFellow }) {
 // MAIN APP
 // ============================================
 function MainApp() {
-  const { user, userRole, isOnboarded, loading, login, completeOnboarding, canAccess } = useContext(AppContext);
+  const { user, userRole, isOnboarded, loading, login, completeOnboarding, canAccess, changeLanguage } = useContext(AppContext);
   const [onboardingStep, setOnboardingStep] = useState(() => {
     // Initialize based on existing state
     const savedUser = localStorage.getItem('gather_user');
@@ -4589,16 +4921,9 @@ function MainApp() {
   useEffect(() => {
     if (user && isOnboarded) {
       setOnboardingStep(3);
-    } else if (user && !isOnboarded) {
-      // Auto-complete onboarding when user exists but not marked as onboarded
-      // (e.g., after OAuth return)
-      completeOnboarding({
-        enabled: false,
-        dailySummary: true,
-        newActivity: true,
-        overdueAlerts: true,
-        newsAlerts: true,
-      });
+    } else if (user && !isOnboarded && onboardingStep < 2) {
+      // After OAuth return, go to language/notification setup
+      setOnboardingStep(2);
     }
   }, [user, isOnboarded]);
 
@@ -4631,14 +4956,13 @@ function MainApp() {
     if (onboardingStep === 1 || !user) {
       return <LoginScreen onLogin={(userData, skipRoleLookup = false) => {
         login(userData, skipRoleLookup);
-        // Skip notifications screen - go straight to app with default settings
-        completeOnboarding({
-          enabled: false,
-          dailySummary: true,
-          newActivity: true,
-          overdueAlerts: true,
-          newsAlerts: true,
-        });
+        setOnboardingStep(2); // Go to language + notification setup
+      }} />;
+    }
+    if (onboardingStep === 2 && user) {
+      return <OnboardingSetupScreen onComplete={(selectedLang, notifSettings) => {
+        changeLanguage(selectedLang);
+        completeOnboarding(notifSettings);
       }} />;
     }
   }
