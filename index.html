@@ -3882,15 +3882,38 @@ function SettingsPage() {
   const isStaff = canAccess(ROLES.TEAM);
   const isTravis = user?.email?.toLowerCase() === 'travis@goldininstitute.org';
 
-  // Scan for news about fellows (full scan - all fellows)
-  const scanForNews = async () => {
-    if (!isTravis) return; // Only Travis can run full scan
+  // Check daily scan limit for non-Travis users
+  const getDailyScanCount = () => {
+    const today = new Date().toDateString();
+    const stored = localStorage.getItem('gather_scan_count');
+    if (stored) {
+      const { date, count } = JSON.parse(stored);
+      if (date === today) return count;
+    }
+    return 0;
+  };
+
+  const incrementScanCount = () => {
+    const today = new Date().toDateString();
+    const current = getDailyScanCount();
+    localStorage.setItem('gather_scan_count', JSON.stringify({ date: today, count: current + 1 }));
+  };
+
+  const [dailyScanCount, setDailyScanCount] = useState(getDailyScanCount());
+  const canScanMore = isTravis || dailyScanCount < 3;
+
+  // Scan for news about fellows
+  const scanForNews = async (fullScan = false) => {
+    if (!isStaff) return;
+    if (!isTravis && !canScanMore) return;
 
     setScanning(true);
     setScanResults(null);
     let totalFound = 0;
     let scannedCount = 0;
-    const fellowsToScan = fellows; // Scan ALL fellows
+
+    // Travis gets full scan, others get 10 at a time
+    const fellowsToScan = (isTravis && fullScan) ? fellows : fellows.slice(0, 10);
 
     for (const fellow of fellowsToScan) {
       try {
@@ -3904,13 +3927,19 @@ function SettingsPage() {
         scannedCount++;
         // Update progress every 10 fellows
         if (scannedCount % 10 === 0) {
-          setScanResults({ scanned: scannedCount, found: totalFound, inProgress: true });
+          setScanResults({ scanned: scannedCount, found: totalFound, inProgress: true, total: fellowsToScan.length });
         }
       } catch (err) {
         console.error(`Error scanning ${fellow.first_name}:`, err);
       }
       // Small delay between searches to avoid rate limiting
       await new Promise(r => setTimeout(r, 250));
+    }
+
+    // Increment scan count for non-Travis users
+    if (!isTravis) {
+      incrementScanCount();
+      setDailyScanCount(getDailyScanCount() + 1);
     }
 
     setScanResults({ scanned: fellowsToScan.length, found: totalFound, inProgress: false });
@@ -4021,8 +4050,8 @@ function SettingsPage() {
         </div>
       </button>
 
-      {/* News Scanner - Travis Only */}
-      {isTravis && (
+      {/* News Scanner - Staff */}
+      {isStaff && (
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -4031,30 +4060,57 @@ function SettingsPage() {
               </div>
               <div>
                 <p className="font-semibold text-gray-900">News Scanner</p>
-                <p className="text-sm text-gray-500">Find web mentions of all {fellows.length} fellows</p>
+                <p className="text-sm text-gray-500">
+                  {isTravis ? `Find web mentions of all ${fellows.length} fellows` : 'Find web mentions of fellows'}
+                </p>
               </div>
             </div>
           </div>
+
+          {/* Travis gets full scan option */}
+          {isTravis && (
+            <button
+              onClick={() => scanForNews(true)}
+              disabled={scanning}
+              className="w-full py-3 rounded-xl font-semibold transition mb-2"
+              style={{
+                backgroundColor: scanning ? '#E5E7EB' : '#3B82F6',
+                color: scanning ? '#6B7280' : '#FFFFFF'
+              }}
+            >
+              {scanning ? `Scanning... ${scanResults?.scanned || 0}/${scanResults?.total || fellows.length}` : `Full Scan (${fellows.length} fellows)`}
+            </button>
+          )}
+
+          {/* Everyone gets quick scan (Travis unlimited, others 3/day) */}
           <button
-            onClick={scanForNews}
-            disabled={scanning}
+            onClick={() => scanForNews(false)}
+            disabled={scanning || (!isTravis && !canScanMore)}
             className="w-full py-3 rounded-xl font-semibold transition"
             style={{
-              backgroundColor: scanning ? '#E5E7EB' : '#3B82F6',
-              color: scanning ? '#6B7280' : '#FFFFFF'
+              backgroundColor: (scanning || (!isTravis && !canScanMore)) ? '#E5E7EB' : '#10B981',
+              color: (scanning || (!isTravis && !canScanMore)) ? '#6B7280' : '#FFFFFF'
             }}
           >
-            {scanning ? `Scanning... ${scanResults?.scanned || 0}/${fellows.length}` : `Full Scan (${fellows.length} fellows)`}
+            {!isTravis && !canScanMore
+              ? 'Daily limit reached (3/3)'
+              : scanning
+                ? `Scanning... ${scanResults?.scanned || 0}/${scanResults?.total || 10}`
+                : `Quick Scan (10 fellows)${!isTravis ? ` - ${3 - dailyScanCount} left today` : ''}`}
           </button>
+
           {scanResults && (
             <div className={`mt-3 p-3 rounded-xl text-sm ${scanResults.inProgress ? 'bg-blue-50' : 'bg-green-50'}`}
                  style={{ color: scanResults.inProgress ? '#1E40AF' : '#166534' }}>
               {scanResults.inProgress
-                ? `Scanning... ${scanResults.scanned}/${fellows.length} fellows, ${scanResults.found} mentions found so far`
+                ? `Scanning... ${scanResults.scanned}/${scanResults.total} fellows, ${scanResults.found} mentions found so far`
                 : `Done! Scanned ${scanResults.scanned} fellows, found ${scanResults.found} new mentions`}
             </div>
           )}
-          <p className="text-xs text-gray-400 mt-2">Note: Full scan may take 5-10 minutes and uses Google API quota</p>
+
+          {isTravis && (
+            <p className="text-xs text-gray-400 mt-2">Full scan may take 5-10 minutes and uses ~$4 API quota</p>
+          )}
         </div>
       )}
 
