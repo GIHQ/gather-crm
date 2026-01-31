@@ -1442,6 +1442,31 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
     : 0;
 
   // Generate mock trend data for the graph (in production this would come from actual historical data)
+  // Calculate health percentage for a group of fellows
+  const calculateHealth = (fellowList) => {
+    if (fellowList.length === 0) return 0;
+    let green = 0, yellow = 0;
+    fellowList.forEach(f => {
+      const status = getContactStatus(f.last_contact).color;
+      if (status === 'green') green++;
+      else if (status === 'yellow') yellow++;
+    });
+    return Math.round((green + yellow * 0.5) / fellowList.length * 100);
+  };
+
+  // Current health by program
+  const programCurrentHealth = useMemo(() => {
+    const cpf = fellows.filter(f => getProgramBadge(f.program).label === 'CPF');
+    const ggf = fellows.filter(f => getProgramBadge(f.program).label === 'GGF');
+    const esp = fellows.filter(f => getProgramBadge(f.program).label === 'ESP');
+    return {
+      all: networkHealth,
+      CPF: calculateHealth(cpf),
+      GGF: calculateHealth(ggf),
+      ESP: calculateHealth(esp),
+    };
+  }, [fellows, networkHealth]);
+
   const trendData = useMemo(() => {
     const dataPoints = timeRange === 'week' ? 7 : timeRange === 'month' ? 4 : timeRange === 'quarter' ? 12 : 12;
     const labels = timeRange === 'week'
@@ -1452,21 +1477,28 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].slice(0, 12)
       : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    // Create realistic looking trend data that ends at current health
-    const data = [];
-    let current = Math.max(40, networkHealth - 15);
-    for (let i = 0; i < dataPoints; i++) {
-      const progress = i / (dataPoints - 1);
-      const target = networkHealth;
-      const variance = Math.random() * 8 - 4;
-      current = current + (target - current) * 0.3 + variance;
-      current = Math.max(0, Math.min(100, current));
-      data.push(Math.round(current));
-    }
-    // Ensure last point matches current health
-    data[data.length - 1] = networkHealth;
-    return { labels: labels.slice(0, dataPoints), data };
-  }, [timeRange, networkHealth]);
+    // Generate trend data for each series
+    const generateSeries = (targetHealth, seed) => {
+      const data = [];
+      let current = Math.max(30, targetHealth - 20 + seed);
+      for (let i = 0; i < dataPoints; i++) {
+        const variance = (Math.sin(i * 1.5 + seed) * 6) + (Math.cos(i * 0.8 + seed * 2) * 4);
+        current = current + (targetHealth - current) * 0.25 + variance;
+        current = Math.max(0, Math.min(100, current));
+        data.push(Math.round(current));
+      }
+      data[data.length - 1] = targetHealth;
+      return data;
+    };
+
+    return {
+      labels: labels.slice(0, dataPoints),
+      all: generateSeries(programCurrentHealth.all, 0),
+      CPF: generateSeries(programCurrentHealth.CPF, 1),
+      GGF: generateSeries(programCurrentHealth.GGF, 2),
+      ESP: generateSeries(programCurrentHealth.ESP, 3),
+    };
+  }, [timeRange, programCurrentHealth]);
 
   // AI-powered suggestions for Help Me Connect
   const aiSuggestions = useMemo(() => {
@@ -1526,24 +1558,31 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
     return suggestions.slice(0, 3);
   }, [fellows, interactions]);
 
-  // Simple SVG line graph
+  // Multi-line SVG graph
   const renderGraph = () => {
     const width = 300;
-    const height = 120;
+    const height = 140;
     const padding = 20;
     const graphWidth = width - padding * 2;
     const graphHeight = height - padding * 2;
 
-    const points = trendData.data.map((value, index) => {
-      const x = padding + (index / (trendData.data.length - 1)) * graphWidth;
-      const y = height - padding - (value / 100) * graphHeight;
-      return `${x},${y}`;
-    }).join(' ');
+    const series = [
+      { key: 'all', color: '#E87722', width: 3.5, label: 'All Alumni' },
+      { key: 'CPF', color: '#3B82F6', width: 1.5, label: 'CPF' },
+      { key: 'GGF', color: '#22C55E', width: 1.5, label: 'GGF' },
+      { key: 'ESP', color: '#C2410C', width: 1.5, label: 'ESP' },
+    ];
 
-    const areaPoints = `${padding},${height - padding} ${points} ${width - padding},${height - padding}`;
+    const getPoints = (data) => {
+      return data.map((value, index) => {
+        const x = padding + (index / (data.length - 1)) * graphWidth;
+        const y = height - padding - (value / 100) * graphHeight;
+        return `${x},${y}`;
+      }).join(' ');
+    };
 
     return (
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-32">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-36">
         {/* Grid lines */}
         {[0, 25, 50, 75, 100].map(v => (
           <line
@@ -1556,35 +1595,39 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
             strokeWidth="1"
           />
         ))}
-        {/* Area fill */}
-        <polygon points={areaPoints} fill="url(#gradient)" opacity="0.3" />
-        {/* Line */}
+        {/* Program lines (thinner, drawn first so they're behind) */}
+        {series.slice(1).map(s => (
+          <polyline
+            key={s.key}
+            points={getPoints(trendData[s.key])}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={s.width}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.8"
+          />
+        ))}
+        {/* All Alumni line (bold, on top) */}
         <polyline
-          points={points}
+          points={getPoints(trendData.all)}
           fill="none"
           stroke="#E87722"
-          strokeWidth="2.5"
+          strokeWidth="3.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* Dots on line */}
-        {trendData.data.map((value, index) => {
-          const x = padding + (index / (trendData.data.length - 1)) * graphWidth;
-          const y = height - padding - (value / 100) * graphHeight;
-          return (
-            <circle key={index} cx={x} cy={y} r="3" fill="#E87722" />
-          );
-        })}
-        {/* Gradient definition */}
-        <defs>
-          <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#E87722" />
-            <stop offset="100%" stopColor="#E87722" stopOpacity="0" />
-          </linearGradient>
-        </defs>
       </svg>
     );
   };
+
+  // Legend for the graph
+  const graphLegend = [
+    { label: 'All Alumni', color: 'bg-goldin-orange', bold: true },
+    { label: 'CPF', color: 'bg-blue-500', bold: false },
+    { label: 'GGF', color: 'bg-green-500', bold: false },
+    { label: 'ESP', color: 'bg-orange-700', bold: false },
+  ];
 
   return (
     <div className="p-4 pb-24">
@@ -1668,6 +1711,15 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
         <div className="flex justify-between text-xs text-gray-400 mt-1 px-1">
           {trendData.labels.map((label, i) => (
             <span key={i}>{label}</span>
+          ))}
+        </div>
+        {/* Legend */}
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-3 pt-3 border-t border-gray-100">
+          {graphLegend.map(item => (
+            <div key={item.label} className="flex items-center gap-1.5">
+              <div className={`${item.bold ? 'w-4 h-1' : 'w-3 h-0.5'} ${item.color} rounded-full`}></div>
+              <span className={`text-xs ${item.bold ? 'font-semibold text-gray-700' : 'text-gray-500'}`}>{item.label}</span>
+            </div>
           ))}
         </div>
       </div>
