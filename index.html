@@ -131,35 +131,37 @@ const GATHER_LOGO = './Gathericon.png';
 const GATHER_LOGO_FULL = 'https://pwazurumpzydxyppbvee.supabase.co/storage/v1/object/public/Photos/Gather%20-%20Logo.png';
 
 // ============================================
-// NEWS SEARCH CONFIG
+// NEWS SEARCH CONFIG (SerpAPI - searches entire web)
 // ============================================
-const GOOGLE_API_KEY = 'AIzaSyDa8t1WL72OyNZ7qG4nktl4Op4X-oOnT2s';
-const GOOGLE_SEARCH_ENGINE_ID = '0539c0dfeee064078';
+const SERPAPI_KEY = '6af57cac1c537ad84c9a51b4ef8dc59bec44d96a4b0270c353c686ff045a6fc9';
 
-// Search for news about a fellow
+// Search for news about a fellow using SerpAPI
 async function searchFellowNews(fellow, maxResults = 5) {
-  // Search for name OR (name + organization) to catch more results
+  // Search for name, optionally with organization context
   const fullName = `"${fellow.first_name} ${fellow.last_name}"`;
-  const withOrg = fellow.organization ? ` OR (${fullName} "${fellow.organization}")` : '';
-  const query = encodeURIComponent(fullName + withOrg);
+  const orgContext = fellow.organization ? ` ${fellow.organization}` : '';
+  const query = encodeURIComponent(fullName + orgContext);
 
-  const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_SEARCH_ENGINE_ID}&q=${query}&num=${maxResults}&dateRestrict=m3`;
+  const url = `https://serpapi.com/search.json?api_key=${SERPAPI_KEY}&engine=google&q=${query}&num=${maxResults}&tbm=nws&tbs=qdr:m3`;
 
   try {
     const response = await fetch(url);
     const data = await response.json();
 
     if (data.error) {
-      console.error('Google Search API error:', data.error);
+      console.error('SerpAPI error:', data.error);
       return [];
     }
 
-    return (data.items || []).map(item => ({
+    // SerpAPI returns news_results for news search
+    const results = data.news_results || data.organic_results || [];
+
+    return results.slice(0, maxResults).map(item => ({
       title: item.title,
       url: item.link,
-      snippet: item.snippet,
-      source: item.displayLink,
-      image: item.pagemap?.cse_image?.[0]?.src || null,
+      snippet: item.snippet || item.description || '',
+      source: item.source?.name || item.displayed_link || new URL(item.link).hostname,
+      image: item.thumbnail || null,
     }));
   } catch (err) {
     console.error('Search error:', err);
