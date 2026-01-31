@@ -1469,7 +1469,7 @@ function ActivityItem({ activity, fellow, onClick }) {
 // PAGES
 // ============================================
 function DashboardPage({ onLogInteraction, onSelectFellow }) {
-  const { fellows, interactions, fetchData } = useContext(AppContext);
+  const { fellows, interactions, activities, fetchData } = useContext(AppContext);
   const [timeRange, setTimeRange] = useState('month');
   const [helpMeConnectOpen, setHelpMeConnectOpen] = useState(false);
 
@@ -1605,19 +1605,30 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       return true;
     };
 
-    // 1. Recent news mentions - congratulate them
+    // 1. Recent news mentions - congratulate them (check both interactions AND activities)
     const newsInteractions = interactions.filter(i =>
       i.interaction_type === 'News Mention' &&
       new Date(i.created_at) > new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
     );
-    newsInteractions.slice(0, 2).forEach(news => {
+    const newsActivities = (activities || []).filter(a =>
+      a.activity_type === 'news_mention' &&
+      new Date(a.discovered_at) > new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+    );
+
+    // Combine and dedupe by fellow_id
+    const allNews = [...newsInteractions, ...newsActivities];
+    const seenFellowsForNews = new Set();
+
+    allNews.slice(0, 3).forEach(news => {
       const fellow = fellows.find(f => f.id === news.fellow_id);
-      if (fellow) {
+      if (fellow && !seenFellowsForNews.has(fellow.id)) {
+        seenFellowsForNews.add(fellow.id);
+        const title = news.title || news.subject || 'Recently featured in the media';
         addSuggestion({
           type: 'congratulate',
           icon: '🎉',
           title: `Congratulate ${fellow.first_name} on their news feature`,
-          description: news.subject || 'Recently featured in the media',
+          description: title.length > 60 ? title.substring(0, 60) + '...' : title,
           fellow,
           action: 'Send congratulations'
         });
@@ -1813,7 +1824,7 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
     }
 
     return suggestions.slice(0, 5);
-  }, [fellows, interactions]);
+  }, [fellows, interactions, activities]);
 
   // Multi-line SVG graph
   const renderGraph = () => {
@@ -3288,27 +3299,17 @@ function DirectoryPage({ onSelectFellow }) {
   );
 }
 
-// Activity Page - shows recent interactions
+// Activity Page - shows recent interactions and news mentions
 function ActivityPage({ onSelectFellow }) {
-  const { fellows, interactions } = useContext(AppContext);
+  const { fellows, interactions, activities } = useContext(AppContext);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  
-  const statusCounts = useMemo(() => {
-    const counts = { green: 0, yellow: 0, red: 0 };
-    fellows.forEach(f => {
-      counts[getContactStatus(f.last_contact).color]++;
-    });
-    return counts;
-  }, [fellows]);
-  
-  // Filter interactions based on search and status
+  const [activeTab, setActiveTab] = useState('interactions'); // 'interactions' or 'news'
+
+  // Filter interactions based on search
   const filteredInteractions = useMemo(() => {
     return interactions.filter(activity => {
       const fellow = fellows.find(f => f.id === activity.fellow_id);
       if (!fellow) return false;
-      
-      // Search filter
       if (search) {
         const term = search.toLowerCase();
         const matchName = `${fellow.first_name} ${fellow.last_name}`.toLowerCase().includes(term);
@@ -3316,16 +3317,25 @@ function ActivityPage({ onSelectFellow }) {
         const matchNotes = activity.notes?.toLowerCase().includes(term);
         if (!matchName && !matchSubject && !matchNotes) return false;
       }
-      
-      // Status filter
-      if (statusFilter) {
-        const fellowStatus = getContactStatus(fellow.last_contact).color;
-        if (fellowStatus !== statusFilter) return false;
-      }
-      
       return true;
     });
-  }, [interactions, fellows, search, statusFilter]);
+  }, [interactions, fellows, search]);
+
+  // Filter news activities based on search
+  const filteredNews = useMemo(() => {
+    return activities.filter(activity => {
+      const fellow = fellows.find(f => f.id === activity.fellow_id);
+      if (!fellow) return false;
+      if (search) {
+        const term = search.toLowerCase();
+        const matchName = `${fellow.first_name} ${fellow.last_name}`.toLowerCase().includes(term);
+        const matchTitle = activity.title?.toLowerCase().includes(term);
+        const matchSnippet = activity.snippet?.toLowerCase().includes(term);
+        if (!matchName && !matchTitle && !matchSnippet) return false;
+      }
+      return true;
+    });
+  }, [activities, fellows, search]);
 
   return (
     <div className="p-4 pb-24">
@@ -3333,33 +3343,110 @@ function ActivityPage({ onSelectFellow }) {
       <div className="mb-4">
         <SearchBar value={search} onChange={setSearch} placeholder="Search activity..." />
       </div>
-      
-      {/* Status Filter Pills */}
-      <StatusFilterBar 
-        statusFilter={statusFilter} 
-        setStatusFilter={setStatusFilter} 
-        statusCounts={statusCounts} 
-      />
-      
-      {/* Count */}
-      <p className="text-sm text-gray-500 mb-3">{filteredInteractions.length} interactions</p>
-      
-      {/* Activity List */}
-      {filteredInteractions.length === 0 ? (
-        <div className="bg-white rounded-2xl p-8 text-center border border-gray-100">
-          <span className="text-4xl mb-3 block">📋</span>
-          <p className="text-gray-500">No activity found</p>
-        </div>
-      ) : (
-        filteredInteractions.map((activity, i) => (
-          <ActivityItem 
-            key={activity.id} 
-            activity={activity} 
-            fellow={fellows.find(f => f.id === activity.fellow_id)}
-            onClick={onSelectFellow}
-            style={{ animationDelay: `${i * 0.05}s` }}
-          />
-        ))
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setActiveTab('interactions')}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
+            activeTab === 'interactions'
+              ? 'bg-goldin-orange text-white'
+              : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          Interactions ({filteredInteractions.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('news')}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
+            activeTab === 'news'
+              ? 'bg-blue-500 text-white'
+              : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          News ({filteredNews.length})
+        </button>
+      </div>
+
+      {/* Interactions Tab */}
+      {activeTab === 'interactions' && (
+        <>
+          {filteredInteractions.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 text-center border border-gray-100">
+              <span className="text-4xl mb-3 block">📋</span>
+              <p className="text-gray-500">No interactions found</p>
+            </div>
+          ) : (
+            filteredInteractions.map((activity, i) => (
+              <ActivityItem
+                key={activity.id}
+                activity={activity}
+                fellow={fellows.find(f => f.id === activity.fellow_id)}
+                onClick={onSelectFellow}
+                style={{ animationDelay: `${i * 0.05}s` }}
+              />
+            ))
+          )}
+        </>
+      )}
+
+      {/* News Tab */}
+      {activeTab === 'news' && (
+        <>
+          {filteredNews.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 text-center border border-gray-100">
+              <span className="text-4xl mb-3 block">📰</span>
+              <p className="text-gray-500">No news mentions found</p>
+              <p className="text-xs text-gray-400 mt-2">Use Settings → News Scanner to find mentions</p>
+            </div>
+          ) : (
+            filteredNews.map((activity, i) => {
+              const fellow = fellows.find(f => f.id === activity.fellow_id);
+              if (!fellow) return null;
+              const badge = getProgramBadge(fellow.program);
+              return (
+                <a
+                  key={activity.id}
+                  href={activity.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="activity-item block w-full text-left p-4 bg-white rounded-2xl shadow-sm border border-gray-100 mb-3"
+                  style={{ animationDelay: `${i * 0.05}s` }}
+                >
+                  <div className="flex gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                      {fellow.photo_url ? (
+                        <img src={fellow.photo_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-lg font-semibold">
+                          {fellow.first_name?.[0]}{fellow.last_name?.[0]}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-semibold text-gray-900">
+                          {fellow.first_name} {fellow.last_name}
+                          <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${badge.bg} text-white`}>
+                            {badge.label}
+                          </span>
+                        </p>
+                        <span className="text-xs text-gray-400 whitespace-nowrap">
+                          {getTimeAgo(activity.discovered_at)}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium text-blue-600 mt-1 line-clamp-2">{activity.title}</p>
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{activity.snippet}</p>
+                      <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                        <span>📰</span> {activity.source_name}
+                      </p>
+                    </div>
+                  </div>
+                </a>
+              );
+            })
+          )}
+        </>
       )}
     </div>
   );
