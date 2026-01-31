@@ -138,9 +138,10 @@ const GOOGLE_SEARCH_ENGINE_ID = '0539c0dfeee064078';
 
 // Search for news about a fellow
 async function searchFellowNews(fellow, maxResults = 5) {
-  const searchTerms = `"${fellow.first_name} ${fellow.last_name}"`;
-  const contextTerms = fellow.organization ? ` "${fellow.organization}"` : '';
-  const query = encodeURIComponent(searchTerms + contextTerms);
+  // Search for name OR (name + organization) to catch more results
+  const fullName = `"${fellow.first_name} ${fellow.last_name}"`;
+  const withOrg = fellow.organization ? ` OR (${fullName} "${fellow.organization}")` : '';
+  const query = encodeURIComponent(fullName + withOrg);
 
   const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_SEARCH_ENGINE_ID}&q=${query}&num=${maxResults}&dateRestrict=m3`;
 
