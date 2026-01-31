@@ -131,6 +131,64 @@ const GATHER_LOGO = './Gathericon.png';
 const GATHER_LOGO_FULL = 'https://pwazurumpzydxyppbvee.supabase.co/storage/v1/object/public/Photos/Gather%20-%20Logo.png';
 
 // ============================================
+// NEWS SEARCH CONFIG
+// ============================================
+const GOOGLE_API_KEY = 'AIzaSyDa8t1WL72OyNZ7qG4nktl4Op4X-oOnT2s';
+const GOOGLE_SEARCH_ENGINE_ID = '0539c0dfeee064078';
+
+// Search for news about a fellow
+async function searchFellowNews(fellow, maxResults = 5) {
+  const searchTerms = `"${fellow.first_name} ${fellow.last_name}"`;
+  const contextTerms = fellow.organization ? ` "${fellow.organization}"` : '';
+  const query = encodeURIComponent(searchTerms + contextTerms);
+
+  const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_SEARCH_ENGINE_ID}&q=${query}&num=${maxResults}&dateRestrict=m3`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.error) {
+      console.error('Google Search API error:', data.error);
+      return [];
+    }
+
+    return (data.items || []).map(item => ({
+      title: item.title,
+      url: item.link,
+      snippet: item.snippet,
+      source: item.displayLink,
+      image: item.pagemap?.cse_image?.[0]?.src || null,
+    }));
+  } catch (err) {
+    console.error('Search error:', err);
+    return [];
+  }
+}
+
+// Save activity to database
+async function saveActivity(fellowId, result) {
+  const { error } = await supabase.from('activities').upsert({
+    fellow_id: fellowId,
+    activity_type: 'news_mention',
+    source_name: result.source,
+    source_url: result.url,
+    source_domain: result.source,
+    title: result.title,
+    snippet: result.snippet,
+    image_url: result.image,
+    relevance_score: 0.5,
+    verified: false,
+    dismissed: false,
+  }, {
+    onConflict: 'fellow_id,source_url',
+    ignoreDuplicates: true,
+  });
+
+  return !error;
+}
+
+// ============================================
 // PERMISSION SYSTEM
 // ============================================
 const ROLES = {
@@ -232,6 +290,7 @@ function AppProvider({ children }) {
   });
   const [focusCategories, setFocusCategories] = useState([]);
   const [focusTags, setFocusTags] = useState([]);
+  const [activities, setActivities] = useState([]);
 
   // Check Supabase auth state on load
   useEffect(() => {
@@ -371,17 +430,19 @@ function AppProvider({ children }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [fellowsRes, interactionsRes, categoriesRes, tagsRes] = await Promise.all([
+      const [fellowsRes, interactionsRes, categoriesRes, tagsRes, activitiesRes] = await Promise.all([
         supabase.from('fellows').select('*').eq('status', 'Alumni'),
         supabase.from('interactions').select('*').order('created_at', { ascending: false }).limit(50),
         supabase.from('focus_categories').select('*').order('sort_order'),
-        supabase.from('focus_tags').select('*').eq('approved', true).order('name')
+        supabase.from('focus_tags').select('*').eq('approved', true).order('name'),
+        supabase.from('activities').select('*').eq('dismissed', false).order('discovered_at', { ascending: false }).limit(50)
       ]);
 
       if (fellowsRes.data) setFellows(fellowsRes.data);
       if (interactionsRes.data) setInteractions(interactionsRes.data);
       if (categoriesRes.data) setFocusCategories(categoriesRes.data);
       if (tagsRes.data) setFocusTags(tagsRes.data);
+      if (activitiesRes.data) setActivities(activitiesRes.data);
     } catch (err) {
       console.error('Fetch error:', err);
     }
@@ -405,7 +466,7 @@ function AppProvider({ children }) {
     <AppContext.Provider value={{
       user, userRole, login, loginWithGoogle, logout, canAccess,
       isOnboarded, completeOnboarding,
-      fellows, interactions, fetchData,
+      fellows, interactions, activities, fetchData,
       focusCategories, focusTags,
       notificationSettings, setNotificationSettings,
       loading
@@ -3723,11 +3784,43 @@ function CohortCommunicationPage() {
 }
 
 function SettingsPage() {
-  const { user, fellows, fetchData, logout } = useContext(AppContext);
+  const { user, userRole, fellows, fetchData, logout, canAccess } = useContext(AppContext);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [myFellow, setMyFellow] = useState(null);
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanResults, setScanResults] = useState(null);
+
+  const isStaff = canAccess(ROLES.TEAM);
+
+  // Scan for news about fellows
+  const scanForNews = async () => {
+    setScanning(true);
+    setScanResults(null);
+    let totalFound = 0;
+    const fellowsToScan = fellows.slice(0, 10); // Scan 10 at a time to stay within limits
+
+    for (const fellow of fellowsToScan) {
+      try {
+        const results = await searchFellowNews(fellow, 3);
+        for (const result of results) {
+          const saved = await saveActivity(fellow.id, result);
+          if (saved) totalFound++;
+        }
+        // Update last_news_search
+        await supabase.from('fellows').update({ last_news_search: new Date().toISOString() }).eq('id', fellow.id);
+      } catch (err) {
+        console.error(`Error scanning ${fellow.first_name}:`, err);
+      }
+      // Small delay between searches
+      await new Promise(r => setTimeout(r, 300));
+    }
+
+    setScanResults({ scanned: fellowsToScan.length, found: totalFound });
+    setScanning(false);
+    fetchData(); // Refresh to show new activities
+  };
 
   // Find user's fellow record by matching email
   useEffect(() => {
@@ -3832,13 +3925,46 @@ function SettingsPage() {
         </div>
       </button>
 
+      {/* News Scanner - Staff Only */}
+      {isStaff && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                <span className="text-xl">📰</span>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">News Scanner</p>
+                <p className="text-sm text-gray-500">Find web mentions of fellows</p>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={scanForNews}
+            disabled={scanning}
+            className="w-full py-3 rounded-xl font-semibold transition"
+            style={{
+              backgroundColor: scanning ? '#E5E7EB' : '#3B82F6',
+              color: scanning ? '#6B7280' : '#FFFFFF'
+            }}
+          >
+            {scanning ? 'Scanning... please wait' : 'Scan for News (10 fellows)'}
+          </button>
+          {scanResults && (
+            <div className="mt-3 p-3 bg-green-50 rounded-xl text-sm" style={{ color: '#166534' }}>
+              Scanned {scanResults.scanned} fellows, found {scanResults.found} new mentions
+            </div>
+          )}
+        </div>
+      )}
+
       {/* About */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">About</h2>
         <div className="space-y-3">
           <div className="flex justify-between">
             <span className="text-gray-600">Version</span>
-            <span className="text-gray-900 font-medium">2.0.0 (PWA)</span>
+            <span className="text-gray-900 font-medium">2.1.0 (PWA)</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Organization</span>
