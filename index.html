@@ -3880,13 +3880,17 @@ function SettingsPage() {
   const [scanResults, setScanResults] = useState(null);
 
   const isStaff = canAccess(ROLES.TEAM);
+  const isTravis = user?.email?.toLowerCase() === 'travis@goldininstitute.org';
 
-  // Scan for news about fellows
+  // Scan for news about fellows (full scan - all fellows)
   const scanForNews = async () => {
+    if (!isTravis) return; // Only Travis can run full scan
+
     setScanning(true);
     setScanResults(null);
     let totalFound = 0;
-    const fellowsToScan = fellows.slice(0, 10); // Scan 10 at a time to stay within limits
+    let scannedCount = 0;
+    const fellowsToScan = fellows; // Scan ALL fellows
 
     for (const fellow of fellowsToScan) {
       try {
@@ -3897,14 +3901,19 @@ function SettingsPage() {
         }
         // Update last_news_search
         await supabase.from('fellows').update({ last_news_search: new Date().toISOString() }).eq('id', fellow.id);
+        scannedCount++;
+        // Update progress every 10 fellows
+        if (scannedCount % 10 === 0) {
+          setScanResults({ scanned: scannedCount, found: totalFound, inProgress: true });
+        }
       } catch (err) {
         console.error(`Error scanning ${fellow.first_name}:`, err);
       }
-      // Small delay between searches
-      await new Promise(r => setTimeout(r, 300));
+      // Small delay between searches to avoid rate limiting
+      await new Promise(r => setTimeout(r, 250));
     }
 
-    setScanResults({ scanned: fellowsToScan.length, found: totalFound });
+    setScanResults({ scanned: fellowsToScan.length, found: totalFound, inProgress: false });
     setScanning(false);
     fetchData(); // Refresh to show new activities
   };
@@ -4012,8 +4021,8 @@ function SettingsPage() {
         </div>
       </button>
 
-      {/* News Scanner - Staff Only */}
-      {isStaff && (
+      {/* News Scanner - Travis Only */}
+      {isTravis && (
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -4022,7 +4031,7 @@ function SettingsPage() {
               </div>
               <div>
                 <p className="font-semibold text-gray-900">News Scanner</p>
-                <p className="text-sm text-gray-500">Find web mentions of fellows</p>
+                <p className="text-sm text-gray-500">Find web mentions of all {fellows.length} fellows</p>
               </div>
             </div>
           </div>
@@ -4035,13 +4044,17 @@ function SettingsPage() {
               color: scanning ? '#6B7280' : '#FFFFFF'
             }}
           >
-            {scanning ? 'Scanning... please wait' : 'Scan for News (10 fellows)'}
+            {scanning ? `Scanning... ${scanResults?.scanned || 0}/${fellows.length}` : `Full Scan (${fellows.length} fellows)`}
           </button>
           {scanResults && (
-            <div className="mt-3 p-3 bg-green-50 rounded-xl text-sm" style={{ color: '#166534' }}>
-              Scanned {scanResults.scanned} fellows, found {scanResults.found} new mentions
+            <div className={`mt-3 p-3 rounded-xl text-sm ${scanResults.inProgress ? 'bg-blue-50' : 'bg-green-50'}`}
+                 style={{ color: scanResults.inProgress ? '#1E40AF' : '#166534' }}>
+              {scanResults.inProgress
+                ? `Scanning... ${scanResults.scanned}/${fellows.length} fellows, ${scanResults.found} mentions found so far`
+                : `Done! Scanned ${scanResults.scanned} fellows, found ${scanResults.found} new mentions`}
             </div>
           )}
+          <p className="text-xs text-gray-400 mt-2">Note: Full scan may take 5-10 minutes and uses Google API quota</p>
         </div>
       )}
 
