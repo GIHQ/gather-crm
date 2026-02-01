@@ -618,13 +618,13 @@ function getProgramBadge(program) {
 
   // Normalize program names to 3-letter codes
   if (p === 'cpf' || p.includes('chicago')) {
-    return { label: 'CPF', bg: 'bg-blue-500' };
+    return { label: 'CPF', bg: 'bg-blue-700' };
   }
   if (p === 'esp' || p.includes('espanol') || p.includes('español') || p.includes('spanish')) {
     return { label: 'ESP', bg: 'bg-orange-700' };
   }
   if (p === 'ggf' || p.includes('global') || p.includes('english')) {
-    return { label: 'GGF', bg: 'bg-green-500' };
+    return { label: 'GGF', bg: 'bg-goldin-orange' };
   }
 
   // Fallback - show first 3 characters
@@ -3192,8 +3192,8 @@ const SORT_OPTIONS = [
 ];
 
 const PROGRAM_OPTIONS = [
-  { value: 'CPF', label: 'CPF', color: 'bg-blue-500' },        // Chicago - Blue
-  { value: 'GGF', label: 'GGF', color: 'bg-goldin-orange' },   // Global English - Bright Orange
+  { value: 'CPF', label: 'CPF', color: 'bg-blue-700' },        // Chicago - Dark Blue
+  { value: 'GGF', label: 'GGF', color: 'bg-goldin-orange' },   // Global English - Gather Orange
   { value: 'ESP', label: 'ESP', color: 'bg-orange-700' },      // Global Spanish - Dark Orange
 ];
 
