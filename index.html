@@ -159,9 +159,8 @@ async function saveActivity(fellowId, result) {
 }
 
 // ============================================
-// TRANSLATION SYSTEM (Google Translate API)
+// TRANSLATION SYSTEM (via Edge Function)
 // ============================================
-const GOOGLE_TRANSLATE_API_KEY = 'AIzaSyC83ec09LKOAwQJFGgirKvYKGHrr0JdE_Y';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'en', name: 'English', native: 'English' },
@@ -196,9 +195,9 @@ const UI_STRINGS = [
 // Translation cache to avoid repeated API calls
 const translationCache = new Map();
 
-// Batch translate multiple strings
+// Batch translate multiple strings (via Edge Function)
 async function batchTranslate(texts, targetLang) {
-  if (targetLang === 'en' || !GOOGLE_TRANSLATE_API_KEY) return {};
+  if (targetLang === 'en') return {};
 
   // Filter texts not in cache
   const uncached = texts.filter(t => !translationCache.has(`${targetLang}:${t}`));
@@ -206,11 +205,11 @@ async function batchTranslate(texts, targetLang) {
   if (uncached.length > 0) {
     try {
       const response = await fetch(
-        `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_API_KEY}`,
+        `${SUPABASE_URL}/functions/v1/translate`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ q: uncached, target: targetLang, source: 'en' })
+          body: JSON.stringify({ texts: uncached, targetLang: targetLang, sourceLang: 'en' })
         }
       );
       const data = await response.json();
@@ -500,7 +499,7 @@ function AppProvider({ children }) {
     document.documentElement.lang = langCode;
 
     // Load translations
-    if (langCode !== 'en' && GOOGLE_TRANSLATE_API_KEY) {
+    if (langCode !== 'en') {
       const trans = await batchTranslate(UI_STRINGS, langCode);
       setTranslations(trans);
     } else {
