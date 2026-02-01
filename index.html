@@ -115,7 +115,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script type="text/babel">
-const { useState, useEffect, useMemo, useCallback, createContext, useContext } = React;
+const { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } = React;
 
 // ============================================
 // CONFIG & SUPABASE
@@ -131,45 +131,12 @@ const GATHER_LOGO = './Gathericon.png';
 const GATHER_LOGO_FULL = 'https://pwazurumpzydxyppbvee.supabase.co/storage/v1/object/public/Photos/Gather%20-%20Logo.png';
 
 // ============================================
-// NEWS SEARCH CONFIG (SerpAPI - searches entire web)
+// NEWS SEARCH - Uses Supabase Edge Function (server-side)
+// See: supabase/functions/search-news/index.ts
+// Deploy with: supabase functions deploy search-news
 // ============================================
-const SERPAPI_KEY = '6af57cac1c537ad84c9a51b4ef8dc59bec44d96a4b0270c353c686ff045a6fc9';
 
-// Search for news about a fellow using SerpAPI
-async function searchFellowNews(fellow, maxResults = 5) {
-  // Search for name, optionally with organization context
-  const fullName = `"${fellow.first_name} ${fellow.last_name}"`;
-  const orgContext = fellow.organization ? ` ${fellow.organization}` : '';
-  const query = encodeURIComponent(fullName + orgContext);
-
-  const url = `https://serpapi.com/search.json?api_key=${SERPAPI_KEY}&engine=google&q=${query}&num=${maxResults}&tbm=nws&tbs=qdr:m3`;
-
-  try {
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('SerpAPI error:', data.error);
-      return [];
-    }
-
-    // SerpAPI returns news_results for news search
-    const results = data.news_results || data.organic_results || [];
-
-    return results.slice(0, maxResults).map(item => ({
-      title: item.title,
-      url: item.link,
-      snippet: item.snippet || item.description || '',
-      source: item.source?.name || item.displayed_link || new URL(item.link).hostname,
-      image: item.thumbnail || null,
-    }));
-  } catch (err) {
-    console.error('Search error:', err);
-    return [];
-  }
-}
-
-// Save activity to database
+// Save activity to database (used by edge function callback if needed)
 async function saveActivity(fellowId, result) {
   const { error } = await supabase.from('activities').upsert({
     fellow_id: fellowId,
@@ -194,7 +161,7 @@ async function saveActivity(fellowId, result) {
 // ============================================
 // TRANSLATION SYSTEM (Google Translate API)
 // ============================================
-const GOOGLE_TRANSLATE_API_KEY = 'AIzaSyCax80rL-YBD_bK99H9NeKOKXRBICBLgKI';
+const GOOGLE_TRANSLATE_API_KEY = 'AIzaSyC83ec09LKOAwQJFGgirKvYKGHrr0JdE_Y';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'en', name: 'English', native: 'English' },
@@ -370,11 +337,18 @@ function AppProvider({ children }) {
   const [focusCategories, setFocusCategories] = useState([]);
   const [focusTags, setFocusTags] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [fellowFocusTags, setFellowFocusTags] = useState([]);
   const [language, setLanguage] = useState('en');
   const [translations, setTranslations] = useState({});
 
   // Check Supabase auth state on load
   useEffect(() => {
+    // Failsafe: ensure loading never gets stuck
+    const loadingTimeout = setTimeout(() => {
+      console.warn('Loading timeout - forcing load complete');
+      setLoading(false);
+    }, 5000);
+
     const initAuth = async () => {
       try {
         // Check for existing session
@@ -426,6 +400,7 @@ function AppProvider({ children }) {
         console.error('Error initializing auth:', err);
       }
 
+      clearTimeout(loadingTimeout);
       setLoading(false);
     };
 
@@ -542,14 +517,14 @@ function AppProvider({ children }) {
   // Permission check helper
   const canAccess = (requiredRole) => hasPermission(userRole, requiredRole);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (forceRefresh = false) => {
     try {
       const [fellowsRes, interactionsRes, categoriesRes, tagsRes, activitiesRes] = await Promise.all([
         supabase.from('fellows').select('*').eq('status', 'Alumni'),
         supabase.from('interactions').select('*').order('created_at', { ascending: false }).limit(50),
         supabase.from('focus_categories').select('*').order('sort_order'),
         supabase.from('focus_tags').select('*').eq('approved', true).order('name'),
-        supabase.from('activities').select('*').eq('dismissed', false).order('discovered_at', { ascending: false }).limit(50)
+        supabase.from('activities').select('*').eq('dismissed', false).order('discovered_at', { ascending: false }).limit(200)
       ]);
 
       if (fellowsRes.data) setFellows(fellowsRes.data);
@@ -557,6 +532,22 @@ function AppProvider({ children }) {
       if (categoriesRes.data) setFocusCategories(categoriesRes.data);
       if (tagsRes.data) setFocusTags(tagsRes.data);
       if (activitiesRes.data) setActivities(activitiesRes.data);
+
+      // Fetch fellow_focus_tags separately (non-blocking if table doesn't exist)
+      try {
+        const fellowTagsRes = await supabase.from('fellow_focus_tags').select('fellow_id, tag_id, is_primary');
+        if (fellowTagsRes.data) setFellowFocusTags(fellowTagsRes.data);
+      } catch (e) {
+        console.log('fellow_focus_tags not available yet');
+      }
+
+      // If force refresh, also clear service worker cache
+      if (forceRefresh && 'serviceWorker' in navigator) {
+        const caches = await window.caches?.keys();
+        if (caches) {
+          await Promise.all(caches.map(cache => window.caches.delete(cache)));
+        }
+      }
     } catch (err) {
       console.error('Fetch error:', err);
     }
@@ -580,7 +571,7 @@ function AppProvider({ children }) {
     <AppContext.Provider value={{
       user, userRole, login, loginWithGoogle, logout, canAccess,
       isOnboarded, completeOnboarding,
-      fellows, interactions, activities, fetchData,
+      fellows, interactions, activities, fellowFocusTags, fetchData,
       focusCategories, focusTags,
       notificationSettings, setNotificationSettings,
       language, changeLanguage, t,
@@ -661,13 +652,20 @@ function FocusAreasEditor({ fellow, onUpdate }) {
   // Fetch fellow's current tags
   useEffect(() => {
     const fetchFellowTags = async () => {
-      if (!fellow?.id) return;
+      console.log('FocusAreasEditor: fellow.id =', fellow?.id);
+      if (!fellow?.id) {
+        console.log('FocusAreasEditor: No fellow.id, returning');
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('fellow_focus_tags')
           .select('tag_id, is_primary')
           .eq('fellow_id', fellow.id);
+
+        console.log('FocusAreasEditor: fetched data =', data, 'error =', error);
 
         if (data) {
           setFellowTags(data);
@@ -681,6 +679,7 @@ function FocusAreasEditor({ fellow, onUpdate }) {
               setPrimaryCommunityArea(ft.tag_id);
             }
           });
+          console.log('FocusAreasEditor: selectedTags =', initial);
           setSelectedTags(initial);
         }
       } catch (err) {
@@ -694,6 +693,7 @@ function FocusAreasEditor({ fellow, onUpdate }) {
 
   // Group tags by category
   const tagsByCategory = useMemo(() => {
+    console.log('FocusAreasEditor: focusCategories =', focusCategories?.length, 'focusTags =', focusTags?.length);
     const grouped = {};
     (focusCategories || []).forEach(cat => {
       grouped[cat.id] = {
@@ -853,7 +853,7 @@ function FocusAreasEditor({ fellow, onUpdate }) {
                       }`}
                     >
                       {isPrimary && <span className="text-xs">★</span>}
-                      {tag.name}
+                      {tag.icon && <span>{tag.icon}</span>} {tag.name}
                     </span>
                   );
                 })}
@@ -922,7 +922,7 @@ function FocusAreasEditor({ fellow, onUpdate }) {
                       }`}
                     >
                       {isPrimary && <span className="mr-1">★</span>}
-                      {tag.name}
+                      {tag.icon && <span className="mr-1">{tag.icon}</span>}{tag.name}
                     </button>
                   );
                 })}
@@ -1753,7 +1753,7 @@ function ActivityItem({ activity, fellow, onClick }) {
 // PAGES
 // ============================================
 function DashboardPage({ onLogInteraction, onSelectFellow }) {
-  const { fellows, interactions, activities, fetchData } = useContext(AppContext);
+  const { fellows, interactions, activities, fellowFocusTags, focusCategories, focusTags, fetchData } = useContext(AppContext);
   const [timeRange, setTimeRange] = useState('month');
   const [helpMeConnectOpen, setHelpMeConnectOpen] = useState(false);
 
@@ -1889,6 +1889,21 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       return true;
     };
 
+    // Build lookup maps for focus tags
+    const communityAreaCategory = focusCategories.find(c => c.slug === 'community-areas');
+    const topicalCategories = focusCategories.filter(c => ['skills', 'populations', 'focus-areas'].includes(c.slug));
+
+    // Map fellow_id -> their tag_ids
+    const fellowTagMap = {};
+    (fellowFocusTags || []).forEach(ft => {
+      if (!fellowTagMap[ft.fellow_id]) fellowTagMap[ft.fellow_id] = [];
+      fellowTagMap[ft.fellow_id].push(ft.tag_id);
+    });
+
+    // Map tag_id -> tag info
+    const tagMap = {};
+    (focusTags || []).forEach(t => { tagMap[t.id] = t; });
+
     // 1. Recent news mentions - congratulate them (check both interactions AND activities)
     const newsInteractions = interactions.filter(i =>
       i.interaction_type === 'News Mention' &&
@@ -1932,7 +1947,7 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
           addSuggestion({
             type: 'birthday',
             icon: '🎂',
-            title: `${fellow.first_name}'s birthday ${daysUntil === 0 ? 'is today!' : `in ${daysUntil} day${daysUntil > 1 ? 's' : ''}`}`,
+            title: `${f.first_name}'s birthday ${daysUntil === 0 ? 'is today!' : `in ${daysUntil} day${daysUntil > 1 ? 's' : ''}`}`,
             description: 'Send a card or birthday message',
             fellow: f,
             action: 'Send birthday wishes'
@@ -1941,19 +1956,55 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       }
     });
 
-    // 3. Geographic proximity - fellows in same city
+    // 3. Chicago neighborhood matching - fellows in same community area
+    if (communityAreaCategory && suggestions.length < 8) {
+      const communityAreaTags = focusTags.filter(t => t.category_id === communityAreaCategory.id);
+      const communityAreaTagIds = new Set(communityAreaTags.map(t => t.id));
+
+      // Group fellows by community area
+      const fellowsByNeighborhood = {};
+      fellows.forEach(f => {
+        const fTags = fellowTagMap[f.id] || [];
+        const neighborhoodTagId = fTags.find(tid => communityAreaTagIds.has(tid));
+        if (neighborhoodTagId) {
+          if (!fellowsByNeighborhood[neighborhoodTagId]) fellowsByNeighborhood[neighborhoodTagId] = [];
+          fellowsByNeighborhood[neighborhoodTagId].push(f);
+        }
+      });
+
+      Object.entries(fellowsByNeighborhood).forEach(([tagId, neighborhoodFellows]) => {
+        if (neighborhoodFellows.length >= 2 && suggestions.length < 8) {
+          const availableFellows = neighborhoodFellows.filter(f => !usedFellowIds.has(f.id));
+          if (availableFellows.length >= 2) {
+            const [f1, f2] = availableFellows.slice(0, 2);
+            const neighborhoodName = tagMap[tagId]?.name || 'the same neighborhood';
+            addSuggestion({
+              type: 'neighborhood',
+              icon: '🏘️',
+              title: `Neighbors: ${f1.first_name} & ${f2.first_name}`,
+              description: `Both work in ${neighborhoodName} - local collaboration opportunity`,
+              fellows: [f1, f2],
+              action: 'Introduce neighbors'
+            });
+          }
+        }
+      });
+    }
+
+    // 4. Geographic proximity - fellows in same city (non-Chicago)
     const fellowsByCity = {};
     fellows.forEach(f => {
-      if (f.city) {
+      if (f.city && f.city.toLowerCase() !== 'chicago') {
         const city = f.city.toLowerCase().trim();
         if (!fellowsByCity[city]) fellowsByCity[city] = [];
         fellowsByCity[city].push(f);
       }
     });
     Object.entries(fellowsByCity).forEach(([city, cityFellows]) => {
-      if (cityFellows.length >= 2 && suggestions.length < 6) {
-        const [f1, f2] = cityFellows.slice(0, 2);
-        if (!usedFellowIds.has(f1.id) && !usedFellowIds.has(f2.id)) {
+      if (cityFellows.length >= 2 && suggestions.length < 8) {
+        const availableFellows = cityFellows.filter(f => !usedFellowIds.has(f.id));
+        if (availableFellows.length >= 2) {
+          const [f1, f2] = availableFellows.slice(0, 2);
           addSuggestion({
             type: 'coffee',
             icon: '☕',
@@ -1966,7 +2017,66 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       }
     });
 
-    // 4. Long time no contact - prioritize by days overdue
+    // 5. Topical matching - fellows with shared focus areas, skills, or populations
+    if (topicalCategories.length > 0 && suggestions.length < 8) {
+      const topicalCategoryIds = new Set(topicalCategories.map(c => c.id));
+      const topicalTagIds = new Set(focusTags.filter(t => topicalCategoryIds.has(t.category_id)).map(t => t.id));
+
+      // Find pairs with shared topical tags
+      const fellowsWithTopicalTags = fellows.filter(f => {
+        const fTags = fellowTagMap[f.id] || [];
+        return fTags.some(tid => topicalTagIds.has(tid));
+      });
+
+      for (let i = 0; i < fellowsWithTopicalTags.length && suggestions.length < 8; i++) {
+        for (let j = i + 1; j < fellowsWithTopicalTags.length && suggestions.length < 8; j++) {
+          const f1 = fellowsWithTopicalTags[i];
+          const f2 = fellowsWithTopicalTags[j];
+          if (usedFellowIds.has(f1.id) || usedFellowIds.has(f2.id)) continue;
+
+          const f1Tags = new Set((fellowTagMap[f1.id] || []).filter(tid => topicalTagIds.has(tid)));
+          const f2Tags = (fellowTagMap[f2.id] || []).filter(tid => topicalTagIds.has(tid));
+          const sharedTagId = f2Tags.find(tid => f1Tags.has(tid));
+
+          if (sharedTagId) {
+            const sharedTag = tagMap[sharedTagId];
+            addSuggestion({
+              type: 'topical',
+              icon: '💡',
+              title: `${f1.first_name} & ${f2.first_name}: Shared Interest`,
+              description: `Both focus on "${sharedTag?.name || 'similar topics'}" - potential collaboration`,
+              fellows: [f1, f2],
+              action: 'Introduce them'
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    // 6. Data cleanup - fellows missing birthday or website
+    const fellowsMissingData = fellows.filter(f =>
+      !usedFellowIds.has(f.id) &&
+      (!f.date_of_birth && !f.dob && !f.birthday || !f.website)
+    ).slice(0, 2);
+
+    fellowsMissingData.forEach(f => {
+      if (suggestions.length < 8) {
+        const missingBirthday = !f.date_of_birth && !f.dob && !f.birthday;
+        const missingWebsite = !f.website;
+        const missingItems = [missingBirthday && 'birthday', missingWebsite && 'website'].filter(Boolean);
+        addSuggestion({
+          type: 'data-cleanup',
+          icon: '📋',
+          title: `Update ${f.first_name}'s profile`,
+          description: `Missing ${missingItems.join(' and ')} - reach out to ask?`,
+          fellow: f,
+          action: 'Request info'
+        });
+      }
+    });
+
+    // 7. Long time no contact - prioritize by days overdue
     const overdueAlumni = fellows
       .filter(f => getContactStatus(f.last_contact).color === 'red')
       .map(f => ({
@@ -1978,7 +2088,7 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       .sort((a, b) => b.daysSince - a.daysSince);
 
     overdueAlumni.slice(0, 3).forEach(fellow => {
-      if (suggestions.length < 6) {
+      if (suggestions.length < 8) {
         addSuggestion({
           type: 'checkin',
           icon: '📞',
@@ -1992,39 +2102,12 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       }
     });
 
-    // 5. Shared focus areas - introduce fellows with matching interests
-    const fellowsWithTags = fellows.filter(f => f.focus_tags?.length > 0 || f.interests);
-    if (fellowsWithTags.length >= 2) {
-      for (let i = 0; i < fellowsWithTags.length && suggestions.length < 6; i++) {
-        for (let j = i + 1; j < fellowsWithTags.length && suggestions.length < 6; j++) {
-          const f1 = fellowsWithTags[i];
-          const f2 = fellowsWithTags[j];
-          if (usedFellowIds.has(f1.id) || usedFellowIds.has(f2.id)) continue;
-
-          // Check for matching organization type or similar roles
-          if (f1.organization && f2.organization &&
-              f1.job_title && f2.job_title &&
-              (f1.job_title.toLowerCase().includes('director') && f2.job_title.toLowerCase().includes('director'))) {
-            addSuggestion({
-              type: 'introduce',
-              icon: '🤝',
-              title: `Introduce ${f1.first_name} and ${f2.first_name}`,
-              description: 'Both are organizational leaders - potential collaboration',
-              fellows: [f1, f2],
-              action: 'Draft introduction'
-            });
-            break;
-          }
-        }
-      }
-    }
-
-    // 6. Cross-program introductions
+    // 8. Cross-program introductions
     const cpfFellows = fellows.filter(f => getProgramBadge(f.program).label === 'CPF' && !usedFellowIds.has(f.id));
     const ggfFellows = fellows.filter(f => getProgramBadge(f.program).label === 'GGF' && !usedFellowIds.has(f.id));
     const espFellows = fellows.filter(f => getProgramBadge(f.program).label === 'ESP' && !usedFellowIds.has(f.id));
 
-    if (cpfFellows.length > 0 && ggfFellows.length > 0 && suggestions.length < 6) {
+    if (cpfFellows.length > 0 && ggfFellows.length > 0 && suggestions.length < 8) {
       const f1 = cpfFellows[Math.floor(Math.random() * cpfFellows.length)];
       const f2 = ggfFellows[Math.floor(Math.random() * ggfFellows.length)];
       addSuggestion({
@@ -2037,11 +2120,10 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       });
     }
 
-    // 7. Cohort anniversary check
+    // 9. Cohort anniversary check
     const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth();
     fellows.forEach(f => {
-      if (f.cohort_year && suggestions.length < 6) {
+      if (f.cohort_year && suggestions.length < 8) {
         const yearsAgo = currentYear - parseInt(f.cohort_year);
         if (yearsAgo > 0 && yearsAgo % 5 === 0) { // 5, 10, 15 year anniversaries
           addSuggestion({
@@ -2056,13 +2138,13 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       }
     });
 
-    // 8. Yellow status - gentle nudge before they go red
+    // 10. Yellow status - gentle nudge before they go red
     const yellowFellows = fellows
       .filter(f => getContactStatus(f.last_contact).color === 'yellow' && !usedFellowIds.has(f.id))
       .slice(0, 2);
 
     yellowFellows.forEach(fellow => {
-      if (suggestions.length < 6) {
+      if (suggestions.length < 8) {
         addSuggestion({
           type: 'nudge',
           icon: '💛',
@@ -2107,8 +2189,8 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       });
     }
 
-    return suggestions.slice(0, 5);
-  }, [fellows, interactions, activities]);
+    return suggestions.slice(0, 6);
+  }, [fellows, interactions, activities, fellowFocusTags, focusCategories, focusTags]);
 
   // Multi-line SVG graph
   const renderGraph = () => {
@@ -4163,9 +4245,12 @@ function SettingsPage() {
   const [scanning, setScanning] = useState(false);
   const [scanResults, setScanResults] = useState(null);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const [creatingProfile, setCreatingProfile] = useState(false);
 
   const isStaff = canAccess(ROLES.TEAM);
   const isTravis = user?.email?.toLowerCase() === 'travis@goldininstitute.org';
+  const isGoldinEmail = user?.email?.toLowerCase().endsWith('@goldininstitute.org') ||
+                        user?.email?.toLowerCase().endsWith('@chicagopeacefellows.org');
   const currentLang = SUPPORTED_LANGUAGES.find(l => l.code === language) || SUPPORTED_LANGUAGES[0];
 
   // Check daily scan limit for non-Travis users
@@ -4185,60 +4270,95 @@ function SettingsPage() {
     localStorage.setItem('gather_scan_count', JSON.stringify({ date: today, count: current + 1 }));
   };
 
+  // Track last news scan date
+  const getLastScanDate = () => {
+    const stored = localStorage.getItem('gather_last_news_scan');
+    return stored ? new Date(stored) : null;
+  };
+
+  const setLastScanDate = () => {
+    localStorage.setItem('gather_last_news_scan', new Date().toISOString());
+  };
+
+  const daysSinceLastScan = () => {
+    const lastScan = getLastScanDate();
+    if (!lastScan) return 999; // Never scanned
+    return Math.floor((Date.now() - lastScan.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
   const [dailyScanCount, setDailyScanCount] = useState(getDailyScanCount());
+  const [showScanReminder, setShowScanReminder] = useState(daysSinceLastScan() > 7);
   const canScanMore = isTravis || dailyScanCount < 3;
 
-  // Scan for news about fellows
+  // Scan for news about fellows using Supabase Edge Function
   const scanForNews = async (fullScan = false) => {
     if (!isStaff) return;
     if (!isTravis && !canScanMore) return;
 
     setScanning(true);
     setScanResults(null);
-    let totalFound = 0;
-    let scannedCount = 0;
 
-    // Travis gets full scan, others get 10 at a time
-    const fellowsToScan = (isTravis && fullScan) ? fellows : fellows.slice(0, 10);
+    try {
+      // Call the Supabase Edge Function for news search
+      // Travis gets full scan (up to 50), others get 10 at a time
+      const maxFellows = (isTravis && fullScan) ? 50 : 10;
 
-    for (const fellow of fellowsToScan) {
-      try {
-        const results = await searchFellowNews(fellow, 3);
-        for (const result of results) {
-          const saved = await saveActivity(fellow.id, result);
-          if (saved) totalFound++;
+      const { data: session } = await supabase.auth.getSession();
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/search-news`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.session?.access_token || SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ max_fellows: maxFellows })
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        console.error('News scan error:', result.error);
+        setScanResults({ scanned: 0, found: 0, inProgress: false, error: result.error });
+      } else {
+        const totalFound = result.results?.reduce((sum, r) => sum + r.activitiesFound, 0) || 0;
+        setScanResults({
+          scanned: result.fellowsSearched || 0,
+          found: totalFound,
+          inProgress: false
+        });
+
+        // Increment scan count for non-Travis users
+        if (!isTravis) {
+          incrementScanCount();
+          setDailyScanCount(getDailyScanCount() + 1);
         }
-        // Update last_news_search
-        await supabase.from('fellows').update({ last_news_search: new Date().toISOString() }).eq('id', fellow.id);
-        scannedCount++;
-        // Update progress every 10 fellows
-        if (scannedCount % 10 === 0) {
-          setScanResults({ scanned: scannedCount, found: totalFound, inProgress: true, total: fellowsToScan.length });
-        }
-      } catch (err) {
-        console.error(`Error scanning ${fellow.first_name}:`, err);
+
+        // Update last scan date and dismiss reminder
+        setLastScanDate();
+        setShowScanReminder(false);
       }
-      // Small delay between searches to avoid rate limiting
-      await new Promise(r => setTimeout(r, 250));
+    } catch (err) {
+      console.error('News scan failed:', err);
+      setScanResults({ scanned: 0, found: 0, inProgress: false, error: err.message });
     }
 
-    // Increment scan count for non-Travis users
-    if (!isTravis) {
-      incrementScanCount();
-      setDailyScanCount(getDailyScanCount() + 1);
-    }
-
-    setScanResults({ scanned: fellowsToScan.length, found: totalFound, inProgress: false });
     setScanning(false);
     fetchData(); // Refresh to show new activities
   };
 
-  // Find user's fellow record by matching email
+  // Find user's fellow record by matching email or work_email
   useEffect(() => {
     if (user?.email && fellows.length > 0) {
-      const found = fellows.find(f =>
-        f.email && f.email.toLowerCase() === user.email.toLowerCase()
-      );
+      const userEmailLower = user.email.toLowerCase();
+      const found = fellows.find(f => {
+        // Check primary email
+        if (f.email && f.email.toLowerCase() === userEmailLower) return true;
+        // Check work_email (can be comma-separated list)
+        if (f.work_email) {
+          const workEmails = f.work_email.toLowerCase().split(',').map(e => e.trim());
+          if (workEmails.includes(userEmailLower)) return true;
+        }
+        return false;
+      });
       setMyFellow(found || null);
     }
   }, [user?.email, fellows]);
@@ -4247,6 +4367,75 @@ function SettingsPage() {
     if (confirm('Are you sure you want to sign out?')) {
       await logout();
     }
+  };
+
+  // Create a new staff profile
+  const createStaffProfile = async () => {
+    if (!user?.email) return;
+    setCreatingProfile(true);
+
+    // First check if a profile with this email already exists (case insensitive)
+    const { data: existing } = await supabase
+      .from('fellows')
+      .select('*')
+      .ilike('email', user.email)
+      .single();
+
+    if (existing) {
+      // Profile already exists, just link it
+      setMyFellow(existing);
+      setCreatingProfile(false);
+      return;
+    }
+
+    // Parse name from email (travis@... -> Travis)
+    const emailName = user.email.split('@')[0];
+    const firstName = emailName.charAt(0).toUpperCase() + emailName.slice(1).replace(/[._]/g, ' ');
+
+    // Generate a unique ID
+    const newId = `staff_${Date.now()}`;
+
+    const { data, error } = await supabase
+      .from('fellows')
+      .insert({
+        id: newId,
+        first_name: firstName,
+        last_name: '',
+        email: user.email.toLowerCase(),
+        status: 'Staff',
+        program: 'Staff',
+        organization: 'Goldin Institute',
+        city: 'Chicago',
+        country: 'United States'
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setMyFellow(data);
+      // Open profile editor immediately so they can fill in details
+      setEditData({
+        first_name: data.first_name || '',
+        last_name: data.last_name || '',
+        email: data.email || '',
+        phone: '',
+        organization: data.organization || '',
+        job_title: '',
+        city: data.city || '',
+        country: data.country || '',
+        biography: '',
+        linkedin: '',
+        twitter: '',
+        website: '',
+        languages: '',
+      });
+      setProfileModalOpen(true);
+      fetchData();
+    } else {
+      console.error('Error creating profile:', error);
+      alert('Error creating profile. Please try again.');
+    }
+    setCreatingProfile(false);
   };
 
   const openProfileEditor = () => {
@@ -4360,30 +4549,89 @@ function SettingsPage() {
       </div>
 
       {/* My Profile */}
-      <button
-        onClick={openProfileEditor}
-        className={`w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6 text-left ${myFellow ? 'active:bg-gray-50' : 'opacity-60'}`}
-        disabled={!myFellow}
-      >
-        <div className="flex items-center justify-between">
+      {myFellow ? (
+        <button
+          onClick={openProfileEditor}
+          className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6 text-left active:bg-gray-50"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-goldin-orange/10 rounded-xl flex items-center justify-center">
+                <span className="text-xl">👤</span>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">My Profile</p>
+                <p className="text-sm text-gray-500">Edit your profile</p>
+              </div>
+            </div>
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </button>
+      ) : isGoldinEmail ? (
+        <button
+          onClick={createStaffProfile}
+          disabled={creatingProfile}
+          className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6 text-left active:bg-gray-50"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                <span className="text-xl">➕</span>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">
+                  {creatingProfile ? 'Creating...' : 'Create My Profile'}
+                </p>
+                <p className="text-sm text-gray-500">Add yourself to the directory</p>
+              </div>
+            </div>
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+        </button>
+      ) : (
+        <div className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6 opacity-60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-goldin-orange/10 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
               <span className="text-xl">👤</span>
             </div>
             <div>
               <p className="font-semibold text-gray-900">My Profile</p>
-              <p className="text-sm text-gray-500">
-                {myFellow ? 'Edit your fellow profile' : 'No linked fellow profile found'}
-              </p>
+              <p className="text-sm text-gray-500">No linked profile found</p>
             </div>
           </div>
-          {myFellow && (
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          )}
         </div>
-      </button>
+      )}
+
+      {/* News Scan Reminder - Travis only */}
+      {isTravis && showScanReminder && (
+        <div className="bg-amber-50 rounded-2xl p-4 shadow-sm border border-amber-200 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+              <span className="text-xl">📰</span>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-amber-900">Time to scan for news!</p>
+              <p className="text-sm text-amber-700">
+                {daysSinceLastScan() === 999
+                  ? "You haven't scanned for fellow news yet"
+                  : `It's been ${daysSinceLastScan()} days since your last scan`}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowScanReminder(false)}
+              className="text-amber-400 hover:text-amber-600 p-1"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* News Scanner - Staff */}
       {isStaff && (
@@ -4897,7 +5145,7 @@ function LogInteractionModal({ isOpen, onClose, preSelectedFellow }) {
 // MAIN APP
 // ============================================
 function MainApp() {
-  const { user, userRole, isOnboarded, loading, login, completeOnboarding, canAccess, changeLanguage } = useContext(AppContext);
+  const { user, userRole, isOnboarded, loading, login, completeOnboarding, canAccess, changeLanguage, fetchData } = useContext(AppContext);
   const [onboardingStep, setOnboardingStep] = useState(() => {
     // Initialize based on existing state
     const savedUser = localStorage.getItem('gather_user');
@@ -4916,6 +5164,47 @@ function MainApp() {
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [selectedFellow, setSelectedFellow] = useState(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const mainRef = useRef(null);
+
+  const handleTouchStart = (e) => {
+    if (window.scrollY === 0 && !isRefreshing) {
+      touchStartY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (window.scrollY === 0 && touchStartY.current > 0 && !isRefreshing) {
+      const currentY = e.touches[0].clientY;
+      const diff = currentY - touchStartY.current;
+      if (diff > 0) {
+        // Reduce pull distance with resistance
+        setPullDistance(Math.min(diff * 0.4, 100));
+      }
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (pullDistance > 60 && !isRefreshing) {
+      // Trigger hard refresh
+      setIsRefreshing(true);
+      setPullDistance(60);
+
+      try {
+        await fetchData(true); // true = force refresh, clears caches
+      } catch (e) {
+        console.error('Refresh failed:', e);
+      }
+
+      setIsRefreshing(false);
+    }
+    setPullDistance(0);
+    touchStartY.current = 0;
+  };
 
   // Update onboarding step when user state changes (e.g., after OAuth return)
   useEffect(() => {
@@ -4984,7 +5273,35 @@ function MainApp() {
 
   // Main app
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div
+      className="min-h-screen bg-gray-50"
+      ref={mainRef}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull-to-refresh indicator */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div
+          className="fixed left-0 right-0 flex justify-center items-center z-50 transition-all"
+          style={{
+            top: 64,
+            height: isRefreshing ? 60 : pullDistance,
+            opacity: Math.min(pullDistance / 60, 1)
+          }}
+        >
+          <div className={`w-8 h-8 rounded-full border-2 border-goldin-orange border-t-transparent ${isRefreshing ? 'animate-spin' : ''}`}
+            style={{ transform: isRefreshing ? 'none' : `rotate(${pullDistance * 3}deg)` }}
+          />
+          {pullDistance > 60 && !isRefreshing && (
+            <span className="ml-2 text-sm text-gray-600">Release to refresh</span>
+          )}
+          {isRefreshing && (
+            <span className="ml-2 text-sm text-gray-600">Refreshing...</span>
+          )}
+        </div>
+      )}
+
       <Header
         onMenuOpen={() => setMenuOpen(true)}
         pageTitle={pageTitles[currentPage] || 'GATHER'}
@@ -4999,7 +5316,7 @@ function MainApp() {
       />
 
       {/* Page content with padding for fixed header */}
-      <main className="pt-16 pb-8">
+      <main className="pt-16 pb-8" style={{ marginTop: isRefreshing ? 60 : 0 }}>
         {currentPage === 'dashboard' && <DashboardPage onLogInteraction={openLogModal} onSelectFellow={handleSelectFellow} />}
         {currentPage === 'directory' && <DirectoryPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'search' && <SearchPage onSelectFellow={handleSelectFellow} />}

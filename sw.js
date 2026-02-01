@@ -1,15 +1,11 @@
 // GATHER PWA Service Worker
-const CACHE_NAME = 'gather-v2.2.0';
-const OFFLINE_URL = '/gather-mobile.html';
+const CACHE_NAME = 'gather-v4.0.0';
+const OFFLINE_URL = '/index.html';
 
 // Assets to cache on install
 const PRECACHE_ASSETS = [
-  '/gather-mobile.html',
+  '/index.html',
   '/manifest.json',
-  'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap',
-  'https://unpkg.com/react@18/umd/react.production.min.js',
-  'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
 ];
 
 // Install event - cache assets

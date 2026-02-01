@@ -429,11 +429,12 @@ function FellowCard({ fellow, onClick }) {
 }
 
 // Modal
-function Modal({ fellow, onClose, onLogInteraction }) {
+function Modal({ fellow, onClose, onLogInteraction, fellowTags }) {
   if (!fellow) return null;
   const defaultPhoto = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%23f1f5f9' width='100' height='100'/%3E%3Ccircle cx='50' cy='35' r='18' fill='%23cbd5e1'/%3E%3Cellipse cx='50' cy='80' rx='28' ry='22' fill='%23cbd5e1'/%3E%3C/svg%3E";
   const name = `${fellow.first_name || ''} ${fellow.last_name || ''}`.trim();
-  const focusAreas = [fellow.focus_area_1, fellow.focus_area_2, fellow.focus_area_3].filter(Boolean).map(id => FOCUS_AREAS[id]).filter(Boolean);
+  // Use new focus tags from database, fallback to old FA codes
+  const focusAreas = fellowTags || [fellow.focus_area_1, fellow.focus_area_2, fellow.focus_area_3].filter(Boolean).map(id => FOCUS_AREAS[id]).filter(Boolean);
   const badge = getProgramBadge(fellow.program);
   const year = getCohortYear(fellow.cohort);
   const regionInfo = getRegionFromCountry(fellow.country);
@@ -963,6 +964,8 @@ function QuickAddModal({ fellows, onClose, onSuccess }) {
 // Main App
 function App() {
   const [fellows, setFellows] = useState([]);
+  const [focusTags, setFocusTags] = useState([]);
+  const [fellowFocusTags, setFellowFocusTags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
@@ -975,16 +978,39 @@ function App() {
   const [contactStatus, setContactStatus] = useState('');
   const [selected, setSelected] = useState(null);
   const [logModalFellow, setLogModalFellow] = useState(null);
-  
+
+  // Build a map of fellow_id -> their focus tags
+  const fellowTagsMap = useMemo(() => {
+    const tagMap = {};
+    focusTags.forEach(t => { tagMap[t.id] = t; });
+
+    const result = {};
+    fellowFocusTags.forEach(fft => {
+      if (!result[fft.fellow_id]) result[fft.fellow_id] = [];
+      const tag = tagMap[fft.tag_id];
+      if (tag) result[fft.fellow_id].push({ ...tag, is_primary: fft.is_primary });
+    });
+    return result;
+  }, [focusTags, fellowFocusTags]);
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await supabase.from('fellows').select('*').eq('status', 'Alumni').order('last_name', { ascending: true });
-      if (fetchError) throw fetchError;
-      if (!data || data.length === 0) throw new Error('No alumni found in the database.');
-      setFellows(data);
-      console.log(`✅ Loaded ${data.length} alumni from Supabase`);
+      const [fellowsRes, tagsRes, fellowTagsRes] = await Promise.all([
+        supabase.from('fellows').select('*').eq('status', 'Alumni').order('last_name', { ascending: true }),
+        supabase.from('focus_tags').select('*').eq('approved', true),
+        supabase.from('fellow_focus_tags').select('fellow_id, tag_id, is_primary')
+      ]);
+
+      if (fellowsRes.error) throw fellowsRes.error;
+      if (!fellowsRes.data || fellowsRes.data.length === 0) throw new Error('No alumni found in the database.');
+
+      setFellows(fellowsRes.data);
+      if (tagsRes.data) setFocusTags(tagsRes.data);
+      if (fellowTagsRes.data) setFellowFocusTags(fellowTagsRes.data);
+
+      console.log(`✅ Loaded ${fellowsRes.data.length} alumni, ${tagsRes.data?.length || 0} tags from Supabase`);
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err.message || 'Failed to load data. Please try again.');
@@ -992,7 +1018,7 @@ function App() {
       setLoading(false);
     }
   };
-  
+
   useEffect(() => { fetchData(); }, []);
   
   // Focus area code to label mapping
@@ -1021,26 +1047,25 @@ function App() {
   
   const options = useMemo(() => {
     const regionsSet = new Set();
-    const focusAreasSet = new Set();
     fellows.forEach(f => {
       const regionInfo = getRegionFromCountry(f.country);
       if (regionInfo.subRegion) regionsSet.add(regionInfo.subRegion);
       else if (regionInfo.region) regionsSet.add(regionInfo.region);
-      // Collect focus areas
-      if (f.focus_area_1) focusAreasSet.add(f.focus_area_1);
-      if (f.focus_area_2) focusAreasSet.add(f.focus_area_2);
-      if (f.focus_area_3) focusAreasSet.add(f.focus_area_3);
     });
+    // Get unique focus areas from the new database-driven system
+    const usedTagIds = new Set(fellowFocusTags.map(fft => fft.tag_id));
+    const usedTags = focusTags.filter(t => usedTagIds.has(t.id)).sort((a, b) => a.name.localeCompare(b.name));
+
     return {
       programs: [...new Set(fellows.map(f => f.program).filter(Boolean))].sort(),
       countries: [...new Set(fellows.map(f => f.country).filter(Boolean))].sort(),
       regions: [...regionsSet].sort(),
       cohorts: [...new Set(fellows.map(f => f.cohort).filter(Boolean))].sort().reverse(),
       hoods: [...new Set(fellows.map(f => f.community_area).filter(Boolean))].sort(),
-      focusAreas: [...focusAreasSet].sort((a, b) => (FOCUS_AREA_LABELS[a] || a).localeCompare(FOCUS_AREA_LABELS[b] || b))
+      focusAreas: usedTags
     };
-  }, [fellows]);
-  
+  }, [fellows, focusTags, fellowFocusTags]);
+
   const filtered = useMemo(() => {
     return fellows.filter(f => {
       const s = search.toLowerCase();
@@ -1058,11 +1083,13 @@ function App() {
       }
       let matchFocusArea = true;
       if (focusArea) {
-        matchFocusArea = f.focus_area_1 === focusArea || f.focus_area_2 === focusArea || f.focus_area_3 === focusArea;
+        // Check if fellow has this tag in the new system
+        const fellowTags = fellowTagsMap[f.id] || [];
+        matchFocusArea = fellowTags.some(t => t.id === focusArea);
       }
       return matchSearch && (!program || f.program === program) && (!country || f.country === country) && matchRegion && (!cohort || f.cohort === cohort) && (!hood || f.community_area === hood) && matchStatus && matchFocusArea;
     });
-  }, [fellows, search, program, country, region, cohort, hood, contactStatus, focusArea]);
+  }, [fellows, search, program, country, region, cohort, hood, contactStatus, focusArea, fellowTagsMap]);
   
   const clearFilters = () => { setSearch(''); setProgram(''); setCountry(''); setRegion(''); setCohort(''); setHood(''); setContactStatus(''); setFocusArea(''); };
   const hasFilters = search || program || country || region || cohort || hood || contactStatus || focusArea;
@@ -1202,7 +1229,7 @@ function App() {
                 {options.focusAreas.length > 0 && (
                   <select value={focusArea} onChange={e => setFocusArea(e.target.value)} className="filter-select px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-goldin-orange/50 bg-white text-sm whitespace-nowrap">
                     <option value="">All Focus Areas</option>
-                    {options.focusAreas.map(fa => <option key={fa} value={fa}>{FOCUS_AREA_LABELS[fa] || fa}</option>)}
+                    {options.focusAreas.map(fa => <option key={fa.id} value={fa.id}>{fa.icon} {fa.name}</option>)}
                   </select>
                 )}
                 {hasFilters && (
@@ -1250,7 +1277,7 @@ function App() {
         </div>
       </footer>
       
-      {selected && <Modal fellow={selected} onClose={() => setSelected(null)} onLogInteraction={(f) => { setSelected(null); setLogModalFellow(f); }} />}
+      {selected && <Modal fellow={selected} onClose={() => setSelected(null)} onLogInteraction={(f) => { setSelected(null); setLogModalFellow(f); }} fellowTags={fellowTagsMap[selected.id]} />}
       
       <LogInteractionModal 
         isOpen={!!logModalFellow} 
