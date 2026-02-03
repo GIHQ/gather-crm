@@ -1767,8 +1767,8 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
 
   // Status counts by program
   const programHealthStats = useMemo(() => {
-    const programs = { CPF: { green: 0, yellow: 0, red: 0, total: 0, color: 'bg-blue-500' },
-                       GGF: { green: 0, yellow: 0, red: 0, total: 0, color: 'bg-green-500' },
+    const programs = { CPF: { green: 0, yellow: 0, red: 0, total: 0, color: 'bg-blue-700' },
+                       GGF: { green: 0, yellow: 0, red: 0, total: 0, color: 'bg-orange-500' },
                        ESP: { green: 0, yellow: 0, red: 0, total: 0, color: 'bg-orange-700' } };
     fellows.forEach(f => {
       const badge = getProgramBadge(f.program);
@@ -2257,8 +2257,8 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
   // Legend for the graph
   const graphLegend = [
     { label: 'All Alumni', color: 'bg-goldin-orange', bold: true },
-    { label: 'CPF', color: 'bg-blue-500', bold: false },
-    { label: 'GGF', color: 'bg-green-500', bold: false },
+    { label: 'CPF', color: 'bg-blue-700', bold: false },
+    { label: 'GGF', color: 'bg-orange-500', bold: false },
     { label: 'ESP', color: 'bg-orange-700', bold: false },
   ];
 
@@ -2604,7 +2604,7 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                 {fellow.job_title && <p style={{ color: '#E87722' }} className="font-semibold">{fellow.job_title}</p>}
                 <p className="text-gray-600">{fellow.organization || 'No organization'}</p>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <span style={{ backgroundColor: badge.bg === 'bg-blue-500' ? '#3B82F6' : badge.bg === 'bg-goldin-orange' ? '#E87722' : '#C2410C' }} className="text-xs px-2.5 py-1 rounded-lg text-white font-bold">{badge.label}</span>
+                  <span style={{ backgroundColor: badge.bg === 'bg-blue-700' ? '#1D4ED8' : badge.bg === 'bg-goldin-orange' ? '#E87722' : '#C2410C' }} className="text-xs px-2.5 py-1 rounded-lg text-white font-bold">{badge.label}</span>
                   {(fellow.cohort_year || fellow.year) && (
                     <span className="text-xs px-2.5 py-1 rounded-lg bg-gray-700 text-white font-bold">
                       {fellow.cohort_year || fellow.year}
