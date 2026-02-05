@@ -1,5 +1,6 @@
-// GATHER CRM - News Search Edge Function
-// Searches for news/web mentions of fellows and stores in activities table
+// GATHER CRM - News & Social Media Search Edge Function
+// Searches for news/web mentions of fellows using SerpAPI across multiple platforms
+// Platforms: Google News, LinkedIn, Twitter/X, Facebook, Instagram
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -18,14 +19,168 @@ interface Fellow {
 }
 
 interface SearchResult {
+  source: 'google_news' | 'linkedin' | 'twitter' | 'facebook' | 'instagram';
   title: string;
   link: string;
-  snippet: string;
-  displayLink: string;
-  pagemap?: {
-    cse_image?: Array<{ src: string }>;
-    metatags?: Array<{ "article:published_time"?: string }>;
-  };
+  snippet?: string;
+  date?: string;
+  thumbnail?: string;
+  relevanceScore: number;
+}
+
+type PlatformType = 'google_news' | 'linkedin' | 'twitter' | 'facebook' | 'instagram';
+
+// Search configurations for each platform
+const SEARCH_CONFIGS: Record<PlatformType, {
+  engine: 'google' | 'google_news';
+  buildQuery: (fellow: Fellow) => string;
+  activityType: string;
+}> = {
+  google_news: {
+    engine: 'google_news',
+    buildQuery: (fellow: Fellow) => {
+      const fullName = `"${fellow.first_name} ${fellow.last_name}"`;
+      return fellow.organization
+        ? `${fullName} OR "${fellow.organization}"`
+        : fullName;
+    },
+    activityType: 'news_mention',
+  },
+  linkedin: {
+    engine: 'google',
+    buildQuery: (fellow: Fellow) => {
+      const name = `"${fellow.first_name} ${fellow.last_name}"`;
+      const org = fellow.organization ? ` "${fellow.organization}"` : '';
+      return `site:linkedin.com/in ${name}${org}`;
+    },
+    activityType: 'linkedin_mention',
+  },
+  twitter: {
+    engine: 'google',
+    buildQuery: (fellow: Fellow) => {
+      const name = `"${fellow.first_name} ${fellow.last_name}"`;
+      return `(site:twitter.com OR site:x.com) ${name}`;
+    },
+    activityType: 'twitter_mention',
+  },
+  facebook: {
+    engine: 'google',
+    buildQuery: (fellow: Fellow) => {
+      const name = `"${fellow.first_name} ${fellow.last_name}"`;
+      return `site:facebook.com ${name}`;
+    },
+    activityType: 'facebook_mention',
+  },
+  instagram: {
+    engine: 'google',
+    buildQuery: (fellow: Fellow) => {
+      const name = `"${fellow.first_name} ${fellow.last_name}"`;
+      return `site:instagram.com ${name}`;
+    },
+    activityType: 'instagram_mention',
+  },
+};
+
+// Calculate relevance score based on name/org matches
+function calculateRelevance(
+  fellow: Fellow,
+  title: string,
+  snippet: string
+): number {
+  const titleLower = (title || "").toLowerCase();
+  const snippetLower = (snippet || "").toLowerCase();
+  const firstNameLower = fellow.first_name.toLowerCase();
+  const lastNameLower = fellow.last_name.toLowerCase();
+  const orgLower = (fellow.organization || "").toLowerCase();
+
+  const nameInTitle = titleLower.includes(firstNameLower) && titleLower.includes(lastNameLower);
+  const nameInSnippet = snippetLower.includes(firstNameLower) && snippetLower.includes(lastNameLower);
+  const orgInTitle = orgLower && orgLower.length > 3 && titleLower.includes(orgLower);
+  const orgInSnippet = orgLower && orgLower.length > 3 && snippetLower.includes(orgLower);
+
+  return (
+    (nameInTitle ? 0.5 : 0) +
+    (nameInSnippet ? 0.3 : 0) +
+    (orgInTitle ? 0.4 : 0) +
+    (orgInSnippet ? 0.2 : 0)
+  );
+}
+
+async function searchPlatform(
+  fellow: Fellow,
+  platform: PlatformType,
+  apiKey: string
+): Promise<SearchResult[]> {
+  const config = SEARCH_CONFIGS[platform];
+  const query = config.buildQuery(fellow);
+
+  const searchUrl = new URL("https://serpapi.com/search.json");
+  searchUrl.searchParams.set("api_key", apiKey);
+  searchUrl.searchParams.set("q", query);
+  searchUrl.searchParams.set("num", "5");
+
+  // Use appropriate engine and settings
+  if (config.engine === 'google_news') {
+    searchUrl.searchParams.set("engine", "google_news");
+  } else {
+    searchUrl.searchParams.set("engine", "google");
+    // For social media, don't limit to recent results as we want to find profiles
+  }
+
+  try {
+    const response = await fetch(searchUrl.toString());
+    const data = await response.json();
+
+    if (data.error) {
+      console.error(`SerpAPI error for ${platform}:`, data.error);
+      return [];
+    }
+
+    // Parse results based on engine type
+    const rawResults = config.engine === 'google_news'
+      ? data.news_results || []
+      : data.organic_results || [];
+
+    return rawResults.slice(0, 3).map((item: any) => {
+      const title = item.title || item.headline || '';
+      const snippet = item.snippet || item.description || '';
+      const relevanceScore = calculateRelevance(fellow, title, snippet);
+
+      return {
+        source: platform,
+        title,
+        link: item.link || item.url || '',
+        snippet,
+        date: item.date || item.published_date || '',
+        thumbnail: item.thumbnail || '',
+        relevanceScore,
+      };
+    }).filter((r: SearchResult) => r.relevanceScore >= 0.2 || platform !== 'google_news');
+    // For social media, we're more lenient since site: filter already targets relevant results
+  } catch (error) {
+    console.error(`Error searching ${platform} for ${fellow.first_name} ${fellow.last_name}:`, error);
+    return [];
+  }
+}
+
+async function searchAllPlatforms(
+  fellow: Fellow,
+  apiKey: string,
+  platforms: PlatformType[]
+): Promise<SearchResult[]> {
+  const results: SearchResult[] = [];
+
+  // Search platforms sequentially to respect rate limits
+  for (const platform of platforms) {
+    console.log(`Searching ${platform} for ${fellow.first_name} ${fellow.last_name}...`);
+    const platformResults = await searchPlatform(fellow, platform, apiKey);
+    results.push(...platformResults);
+
+    // Small delay between API calls to respect rate limits
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+
+  return results;
 }
 
 serve(async (req) => {
@@ -36,22 +191,29 @@ serve(async (req) => {
 
   try {
     // Get environment variables
-    const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY");
-    const GOOGLE_SEARCH_ENGINE_ID = Deno.env.get("GOOGLE_SEARCH_ENGINE_ID");
+    const SERPAPI_KEY = Deno.env.get("SERPAPI_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!GOOGLE_API_KEY || !GOOGLE_SEARCH_ENGINE_ID) {
-      throw new Error("Missing Google API credentials");
+    if (!SERPAPI_KEY) {
+      throw new Error("Missing SERPAPI_KEY");
+    }
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error(`Missing Supabase credentials: URL=${!!SUPABASE_URL}, KEY=${!!SUPABASE_SERVICE_ROLE_KEY}`);
     }
 
     // Create Supabase client with service role (bypasses RLS)
-    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Get request body (optional: specific fellow_id to search)
+    // Get request body
     const body = await req.json().catch(() => ({}));
     const specificFellowId = body.fellow_id;
-    const maxFellows = body.max_fellows || 10; // Limit per run to stay within API quotas
+    const maxFellows = body.max_fellows || 10;
+    // Default to google_news only for backward compatibility
+    const platforms: PlatformType[] = body.platforms || ['google_news'];
+
+    console.log(`Starting search with platforms: ${platforms.join(', ')}, max_fellows: ${maxFellows}`);
 
     // Fetch fellows to search
     let query = supabase
@@ -69,83 +231,63 @@ serve(async (req) => {
 
     const { data: fellows, error: fellowsError } = await query;
 
-    if (fellowsError) throw fellowsError;
+    if (fellowsError) {
+      throw new Error(`Fellows query error: ${fellowsError.message}`);
+    }
     if (!fellows || fellows.length === 0) {
-      return new Response(JSON.stringify({ message: "No fellows to search" }), {
+      return new Response(JSON.stringify({
+        message: "No fellows to search",
+        debug: { maxFellows, specificFellowId, platforms }
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const results: Array<{ fellow: string; activitiesFound: number }> = [];
+    console.log(`Found ${fellows.length} fellows to search across ${platforms.length} platforms`);
+
+    const results: Array<{
+      fellow: string;
+      activitiesFound: number;
+      byPlatform: Record<string, number>;
+    }> = [];
 
     for (const fellow of fellows as Fellow[]) {
-      // Build search query
-      const searchTerms = [
-        `"${fellow.first_name} ${fellow.last_name}"`,
-        fellow.organization ? `"${fellow.organization}"` : "",
-      ].filter(Boolean).join(" OR ");
-
-      // Add context terms to improve relevance
-      const contextTerms = "peace OR community OR nonprofit OR social OR award OR interview";
-      const fullQuery = `(${searchTerms}) (${contextTerms})`;
-
-      // Search Google Custom Search API
-      const searchUrl = new URL("https://www.googleapis.com/customsearch/v1");
-      searchUrl.searchParams.set("key", GOOGLE_API_KEY);
-      searchUrl.searchParams.set("cx", GOOGLE_SEARCH_ENGINE_ID);
-      searchUrl.searchParams.set("q", fullQuery);
-      searchUrl.searchParams.set("num", "5"); // Get top 5 results
-      searchUrl.searchParams.set("dateRestrict", "m1"); // Last month
-      searchUrl.searchParams.set("safe", "active");
-
-      const searchResponse = await fetch(searchUrl.toString());
-      const searchData = await searchResponse.json();
-
+      const searchResults = await searchAllPlatforms(fellow, SERPAPI_KEY, platforms);
+      const byPlatform: Record<string, number> = {};
       let activitiesFound = 0;
 
-      if (searchData.items && searchData.items.length > 0) {
-        for (const item of searchData.items as SearchResult[]) {
-          // Calculate basic relevance score
-          const titleMatch = item.title.toLowerCase().includes(fellow.first_name.toLowerCase()) &&
-                            item.title.toLowerCase().includes(fellow.last_name.toLowerCase());
-          const snippetMatch = item.snippet.toLowerCase().includes(fellow.first_name.toLowerCase());
-          const relevanceScore = (titleMatch ? 0.5 : 0) + (snippetMatch ? 0.3 : 0) + 0.2;
+      for (const result of searchResults) {
+        const config = SEARCH_CONFIGS[result.source];
+        const sourceName = result.source === 'google_news'
+          ? (new URL(result.link).hostname.replace('www.', ''))
+          : result.source.charAt(0).toUpperCase() + result.source.slice(1);
 
-          // Only store if reasonably relevant
-          if (relevanceScore >= 0.3) {
-            // Extract image URL if available
-            const imageUrl = item.pagemap?.cse_image?.[0]?.src || null;
+        // Insert into activities table (upsert to avoid duplicates)
+        const { error: insertError } = await supabase
+          .from("activities")
+          .upsert({
+            fellow_id: fellow.id,
+            activity_type: config.activityType,
+            source_name: sourceName,
+            source_url: result.link,
+            source_domain: sourceName,
+            title: result.title,
+            snippet: result.snippet || "",
+            image_url: result.thumbnail || null,
+            published_at: result.date || null,
+            search_query: config.buildQuery(fellow),
+            relevance_score: result.relevanceScore,
+            verified: false,
+            dismissed: false,
+            notified: false,
+          }, {
+            onConflict: "fellow_id,source_url",
+            ignoreDuplicates: true,
+          });
 
-            // Extract published date if available
-            const publishedAt = item.pagemap?.metatags?.[0]?.["article:published_time"] || null;
-
-            // Insert into activities table (upsert to avoid duplicates)
-            const { error: insertError } = await supabase
-              .from("activities")
-              .upsert({
-                fellow_id: fellow.id,
-                activity_type: "news_mention",
-                source_name: item.displayLink,
-                source_url: item.link,
-                source_domain: item.displayLink,
-                title: item.title,
-                snippet: item.snippet,
-                image_url: imageUrl,
-                published_at: publishedAt,
-                search_query: fullQuery,
-                relevance_score: relevanceScore,
-                verified: false,
-                dismissed: false,
-                notified: false,
-              }, {
-                onConflict: "fellow_id,source_url",
-                ignoreDuplicates: true,
-              });
-
-            if (!insertError) {
-              activitiesFound++;
-            }
-          }
+        if (!insertError) {
+          activitiesFound++;
+          byPlatform[result.source] = (byPlatform[result.source] || 0) + 1;
         }
       }
 
@@ -158,16 +300,20 @@ serve(async (req) => {
       results.push({
         fellow: `${fellow.first_name} ${fellow.last_name}`,
         activitiesFound,
+        byPlatform,
       });
 
-      // Small delay to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      console.log(`${fellow.first_name} ${fellow.last_name}: ${activitiesFound} results`);
     }
+
+    const totalFound = results.reduce((sum, r) => sum + r.activitiesFound, 0);
 
     return new Response(
       JSON.stringify({
         success: true,
         fellowsSearched: results.length,
+        platformsSearched: platforms,
+        totalFound,
         results,
       }),
       {

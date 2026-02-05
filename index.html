@@ -4245,6 +4245,20 @@ function SettingsPage() {
   const [scanResults, setScanResults] = useState(null);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [creatingProfile, setCreatingProfile] = useState(false);
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState(() => {
+    const saved = localStorage.getItem('gatherNotificationSettings');
+    return saved ? JSON.parse(saved) : {
+      pushEnabled: false,
+      emailEnabled: true,
+      dailySummary: true,
+      weeklySummary: false,
+      teamActivity: true,
+      overdueAlerts: true,
+      newsMentions: false,
+    };
+  });
+  const [savingNotifications, setSavingNotifications] = useState(false);
 
   const isStaff = canAccess(ROLES.TEAM);
   const isTravis = user?.email?.toLowerCase() === 'travis@goldininstitute.org';
@@ -4288,6 +4302,35 @@ function SettingsPage() {
   const [dailyScanCount, setDailyScanCount] = useState(getDailyScanCount());
   const [showScanReminder, setShowScanReminder] = useState(daysSinceLastScan() > 7);
   const canScanMore = isTravis || dailyScanCount < 3;
+  const [scanPlatforms, setScanPlatforms] = useState(() => {
+    const saved = localStorage.getItem('gatherScanPlatforms');
+    return saved ? JSON.parse(saved) : {
+      google_news: true,
+      linkedin: true,
+      twitter: true,
+      facebook: false,
+      instagram: false,
+    };
+  });
+  const [platformsExpanded, setPlatformsExpanded] = useState(false);
+
+  const platformOptions = [
+    { id: 'google_news', label: 'Google News', icon: '📰', description: 'Traditional news articles' },
+    { id: 'linkedin', label: 'LinkedIn', icon: '💼', description: 'Professional profiles & posts' },
+    { id: 'twitter', label: 'Twitter/X', icon: '🐦', description: 'Public tweets & mentions' },
+    { id: 'facebook', label: 'Facebook', icon: '👥', description: 'Public pages & posts' },
+    { id: 'instagram', label: 'Instagram', icon: '📸', description: 'Public profiles' },
+  ];
+
+  const selectedPlatforms = Object.entries(scanPlatforms)
+    .filter(([_, enabled]) => enabled)
+    .map(([id]) => id);
+
+  const togglePlatform = (platformId) => {
+    const updated = { ...scanPlatforms, [platformId]: !scanPlatforms[platformId] };
+    setScanPlatforms(updated);
+    localStorage.setItem('gatherScanPlatforms', JSON.stringify(updated));
+  };
 
   // Scan for news about fellows using Supabase Edge Function
   const scanForNews = async (fullScan = false) => {
@@ -4309,7 +4352,7 @@ function SettingsPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.session?.access_token || SUPABASE_ANON_KEY}`
         },
-        body: JSON.stringify({ max_fellows: maxFellows })
+        body: JSON.stringify({ max_fellows: maxFellows, platforms: selectedPlatforms })
       });
 
       const result = await response.json();
@@ -4479,10 +4522,10 @@ function SettingsPage() {
     <div className="p-4 pb-24">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
 
-      {/* Notifications - Coming Soon */}
+      {/* Notifications */}
       <button
-        className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4 text-left"
-        disabled
+        onClick={() => setNotificationModalOpen(true)}
+        className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4 text-left active:bg-gray-50 transition"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -4490,11 +4533,13 @@ function SettingsPage() {
               <span className="text-xl">🔔</span>
             </div>
             <div>
-              <p className="font-semibold text-gray-900">Notifications</p>
-              <p className="text-sm text-gray-500">Manage your alerts</p>
+              <p className="font-semibold text-gray-900">{t('Notifications')}</p>
+              <p className="text-sm text-gray-500">{t('Manage your alerts')}</p>
             </div>
           </div>
-          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded-full font-medium">Coming Soon</span>
+          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
         </div>
       </button>
 
@@ -4638,47 +4683,113 @@ function SettingsPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                <span className="text-xl">📰</span>
+                <span className="text-xl">🔍</span>
               </div>
               <div>
-                <p className="font-semibold text-gray-900">News Scanner</p>
+                <p className="font-semibold text-gray-900">News & Social Scanner</p>
                 <p className="text-sm text-gray-500">
-                  {isTravis ? `Find web mentions of all ${fellows.length} fellows` : 'Find web mentions of fellows'}
+                  {isTravis ? `Find mentions across ${selectedPlatforms.length} platforms` : 'Find web mentions of fellows'}
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Platform Selection (Collapsible) */}
+          <div className="mb-4">
+            <button
+              onClick={() => setPlatformsExpanded(!platformsExpanded)}
+              className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-xl text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-700">Sources to search:</span>
+                <span className="text-xs px-2 py-0.5 bg-goldin-orange/10 text-goldin-orange rounded-full font-medium">
+                  {selectedPlatforms.length} selected
+                </span>
+              </div>
+              <svg className={`w-5 h-5 text-gray-400 transition ${platformsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {platformsExpanded && (
+              <div className="mt-2 space-y-2">
+                {platformOptions.map(platform => (
+                  <label
+                    key={platform.id}
+                    className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      scanPlatforms[platform.id]
+                        ? 'bg-orange-50 border-orange-300'
+                        : 'bg-white border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{platform.icon}</span>
+                      <div>
+                        <span className="font-medium text-gray-900">{platform.label}</span>
+                        <p className="text-xs text-gray-500">{platform.description}</p>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={scanPlatforms[platform.id]}
+                        onChange={() => togglePlatform(platform.id)}
+                        className="sr-only"
+                      />
+                      <div className={`w-10 h-6 rounded-full transition-colors ${
+                        scanPlatforms[platform.id] ? 'bg-goldin-orange' : 'bg-gray-300'
+                      }`}>
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                          scanPlatforms[platform.id] ? 'translate-x-5' : 'translate-x-1'
+                        }`} />
+                      </div>
+                    </div>
+                  </label>
+                ))}
+
+                {/* API Usage Note */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm mt-3">
+                  <p className="text-amber-800">
+                    <strong>API Usage:</strong> Each platform = 1 credit per fellow.
+                    {isTravis && ` Full scan: ${fellows.length} × ${selectedPlatforms.length} = ~${fellows.length * selectedPlatforms.length} credits.`}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Travis gets full scan option */}
           {isTravis && (
             <button
               onClick={() => scanForNews(true)}
-              disabled={scanning}
+              disabled={scanning || selectedPlatforms.length === 0}
               className="w-full py-3 rounded-xl font-semibold transition mb-2"
               style={{
-                backgroundColor: scanning ? '#E5E7EB' : '#3B82F6',
-                color: scanning ? '#6B7280' : '#FFFFFF'
+                backgroundColor: (scanning || selectedPlatforms.length === 0) ? '#E5E7EB' : '#3B82F6',
+                color: (scanning || selectedPlatforms.length === 0) ? '#6B7280' : '#FFFFFF'
               }}
             >
-              {scanning ? `Scanning... ${scanResults?.scanned || 0}/${scanResults?.total || fellows.length}` : `Full Scan (${fellows.length} fellows)`}
+              {scanning ? `Scanning... ${scanResults?.scanned || 0}/${scanResults?.total || fellows.length}` : `Full Scan (${fellows.length} fellows × ${selectedPlatforms.length} platforms)`}
             </button>
           )}
 
           {/* Everyone gets quick scan (Travis unlimited, others 3/day) */}
           <button
             onClick={() => scanForNews(false)}
-            disabled={scanning || (!isTravis && !canScanMore)}
+            disabled={scanning || (!isTravis && !canScanMore) || selectedPlatforms.length === 0}
             className="w-full py-3 rounded-xl font-semibold transition"
             style={{
-              backgroundColor: (scanning || (!isTravis && !canScanMore)) ? '#E5E7EB' : '#10B981',
-              color: (scanning || (!isTravis && !canScanMore)) ? '#6B7280' : '#FFFFFF'
+              backgroundColor: (scanning || (!isTravis && !canScanMore) || selectedPlatforms.length === 0) ? '#E5E7EB' : '#10B981',
+              color: (scanning || (!isTravis && !canScanMore) || selectedPlatforms.length === 0) ? '#6B7280' : '#FFFFFF'
             }}
           >
-            {!isTravis && !canScanMore
-              ? 'Daily limit reached (3/3)'
-              : scanning
-                ? `Scanning... ${scanResults?.scanned || 0}/${scanResults?.total || 10}`
-                : `Quick Scan (10 fellows)${!isTravis ? ` - ${3 - dailyScanCount} left today` : ''}`}
+            {selectedPlatforms.length === 0
+              ? 'Select at least one platform'
+              : !isTravis && !canScanMore
+                ? 'Daily limit reached (3/3)'
+                : scanning
+                  ? `Scanning... ${scanResults?.scanned || 0}/${scanResults?.total || 10}`
+                  : `Quick Scan (10 fellows × ${selectedPlatforms.length} platforms)${!isTravis ? ` - ${3 - dailyScanCount} left today` : ''}`}
           </button>
 
           {scanResults && (
@@ -4686,12 +4797,14 @@ function SettingsPage() {
                  style={{ color: scanResults.inProgress ? '#1E40AF' : '#166534' }}>
               {scanResults.inProgress
                 ? `Scanning... ${scanResults.scanned}/${scanResults.total} fellows, ${scanResults.found} mentions found so far`
-                : `Done! Scanned ${scanResults.scanned} fellows, found ${scanResults.found} new mentions`}
+                : scanResults.error
+                  ? `Error: ${scanResults.error}`
+                  : `Done! Scanned ${scanResults.scanned} fellows across ${selectedPlatforms.length} platforms, found ${scanResults.found} new mentions`}
             </div>
           )}
 
           {isTravis && (
-            <p className="text-xs text-gray-400 mt-2">Full scan may take 5-10 minutes and uses ~$4 API quota</p>
+            <p className="text-xs text-gray-400 mt-2">Full scan may take 5-10 minutes depending on platforms selected</p>
           )}
         </div>
       )}
@@ -4868,6 +4981,263 @@ function SettingsPage() {
                   placeholder="English, Spanish, ..."
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
                 />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Notification Settings Modal */}
+      {notificationModalOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+            onClick={() => setNotificationModalOpen(false)}
+          />
+          <div className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl z-50 max-h-[90vh] overflow-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between rounded-t-3xl">
+              <button
+                onClick={() => setNotificationModalOpen(false)}
+                className="text-gray-500 font-medium"
+              >
+                {t('Cancel')}
+              </button>
+              <h2 className="font-bold text-gray-900">{t('Notifications')}</h2>
+              <button
+                onClick={async () => {
+                  setSavingNotifications(true);
+                  // Save to localStorage
+                  localStorage.setItem('gatherNotificationSettings', JSON.stringify(notificationSettings));
+
+                  // Request push permission if enabled
+                  if (notificationSettings.pushEnabled && 'Notification' in window) {
+                    const permission = await Notification.requestPermission();
+                    if (permission !== 'granted') {
+                      setNotificationSettings(s => ({ ...s, pushEnabled: false }));
+                      alert('Push notifications were denied. You can enable them in browser settings.');
+                    }
+                  }
+
+                  setSavingNotifications(false);
+                  setNotificationModalOpen(false);
+                }}
+                disabled={savingNotifications || (!notificationSettings.pushEnabled && !notificationSettings.emailEnabled)}
+                className="text-goldin-orange font-semibold disabled:opacity-50"
+              >
+                {savingNotifications ? 'Saving...' : t('Save')}
+              </button>
+            </div>
+
+            <div className="p-4 pb-8">
+              {/* Delivery Method */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  Delivery Method
+                </h3>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setNotificationSettings(s => ({ ...s, pushEnabled: !s.pushEnabled }))}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium transition-all ${
+                      notificationSettings.pushEnabled
+                        ? 'bg-goldin-orange text-white border-2 border-goldin-orange'
+                        : 'bg-white text-gray-600 border-2 border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    Push
+                    {notificationSettings.pushEnabled && (
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setNotificationSettings(s => ({ ...s, emailEnabled: !s.emailEnabled }))}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium transition-all ${
+                      notificationSettings.emailEnabled
+                        ? 'bg-goldin-orange text-white border-2 border-goldin-orange'
+                        : 'bg-white text-gray-600 border-2 border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Email
+                    {notificationSettings.emailEnabled && (
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {!notificationSettings.pushEnabled && !notificationSettings.emailEnabled && (
+                  <p className="text-sm text-red-500 mt-2">Please select at least one delivery method</p>
+                )}
+              </div>
+
+              {/* Notification Types */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  What to notify
+                </h3>
+                <div className="space-y-3">
+                  {/* Daily Summary */}
+                  <div
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                      notificationSettings.dailySummary
+                        ? 'bg-orange-50 border-orange-300'
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">📊</span>
+                      <div>
+                        <h4 className={`font-semibold ${notificationSettings.dailySummary ? 'text-gray-900' : 'text-gray-700'}`}>
+                          {t('Daily Summary')}
+                        </h4>
+                        <p className="text-sm text-gray-500">{t('Morning overview of your priorities')}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setNotificationSettings(s => ({ ...s, dailySummary: !s.dailySummary }))}
+                      className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${
+                        notificationSettings.dailySummary ? 'bg-goldin-orange' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                          notificationSettings.dailySummary ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Weekly Summary */}
+                  <div
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                      notificationSettings.weeklySummary
+                        ? 'bg-orange-50 border-orange-300'
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">📅</span>
+                      <div>
+                        <h4 className={`font-semibold ${notificationSettings.weeklySummary ? 'text-gray-900' : 'text-gray-700'}`}>
+                          Weekly Summary
+                        </h4>
+                        <p className="text-sm text-gray-500">Week recap every Monday</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setNotificationSettings(s => ({ ...s, weeklySummary: !s.weeklySummary }))}
+                      className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${
+                        notificationSettings.weeklySummary ? 'bg-goldin-orange' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                          notificationSettings.weeklySummary ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Team Activity */}
+                  <div
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                      notificationSettings.teamActivity
+                        ? 'bg-orange-50 border-orange-300'
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">⚡</span>
+                      <div>
+                        <h4 className={`font-semibold ${notificationSettings.teamActivity ? 'text-gray-900' : 'text-gray-700'}`}>
+                          {t('Activity Alerts')}
+                        </h4>
+                        <p className="text-sm text-gray-500">{t('When team members log interactions')}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setNotificationSettings(s => ({ ...s, teamActivity: !s.teamActivity }))}
+                      className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${
+                        notificationSettings.teamActivity ? 'bg-goldin-orange' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                          notificationSettings.teamActivity ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Overdue Alerts */}
+                  <div
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                      notificationSettings.overdueAlerts
+                        ? 'bg-orange-50 border-orange-300'
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">🔴</span>
+                      <div>
+                        <h4 className={`font-semibold ${notificationSettings.overdueAlerts ? 'text-gray-900' : 'text-gray-700'}`}>
+                          {t('Overdue Alerts')}
+                        </h4>
+                        <p className="text-sm text-gray-500">{t('When follow-ups become overdue')}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setNotificationSettings(s => ({ ...s, overdueAlerts: !s.overdueAlerts }))}
+                      className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${
+                        notificationSettings.overdueAlerts ? 'bg-goldin-orange' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                          notificationSettings.overdueAlerts ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* News Mentions */}
+                  <div
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                      notificationSettings.newsMentions
+                        ? 'bg-orange-50 border-orange-300'
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">📰</span>
+                      <div>
+                        <h4 className={`font-semibold ${notificationSettings.newsMentions ? 'text-gray-900' : 'text-gray-700'}`}>
+                          {t('News Mentions')}
+                        </h4>
+                        <p className="text-sm text-gray-500">{t('When fellows appear in the news')}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setNotificationSettings(s => ({ ...s, newsMentions: !s.newsMentions }))}
+                      className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${
+                        notificationSettings.newsMentions ? 'bg-goldin-orange' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                          notificationSettings.newsMentions ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
