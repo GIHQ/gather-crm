@@ -1,0 +1,213 @@
+# GATHER Architecture
+
+> **Last Updated:** February 4, 2026  
+> **Maintainer:** Goldin Institute  
+> **Live Site:** https://gathertracker.netlify.app
+
+## Overview
+
+GATHER is an alumni network CRM for the Goldin Institute, managing 292 fellows across three programs:
+- **CPF** - Chicago Peace Fellows (Chicago-based)
+- **GGF** - Goldin Global Fellows English (International)
+- **ESP** - Goldin Global Fellows Español (Spanish-speaking International)
+
+The system serves dual purposes:
+1. **Internal Staff Tool** - CRM for tracking interactions, managing relationships, sending communications
+2. **Public Alumni Directory** - Fellows can find and connect with each other
+
+---
+
+## Technology Stack
+
+### Core Infrastructure
+
+| Service | Purpose | Dashboard |
+|---------|---------|-----------|
+| **Supabase** | Database, Auth, Storage, Edge Functions | https://supabase.com/dashboard/project/pwazurumpzydxyppbvee |
+| **Netlify** | Hosting, Auto-deploy from GitHub | https://app.netlify.com (gathertracker.netlify.app) |
+| **GitHub** | Source code repository | https://github.com/GIHQ/gather-crm |
+
+### Frontend
+
+- Single HTML file with embedded React components (`index.html`)
+- Tailwind CSS via CDN
+- No build step required - runs directly in browser
+
+### Authentication
+
+- **Staff:** Google OAuth (restricted to @goldininstitute.org domain)
+- **Fellows:** Magic links (email-based, any domain)
+- **Guests:** Limited read-only access
+
+---
+
+## Database Schema
+
+### Core Tables
+
+```
+fellows
+├── id (UUID, PK)
+├── fellow_id (text, e.g., "P001")
+├── first_name, last_name
+├── email, phone
+├── program (CPF/GGF/ESP)
+├── cohort_year
+├── city, country
+├── organization
+├── bio
+├── photo_url
+├── is_active
+└── created_at, updated_at
+
+interactions
+├── id (UUID, PK)
+├── fellow_id (FK → fellows)
+├── interaction_type (Call, Email, Meeting, etc.)
+├── interaction_date
+├── title, notes
+├── logged_by
+└── created_at
+
+focus_categories
+├── id (UUID, PK)
+├── name (Skills, Populations, Focus Areas, Community Areas)
+├── slug
+└── display_order
+
+focus_tags
+├── id (UUID, PK)
+├── category_id (FK → focus_categories)
+├── name
+├── slug
+└── emoji
+
+fellow_focus_tags
+├── id (UUID, PK)
+├── fellow_id (FK → fellows)
+├── tag_id (FK → focus_tags)
+├── is_primary (boolean, for Community Areas)
+└── created_at
+
+user_roles
+├── id (UUID, PK)
+├── user_id (FK → auth.users)
+├── role (super_admin, admin, staff, fellow, viewer, guest)
+└── created_at
+```
+
+### Storage Buckets
+
+- **Photos** - Fellow profile photos (public bucket)
+
+---
+
+## Permission System
+
+Six-tier role hierarchy:
+
+| Role | Level | Capabilities |
+|------|-------|--------------|
+| super_admin | 6 | Full system access, manage other admins |
+| admin | 5 | All staff functions + user management |
+| staff | 4 | Full CRM access, can't manage users |
+| fellow | 3 | View directory, own profile, limited interactions |
+| viewer | 2 | Read-only directory access |
+| guest | 1 | Minimal access, public directory only |
+
+---
+
+## File Structure
+
+```
+gather-crm/
+├── index.html          # Main PWA app (mobile + desktop)
+├── directory.html      # Public directory (legacy)
+├── dashboard.html      # Staff dashboard (legacy)
+├── manifest.json       # PWA manifest
+├── sw.js              # Service worker
+├── docs/              # Architecture documentation
+│   ├── ARCHITECTURE.md
+│   ├── DATABASE_SCHEMA.md
+│   ├── STYLE_GUIDE.md
+│   ├── COMMUNITY_BUILD_PLAN.md
+│   └── SETUP_GUIDE.md
+├── supabase/
+│   └── functions/
+│       └── search-news/   # News scanner Edge Function
+└── migrations/        # SQL migration files
+```
+
+---
+
+## Deployment Pipeline
+
+```
+GitHub (main branch)
+    ↓ push
+Netlify (auto-build)
+    ↓ deploy
+gathertracker.netlify.app
+```
+
+No build step - Netlify serves files directly.
+
+---
+
+## Environment Variables
+
+### Netlify (Frontend)
+- `VITE_SUPABASE_URL` - Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` - Supabase anonymous key (safe to expose)
+
+### Supabase Edge Functions (Backend)
+- `SERPAPI_KEY` - For news scanner
+- `SUPABASE_URL` - Project URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Admin access (never expose)
+
+### Future (Community Features)
+- `STREAM_API_KEY` - GetStream public key
+- `STREAM_API_SECRET` - GetStream secret (Edge Function only)
+- `BUTTONDOWN_API_KEY` - Newsletter service
+
+---
+
+## Key Design Decisions
+
+1. **Single HTML file** - Simplicity over complexity. No build tools, no framework overhead.
+
+2. **Supabase for everything** - Database, auth, storage, and serverless functions in one place.
+
+3. **Mobile-first PWA** - Most fellows access on phones. Installable as app.
+
+4. **RLS for security** - Row Level Security policies enforce permissions at database level.
+
+5. **Composable services** - GetStream for social, Buttondown for email. Easy to swap if needed.
+
+---
+
+## Common Operations
+
+### Adding a new fellow
+1. Insert into `fellows` table
+2. Upload photo to Storage bucket
+3. Update `photo_url` field
+
+### Checking network health
+- Query `interactions` table grouped by fellow
+- Calculate days since last contact
+- Flag fellows with no recent interactions
+
+### Sending cohort newsletter
+1. Query `fellows` filtered by program/cohort
+2. Send to Buttondown API with recipient list
+3. Log as interaction in database
+
+---
+
+## Related Documentation
+
+- [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) - Full schema with all columns
+- [STYLE_GUIDE.md](./STYLE_GUIDE.md) - Colors, fonts, component patterns
+- [COMMUNITY_BUILD_PLAN.md](./COMMUNITY_BUILD_PLAN.md) - GetStream + Buttondown integration
+- [SETUP_GUIDE.md](./SETUP_GUIDE.md) - How to set up development environment
