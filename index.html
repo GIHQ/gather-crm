@@ -712,6 +712,39 @@ function getProgramBadge(program) {
   return { label: program.substring(0, 3).toUpperCase(), bg: 'bg-gray-500' };
 }
 
+// Get all badges for a person (supports multiple badges for staff with fellowships)
+function getBadges(person) {
+  const badges = [];
+
+  if (person.record_type === 'team_member') {
+    // Always show Team badge first for staff
+    badges.push({ label: 'Team', bg: 'bg-gray-400' });
+
+    // Add fellowship badges if they were also a fellow
+    if (person.fellowships && Array.isArray(person.fellowships)) {
+      person.fellowships.forEach(f => {
+        if (f.program && f.year) {
+          const programBadge = getProgramBadge(f.program);
+          badges.push({
+            label: `${programBadge.label} '${String(f.year).slice(-2)}`,
+            bg: programBadge.bg
+          });
+        }
+      });
+    }
+  } else {
+    // Regular fellow - single badge with year
+    const programBadge = getProgramBadge(person.program);
+    const year = person.cohort_year || person.year;
+    badges.push({
+      label: year ? `${programBadge.label} '${String(year).slice(-2)}` : programBadge.label,
+      bg: programBadge.bg
+    });
+  }
+
+  return badges;
+}
+
 // ============================================
 // FOCUS AREAS EDITOR
 // ============================================
@@ -2570,7 +2603,7 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
   if (!fellow) return null;
 
   const status = getContactStatus(fellow.last_contact);
-  const badge = getProgramBadge(fellow.program);
+  const badges = getBadges(fellow);
 
   // Permission checks
   const isStaff = canAccess(ROLES.TEAM);
@@ -2611,7 +2644,7 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
   };
 
   const startEditing = () => {
-    setEditData({
+    const baseData = {
       first_name: fellow.first_name || '',
       last_name: fellow.last_name || '',
       email: fellow.email || '',
@@ -2625,22 +2658,40 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
       twitter: fellow.twitter || '',
       website: fellow.website || '',
       languages: fellow.languages || '',
-    });
+    };
+    // Admin can edit additional fields
+    if (isAdmin) {
+      baseData.program = fellow.program || '';
+      baseData.cohort_year = fellow.cohort_year || fellow.year || '';
+      baseData.staff_notes = fellow.staff_notes || '';
+      baseData.alternate_emails = (fellow.alternate_emails || []).join(', ');
+    }
+    setEditData(baseData);
     setIsEditing(true);
   };
 
   const saveEdits = async () => {
     setSaving(true);
+    // Prepare update data
+    const updateData = { ...editData };
+    // Convert alternate_emails from comma-separated string back to array (admin only)
+    if (isAdmin && typeof updateData.alternate_emails === 'string') {
+      updateData.alternate_emails = updateData.alternate_emails
+        .split(',')
+        .map(e => e.trim().toLowerCase())
+        .filter(e => e.length > 0);
+    }
+
     const { error } = await supabase
       .from('fellows')
-      .update(editData)
+      .update(updateData)
       .eq('id', fellow.id);
-    
+
     if (!error) {
       setIsEditing(false);
-      window.location.reload();
+      fetchData(); // Refresh data instead of full reload
     } else {
-      alert('Error saving changes');
+      alert('Error saving changes: ' + error.message);
     }
     setSaving(false);
   };
@@ -2685,12 +2736,19 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                 {fellow.job_title && <p style={{ color: '#E87722' }} className="font-semibold">{fellow.job_title}</p>}
                 <p className="text-gray-600">{fellow.organization || 'No organization'}</p>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <span style={{ backgroundColor: badge.bg === 'bg-blue-700' ? '#1D4ED8' : badge.bg === 'bg-goldin-orange' ? '#E87722' : '#C2410C' }} className="text-xs px-2.5 py-1 rounded-lg text-white font-bold">{badge.label}</span>
-                  {(fellow.cohort_year || fellow.year) && (
-                    <span className="text-xs px-2.5 py-1 rounded-lg bg-gray-700 text-white font-bold">
-                      {fellow.cohort_year || fellow.year}
-                    </span>
-                  )}
+                  {/* Multiple badges for staff with fellowships */}
+                  {badges.map((badge, idx) => {
+                    const bgColor = badge.bg === 'bg-blue-700' ? '#1D4ED8'
+                      : badge.bg === 'bg-orange-500' ? '#E87722'
+                      : badge.bg === 'bg-orange-700' ? '#C2410C'
+                      : badge.bg === 'bg-gray-400' ? '#9CA3AF'
+                      : '#6B7280';
+                    return (
+                      <span key={idx} style={{ backgroundColor: bgColor }} className="text-xs px-2.5 py-1 rounded-lg text-white font-bold">
+                        {badge.label}
+                      </span>
+                    );
+                  })}
                   {/* Status dot */}
                   <div className="flex items-center gap-1.5">
                     <div className={`w-2.5 h-2.5 rounded-full ${
@@ -2937,6 +2995,44 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                   <label className="block text-sm text-gray-500 mb-1">Languages (comma separated)</label>
                   <input type="text" value={editData.languages} onChange={(e) => setEditData(d => ({ ...d, languages: e.target.value }))} placeholder="English, Spanish, French" className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
                 </div>
+
+                {/* Admin-only fields */}
+                {isAdmin && (
+                  <>
+                    <div className="pt-4 border-t border-gray-200">
+                      <p className="text-xs font-semibold text-violet-600 uppercase tracking-wide mb-3">Admin Only</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm text-gray-500 mb-1">Program</label>
+                        <select
+                          value={editData.program}
+                          onChange={(e) => setEditData(d => ({ ...d, program: e.target.value }))}
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange bg-white"
+                        >
+                          <option value="">Select...</option>
+                          <option value="CPF">CPF - Chicago Peace Fellows</option>
+                          <option value="GGF">GGF - Global Grassroots Fellows</option>
+                          <option value="ESP">ESP - Spanish Program</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-500 mb-1">Cohort Year</label>
+                        <input type="text" value={editData.cohort_year} onChange={(e) => setEditData(d => ({ ...d, cohort_year: e.target.value }))} placeholder="2024" className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-500 mb-1">Alternate Emails (comma separated)</label>
+                      <input type="text" value={editData.alternate_emails} onChange={(e) => setEditData(d => ({ ...d, alternate_emails: e.target.value }))} placeholder="other@email.com, work@company.org" className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                      <p className="text-xs text-gray-400 mt-1">These emails can also be used to log in</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-500 mb-1">Staff Notes (not visible to fellow)</label>
+                      <textarea value={editData.staff_notes} onChange={(e) => setEditData(d => ({ ...d, staff_notes: e.target.value }))} rows={3} placeholder="Internal notes about this fellow..." className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-violet-500 bg-violet-50/50 resize-none" />
+                    </div>
+                  </>
+                )}
+
                 <div className="flex gap-3 pt-4 pb-8">
                   <button onClick={() => setIsEditing(false)} className="flex-1 py-3 border border-gray-200 rounded-xl font-medium text-gray-600">Cancel</button>
                   <button onClick={saveEdits} disabled={saving} className="flex-1 py-3 bg-goldin-orange text-white rounded-xl font-semibold disabled:opacity-50">{saving ? 'Saving...' : 'Save Changes'}</button>
@@ -2952,6 +3048,14 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                       <div className="mb-6">
                         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">About</h3>
                         <p className="text-gray-700 leading-relaxed whitespace-pre-line">{fellow.biography}</p>
+                      </div>
+                    )}
+
+                    {/* Staff Notes - Admin only */}
+                    {isAdmin && fellow.staff_notes && (
+                      <div className="mb-6 p-4 bg-violet-50 rounded-xl border border-violet-200">
+                        <h3 className="text-xs font-semibold text-violet-600 uppercase tracking-wide mb-2">Staff Notes</h3>
+                        <p className="text-gray-700 text-sm whitespace-pre-line">{fellow.staff_notes}</p>
                       </div>
                     )}
 
@@ -3541,6 +3645,7 @@ function DirectoryPage({ onSelectFellow }) {
       last_contact: null,
       record_type: 'team_member',
       role: tm.role,
+      fellowships: tm.fellowships || [], // Include fellowships for multi-badge support
     }));
 
     // Map fellows with record_type
@@ -3715,7 +3820,7 @@ function DirectoryPage({ onSelectFellow }) {
       <div className="space-y-2">
         {filtered.map(fellow => {
           const status = getContactStatus(fellow.last_contact);
-          const badge = getProgramBadge(fellow.program);
+          const badges = getBadges(fellow);
           return (
             <button
               key={fellow.id}
@@ -3740,16 +3845,13 @@ function DirectoryPage({ onSelectFellow }) {
                 </p>
                 <p className="text-sm text-gray-500 truncate">{fellow.organization || 'No organization'}</p>
               </div>
-              {/* Program + Year Pills */}
-              <div className="flex flex-col gap-1 items-end flex-shrink-0">
-                <span className={`text-xs px-2 py-0.5 rounded-full ${badge.bg} text-white font-semibold`}>
-                  {badge.label}
-                </span>
-                {(fellow.cohort_year || fellow.year) && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 font-medium">
-                    {fellow.cohort_year || fellow.year}
+              {/* Program Badges - supports multiple for staff with fellowships */}
+              <div className="flex flex-wrap gap-1 items-end justify-end flex-shrink-0 max-w-[120px]">
+                {badges.map((badge, idx) => (
+                  <span key={idx} className={`text-xs px-2 py-0.5 rounded-full ${badge.bg} text-white font-semibold whitespace-nowrap`}>
+                    {badge.label}
                   </span>
-                )}
+                ))}
               </div>
               <svg className="w-5 h-5 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
