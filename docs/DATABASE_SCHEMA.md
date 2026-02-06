@@ -19,6 +19,7 @@ The main table storing all 292 Goldin Institute fellows.
 | first_name | text | |
 | last_name | text | |
 | email | text | Primary contact email |
+| alternate_emails | text[] | Additional email addresses for identity matching |
 | phone | text | Phone number |
 | program | text | CPF, GGF, or ESP |
 | cohort_year | integer | Year they joined (2019-2024) |
@@ -30,6 +31,8 @@ The main table storing all 292 Goldin Institute fellows.
 | photo_url | text | URL to photo in Supabase Storage |
 | linkedin_url | text | LinkedIn profile |
 | is_active | boolean | Whether currently active in network |
+| user_id | uuid | FK → auth.users.id (linked on first login) |
+| staff_notes | text | Internal notes visible only to admins |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -56,6 +59,66 @@ Maps authenticated users to permission tiers.
 | user_id | uuid | FK → auth.users.id |
 | role | text | super_admin, admin, staff, fellow, viewer, guest |
 | created_at | timestamptz | |
+
+### team_members
+Staff and team members of the Goldin Institute. Appear in directory with silver "Team" badge.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| user_id | uuid | FK → auth.users.id (linked on first login) |
+| email | text | Primary email (unique) |
+| alternate_emails | text[] | Additional emails for identity matching |
+| first_name | text | |
+| last_name | text | |
+| title | text | Job title |
+| photo_url | text | Profile photo URL |
+| bio | text | Biography |
+| phone | text | Phone number |
+| linkedin_url | text | LinkedIn profile |
+| role | text | Permission tier: super_admin, admin, manager, team |
+| fellowships | jsonb | Array of {program, year} if staff is also a fellow |
+| is_active | boolean | Whether currently active |
+| staff_notes | text | Internal notes visible only to admins |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**Indexes:**
+- `idx_team_members_alternate_emails` - GIN index on alternate_emails
+- `idx_team_members_fellowships` - GIN index on fellowships
+
+**Fellowships format:**
+```json
+[
+  {"program": "CPF", "year": 2021},
+  {"program": "GGF", "year": 2023}
+]
+```
+
+### profile_claim_requests
+Tracks requests from users to claim an existing profile when their email isn't recognized.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| requesting_email | text | Email the user logged in with |
+| requesting_user_id | uuid | FK → auth.users.id |
+| target_type | text | 'fellow' or 'team_member' |
+| target_id | uuid | ID of the profile being claimed |
+| status | text | 'pending', 'approved', 'rejected' |
+| reviewed_by | uuid | FK → auth.users.id (admin who reviewed) |
+| reviewed_at | timestamptz | When the decision was made |
+| notes | text | Optional notes from reviewer |
+| created_at | timestamptz | |
+
+**Workflow:**
+1. User logs in with unrecognized email
+2. System shows potential profile matches based on name parsing
+3. User selects "This is me" on a profile
+4. Claim request created with status 'pending'
+5. Admin reviews in Team Management page
+6. If approved: alternate_emails updated on target profile
+7. User can now log in and access their profile
 
 ---
 
@@ -141,10 +204,20 @@ Junction table linking fellows to their tags.
 All tables have RLS enabled. Key policies:
 
 ### fellows
-- Anyone can SELECT (public directory)
-- Authenticated users can UPDATE their own profile
-- Staff+ can UPDATE any profile
-- Admin+ can INSERT/DELETE
+- **SELECT:** Anyone (public directory, `USING (true)`)
+- **UPDATE (self):** Fellows can update own profile where `user_id = auth.uid()`
+- **UPDATE (admin):** Admins can update any fellow (checked via team_members role)
+- **INSERT/DELETE:** Admin+ only
+
+### team_members
+- **SELECT:** Anyone can view active team members (`is_active = true`)
+- **UPDATE (self):** Team members can update own profile where `user_id = auth.uid()`
+- **ALL (admin):** Admins/super_admins can manage all team members
+
+### profile_claim_requests
+- **SELECT (self):** Users can view their own claims (`requesting_user_id = auth.uid()`)
+- **INSERT (self):** Users can create claims for themselves
+- **ALL (admin):** Admins can view and manage all claims
 
 ### interactions
 - Staff+ can SELECT all
@@ -152,8 +225,9 @@ All tables have RLS enabled. Key policies:
 - Own interactions can be updated by creator
 
 ### focus_* tables
-- Public SELECT on categories and tags
-- Authenticated can manage fellow_focus_tags
+- **focus_categories:** Public SELECT (`USING (true)`)
+- **focus_tags:** Public SELECT (`USING (true)`)
+- **fellow_focus_tags:** Public SELECT, authenticated can manage
 - Staff+ can manage all assignments
 
 ### user_roles

@@ -1,7 +1,7 @@
 # GATHER Architecture
 
-> **Last Updated:** February 4, 2026  
-> **Maintainer:** Goldin Institute  
+> **Last Updated:** February 6, 2026
+> **Maintainer:** Goldin Institute
 > **Live Site:** https://gathertracker.netlify.app
 
 ## Overview
@@ -94,6 +94,29 @@ user_roles
 ├── user_id (FK → auth.users)
 ├── role (super_admin, admin, staff, fellow, viewer, guest)
 └── created_at
+
+team_members
+├── id (UUID, PK)
+├── user_id (FK → auth.users)
+├── email, alternate_emails[]
+├── first_name, last_name
+├── title, phone, bio
+├── photo_url, linkedin_url
+├── role (super_admin, admin, manager, team)
+├── fellowships (JSONB: [{program, year}])
+├── is_active
+├── staff_notes
+└── created_at, updated_at
+
+profile_claim_requests
+├── id (UUID, PK)
+├── requesting_email
+├── requesting_user_id (FK → auth.users)
+├── target_type (fellow/team_member)
+├── target_id
+├── status (pending/approved/rejected)
+├── reviewed_by, reviewed_at, notes
+└── created_at
 ```
 
 ### Storage Buckets
@@ -110,10 +133,17 @@ Six-tier role hierarchy:
 |------|-------|--------------|
 | super_admin | 6 | Full system access, manage other admins |
 | admin | 5 | All staff functions + user management |
-| staff | 4 | Full CRM access, can't manage users |
+| manager | 4 | Full CRM access, can't manage users |
+| team | 3.5 | Staff member with basic access |
 | fellow | 3 | View directory, own profile, limited interactions |
 | viewer | 2 | Read-only directory access |
 | guest | 1 | Minimal access, public directory only |
+
+**Role lookup flow (determineUserRole):**
+1. Check `team_members` table (email OR alternate_emails)
+2. Check `fellows` table (email OR alternate_emails)
+3. Auto-create team record for new @goldininstitute.org logins
+4. Fall back to guest for unrecognized emails
 
 ---
 
@@ -126,16 +156,21 @@ gather-crm/
 ├── dashboard.html      # Staff dashboard (legacy)
 ├── manifest.json       # PWA manifest
 ├── sw.js              # Service worker
-├── docs/              # Architecture documentation
-│   ├── ARCHITECTURE.md
-│   ├── DATABASE_SCHEMA.md
-│   ├── STYLE_GUIDE.md
-│   ├── COMMUNITY_BUILD_PLAN.md
-│   └── SETUP_GUIDE.md
+├── docs/
+│   ├── ARCHITECTURE.md         # System overview (this file)
+│   ├── DATABASE_SCHEMA.md      # Full schema with all columns
+│   ├── STYLE_GUIDE.md          # Colors, fonts, component patterns
+│   ├── SESSION_HANDOFF.md      # Current state for new sessions
+│   ├── GATHER_COMMUNITY_PLAN.md # Community platform roadmap
+│   ├── TEAM_MANAGEMENT_SPEC.md # Team members + directory spec
+│   ├── PROFILE_CLAIMING_SPEC.md # Identity matching + claiming
+│   └── SETUP_GUIDE.md          # Development setup
 ├── supabase/
 │   └── functions/
 │       └── search-news/   # News scanner Edge Function
-└── migrations/        # SQL migration files
+└── migrations/
+    ├── 008_team_members.sql     # Team members + alternate_emails
+    └── 009_profile_claims.sql   # Profile claim requests table
 ```
 
 ---
@@ -164,11 +199,10 @@ No build step - Netlify serves files directly.
 - `SERPAPI_KEY` - For news scanner
 - `SUPABASE_URL` - Project URL
 - `SUPABASE_SERVICE_ROLE_KEY` - Admin access (never expose)
-
-### Future (Community Features)
-- `STREAM_API_KEY` - GetStream public key
-- `STREAM_API_SECRET` - GetStream secret (Edge Function only)
+- `GETSTREAM_API_KEY` - GetStream public key
+- `GETSTREAM_SECRET` - GetStream secret (for token minting)
 - `BUTTONDOWN_API_KEY` - Newsletter service
+- `GOOGLE_TRANSLATE_API_KEY` - Translation service
 
 ---
 
@@ -207,7 +241,10 @@ No build step - Netlify serves files directly.
 
 ## Related Documentation
 
+- [SESSION_HANDOFF.md](./SESSION_HANDOFF.md) - **Start here** - Current state and what's next
 - [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) - Full schema with all columns
 - [STYLE_GUIDE.md](./STYLE_GUIDE.md) - Colors, fonts, component patterns
-- [COMMUNITY_BUILD_PLAN.md](./COMMUNITY_BUILD_PLAN.md) - GetStream + Buttondown integration
-- [SETUP_GUIDE.md](./SETUP_GUIDE.md) - How to set up development environment
+- [TEAM_MANAGEMENT_SPEC.md](./TEAM_MANAGEMENT_SPEC.md) - Team members + directory integration
+- [PROFILE_CLAIMING_SPEC.md](./PROFILE_CLAIMING_SPEC.md) - Identity matching + claim flow
+- [GATHER_COMMUNITY_PLAN.md](./GATHER_COMMUNITY_PLAN.md) - Community platform roadmap
+- [SETUP_GUIDE.md](./SETUP_GUIDE.md) - Development environment setup

@@ -33,20 +33,19 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - **Auth flow updated to check alternate_emails** for both team_members and fellows
 - **My Profile page supports both fellows and team members**
 - **Self-editing profile** (phone, bio, LinkedIn, etc.) - name/email read-only
-- Migration file added: `migrations/008_team_members.sql`
+- Migration files added: `migrations/008_team_members.sql`, `migrations/009_profile_claims.sql`
 - Documentation: PROFILE_CLAIMING_SPEC.md, NotificationSettings-fix.jsx, COMPONENT_INDEX.js
+- **Admin edit button** on FellowProfileModal with full field access + staff notes
+- **Multiple badges** for staff with fellowships (Team badge + program badges)
+- **Profile claiming flow** - "Is This You?" screen for unrecognized emails
+- **Claim approval queue** in Team Management page for admins
+- **RLS fixes** - Directory now visible to all users (guests see fellows)
+- **Focus areas RLS fix** - All focus tables publicly readable
 
 ### In Progress
 - **Community Platform Phase 1** - Stream token minting, announcements, newsletter composer
-- Profile claiming flow for unrecognized emails (Phase 2)
-
-### TODO (Next Session)
-1. Run migration 008_team_members.sql in Supabase (adds alternate_emails columns)
-2. Add admin edit button on FellowProfileModal for full field access
-3. Implement "Is This You?" claim flow for unrecognized emails
 
 ### Known Issues
-- Guest users see "0 alumni" in directory (RLS or permission issue)
 - News scanner returns 0 results (SerpAPI key may need verification)
 
 ---
@@ -72,6 +71,7 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `docs/TEAM_MANAGEMENT_SPEC.md` | Team members in directory + admin page |
 | `docs/PROFILE_CLAIMING_SPEC.md` | Identity matching + profile claiming |
 | `migrations/008_team_members.sql` | Team members table + alternate_emails |
+| `migrations/009_profile_claims.sql` | Profile claim requests table |
 
 ---
 
@@ -93,13 +93,35 @@ Team members (Goldin Institute staff) are stored in the `team_members` table:
 - Read-only: name, email (contact admin to change)
 
 **Admin editing:**
-- Admins can edit any profile via FellowProfileModal
+- Admins see "Edit" button on any FellowProfileModal
 - Full access to all fields including name, email, program/cohort
-- Staff notes field (not visible to the person)
+- Admin-only fields in violet section: program, cohort_year, alternate_emails, staff_notes
+- Staff notes visible only to admins (not to the person themselves)
 
 **Identity matching:**
 - Auth flow checks both primary email and `alternate_emails` array
 - See PROFILE_CLAIMING_SPEC.md for claim flow details
+
+---
+
+## Multiple Badges
+
+Team members who are also fellows display multiple badges:
+- Primary "Team" badge (gray-400)
+- Additional program badges for each fellowship in their `fellowships` JSONB
+
+The `getBadges()` function handles badge generation for both fellows and team members.
+
+---
+
+## Profile Claiming
+
+When a user logs in with an unrecognized email:
+1. **IsThisYouScreen** displays potential profile matches (parsed from email name)
+2. User can claim a profile or request a new profile creation
+3. Claims go into **profile_claim_requests** table with status 'pending'
+4. Admins review in Team Management > Pending Claims section
+5. Approved claims add the email to `alternate_emails` on the target profile
 
 ---
 
