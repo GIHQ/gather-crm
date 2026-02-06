@@ -1,4 +1,4 @@
-# GATHER Community Platform — Product Plan
+# GATHER Community Platform - Product Plan
 
 > **Last Updated:** February 5, 2026
 > **Version:** 2.0 (replaces original COMMUNITY_BUILD_PLAN.md)
@@ -7,7 +7,7 @@
 
 ## Vision
 
-Transform GATHER from a staff-only CRM into a **living alumni network** where 292 Goldin Institute fellows can discover each other, stay informed, collaborate across programs, and deepen their connection to the Institute — all within the same platform staff already uses to manage relationships.
+Transform GATHER from a staff-only CRM into a **living alumni network** where 292 Goldin Institute fellows can discover each other, stay informed, collaborate across programs, and deepen their connection to the Institute - all within the same platform staff already uses to manage relationships.
 
 ---
 
@@ -37,19 +37,19 @@ Transform GATHER from a staff-only CRM into a **living alumni network** where 29
 
 ## User Personas
 
-### Maria — Staff Member
+### Maria - Staff Member
 - Needs to broadcast announcements to all fellows or specific cohorts
 - Wants to see who's engaging and who's gone quiet
 - Sends monthly newsletters, currently via manual email
 - Tracks interactions in the CRM
 
-### David — Active Fellow (the 30-50%)
+### David - Active Fellow (the 30-50%)
 - Wants to know what other fellows are working on
 - Interested in finding collaborators with complementary skills
 - Would message another fellow if it were easy
 - Checks in weekly, responds to things that interest him
 
-### Amina — Passive Fellow (the 50-70%)
+### Amina - Passive Fellow (the 50-70%)
 - Reads newsletters when they arrive
 - Might browse the directory occasionally
 - Won't post or message unless directly relevant
@@ -59,7 +59,7 @@ Transform GATHER from a staff-only CRM into a **living alumni network** where 29
 
 ## Feature Map
 
-### Tier 1: Broadcast (Staff → Fellows)
+### Tier 1: Broadcast (Staff -> Fellows)
 *Delivers value even if zero fellows actively engage.*
 
 | Feature | Tool | Description |
@@ -69,17 +69,17 @@ Transform GATHER from a staff-only CRM into a **living alumni network** where 29
 | **Resource Library** | Supabase | Shared documents, links, videos organized by category. Staff curates, fellows browse. |
 | **Automated Digests** | Buttondown | Weekly/monthly email summarizing new announcements, resources, and network activity. |
 
-### Tier 2: Discovery (Fellow ↔ Fellow, passive)
+### Tier 2: Discovery (Fellow <-> Fellow, passive)
 *Delivers value by making the network visible.*
 
 | Feature | Tool | Description |
 |---------|------|-------------|
 | **Enhanced Directory** | Supabase | Search/filter by focus area, skills, location, program. Already partially built. |
-| **Fellow Spotlights** | GetStream Feed | Auto-generated cards: "Meet [name] — working on [project] in [city]" rotating weekly. |
+| **Fellow Spotlights** | GetStream Feed | Auto-generated cards: "Meet [name] - working on [project] in [city]" rotating weekly. |
 | **Activity Feed** | GetStream | See what's happening across the network: new fellows, project updates, milestones. |
 | **"Working On" Profiles** | Supabase | Each fellow can add a short "currently working on" blurb visible in directory. |
 
-### Tier 3: Engagement (Fellow ↔ Fellow, active)
+### Tier 3: Engagement (Fellow <-> Fellow, active)
 *For the 30-50% who want to participate.*
 
 | Feature | Tool | Description |
@@ -89,8 +89,8 @@ Transform GATHER from a staff-only CRM into a **living alumni network** where 29
 | **Program Channels** | GetStream | Dedicated conversation spaces for CPF, GGF, ESP + a cross-program "General" channel. |
 | **Interest Groups** | GetStream | Optional channels around shared focus areas (e.g., "Youth Development," "Arts & Culture"). |
 
-### Tier 4: Collaboration (Fellow ↔ Fellow, deep)
-*Future — only if engagement warrants it.*
+### Tier 4: Collaboration (Fellow <-> Fellow, deep)
+*Future - only if engagement warrants it.*
 
 | Feature | Tool | Description |
 |---------|------|-------------|
@@ -152,7 +152,7 @@ Transform GATHER from a staff-only CRM into a **living alumni network** where 29
 *Goal: Fellows can interact with each other.*
 
 **Build:**
-- [ ] Reactions on announcements and feed posts (👍 ❤️ 🎉 🤝)
+- [ ] Reactions on announcements and feed posts
 - [ ] Comments on announcements
 - [ ] Direct messaging UI (1:1 conversations)
 - [ ] Program channels (CPF, GGF, ESP group chats)
@@ -175,7 +175,7 @@ Transform GATHER from a staff-only CRM into a **living alumni network** where 29
 
 **Build (prioritize based on engagement data):**
 - [ ] Interest-based channels (auto-created from popular focus areas)
-- [ ] Project board (post → browse → connect flow)
+- [ ] Project board (post -> browse -> connect flow)
 - [ ] Event calendar with RSVP
 - [ ] Mentorship opt-in and matching
 - [ ] Job/opportunity board
@@ -188,38 +188,38 @@ Transform GATHER from a staff-only CRM into a **living alumni network** where 29
 ## Technical Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        GATHER App                           │
-│                                                             │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────────────┐ │
-│  │   CRM    │  │  Community   │  │     Newsletters       │ │
-│  │  (staff) │  │  (fellows)   │  │  (Buttondown email)   │ │
-│  │          │  │              │  │                       │ │
-│  │ Fellows  │  │ Feed    Chat │  │ Compose    Templates  │ │
-│  │ Interact │  │ Announce DM  │  │ Schedule   Analytics  │ │
-│  │ Reports  │  │ Resources    │  │ Cohort targeting      │ │
-│  └────┬─────┘  └──────┬───────┘  └───────────┬───────────┘ │
-│       │               │                      │             │
-│       └───────────────┼──────────────────────┘             │
-│                       │                                     │
-│              ┌────────┴────────┐                           │
-│              │    Supabase     │                           │
-│              │  (source of     │                           │
-│              │   truth)        │                           │
-│              └───┬─────────┬───┘                           │
-│                  │         │                               │
-│           ┌──────┴──┐  ┌───┴──────────┐                   │
-│           │GetStream│  │ Buttondown   │                   │
-│           │  (sync) │  │   (sync)     │                   │
-│           └─────────┘  └──────────────┘                   │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|                        GATHER App                           |
+|                                                             |
+|  +----------+  +--------------+  +-----------------------+  |
+|  |   CRM    |  |  Community   |  |     Newsletters       |  |
+|  |  (staff) |  |  (fellows)   |  |  (Buttondown email)   |  |
+|  |          |  |              |  |                       |  |
+|  | Fellows  |  | Feed    Chat |  | Compose    Templates  |  |
+|  | Interact |  | Announce DM  |  | Schedule   Analytics  |  |
+|  | Reports  |  | Resources    |  | Cohort targeting      |  |
+|  +----+-----+  +------+-------+  +-----------+-----------+  |
+|       |               |                      |              |
+|       +---------------+----------------------+              |
+|                       |                                     |
+|              +--------+--------+                            |
+|              |    Supabase     |                            |
+|              |  (source of     |                            |
+|              |   truth)        |                            |
+|              +---+---------+---+                            |
+|                  |         |                                |
+|           +------+--+  +---+----------+                     |
+|           |GetStream|  | Buttondown   |                     |
+|           |  (sync) |  |   (sync)     |                     |
+|           +---------+  +--------------+                     |
++-------------------------------------------------------------+
 
 Data Flow:
-1. Fellow signs in → Supabase Auth → Stream token minted → Stream connected
-2. Staff posts announcement → Supabase INSERT → Stream activity created → Push notification
-3. Staff sends newsletter → Buttondown API → Emails delivered → Logged in Supabase
-4. Fellow messages fellow → Stream handles realtime → Message stored in Stream
-5. Fellow updates profile → Supabase UPDATE → Stream user synced → Feed activity generated
+1. Fellow signs in -> Supabase Auth -> Stream token minted -> Stream connected
+2. Staff posts announcement -> Supabase INSERT -> Stream activity created -> Push notification
+3. Staff sends newsletter -> Buttondown API -> Emails delivered -> Logged in Supabase
+4. Fellow messages fellow -> Stream handles realtime -> Message stored in Stream
+5. Fellow updates profile -> Supabase UPDATE -> Stream user synced -> Feed activity generated
 ```
 
 ---
@@ -227,7 +227,7 @@ Data Flow:
 ## New Database Tables
 
 ```sql
--- Announcements (staff → fellows)
+-- Announcements (staff -> fellows)
 CREATE TABLE announcements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
@@ -295,16 +295,16 @@ CREATE TABLE stream_tokens (
 Current app navigation needs a "Community" tab:
 
 ```
-┌─────────────────────────────────────────┐
-│  Home  │  Directory  │  Community  │  ⚙️  │
-└─────────────────────────────────────────┘
++-----------------------------------------+
+|  Home  |  Directory  |  Community  |  Settings  |
++-----------------------------------------+
 ```
 
 Community tab contains:
-- **Feed** (default view) — Announcements + activity
-- **Messages** — DM inbox
-- **Channels** — Program channels + interest groups
-- **Resources** — Shared docs and links
+- **Feed** (default view) - Announcements + activity
+- **Messages** - DM inbox
+- **Channels** - Program channels + interest groups
+- **Resources** - Shared docs and links
 
 ---
 
@@ -363,5 +363,5 @@ Note: Buttondown free tier supports 100 subscribers. With 292 fellows, we'll nee
 - [ ] 50+ fellows have viewed the community feed
 - [ ] 20+ DM conversations initiated between fellows
 - [ ] 3+ newsletters sent with >40% open rate
-- [ ] At least 1 cross-program connection formed (CPF↔GGF or CPF↔ESP)
+- [ ] At least 1 cross-program connection formed (CPF<->GGF or CPF<->ESP)
 - [ ] Staff reports time savings on communication tasks

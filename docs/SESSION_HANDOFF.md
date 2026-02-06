@@ -16,42 +16,34 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 
 ---
 
-## Current State (Updated Feb 5, 2026)
+## Current State (Updated Feb 6, 2026)
 
-### Recently Completed ✅
+### Recently Completed
 - Google OAuth login redirect fixed
 - GetStream account created, API keys stored in Supabase + Netlify
 - Buttondown account created, API key stored in Supabase
-- Full Community Platform plan created (GATHER_COMMUNITY_PLAN.md)
+- Full Community Platform plan created
 - All 292 fellow photos uploaded and linked
 - Focus Areas system working
-- Badge colors standardized (CPF: blue-700, GGF: orange-500, ESP: orange-700)
+- Notification settings mobile overflow fix applied (Feb 6)
+- Component index comment block added to index.html
 
-### In Progress 🔄
-- **Notification preferences UI fix** — buttons/toggles going off screen (fix ready in NotificationSettings-fix.jsx)
-- **Community Platform Phase 1** — Stream token minting, announcements, newsletter composer
-- **Staff account setup** — Tyler Stober pending
+### In Progress
+- **Community Platform Phase 1** - Stream token minting, announcements, newsletter composer
+- **Staff account setup** - Tyler Stober (stobertg@gmail.com) pending
 
-### Known Issues 🐛
-- Notification preferences page: delivery buttons and toggles cut off on mobile (CSS fix ready)
-
-### Pending Features 📋
-- Community tab with announcements feed
-- Direct messaging between fellows (GetStream)
-- Newsletter composer (Buttondown integration)
-- Weekly digest emails (automated)
+### Known Issues
+- Guest users see "0 alumni" in directory (RLS or permission issue)
+- News scanner returns 0 results (SerpAPI key may need verification)
 
 ---
 
-## Environment Variables
+## Environment Variables (All Configured)
 
-### Supabase Edge Function Secrets ✅
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`
-- `SERPAPI_KEY`, `GOOGLE_TRANSLATE_API_KEY`
-- `BUTTONDOWN_API_KEY`, `GETSTREAM_API_KEY`, `GETSTREAM_SECRET`
+**Supabase Edge Function Secrets:**
+SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SERPAPI_KEY, GOOGLE_TRANSLATE_API_KEY, BUTTONDOWN_API_KEY, GETSTREAM_API_KEY, GETSTREAM_SECRET
 
-### Netlify Environment Variables ✅
-- `GETSTREAM_API_KEY`
+**Netlify:** GETSTREAM_API_KEY
 
 ---
 
@@ -59,11 +51,23 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Main app — all React components embedded |
+| `index.html` | Main app - all React components embedded |
 | `docs/ARCHITECTURE.md` | System overview |
 | `docs/DATABASE_SCHEMA.md` | All tables and relationships |
 | `docs/STYLE_GUIDE.md` | Colors, fonts, component patterns |
 | `docs/GATHER_COMMUNITY_PLAN.md` | Community platform product plan |
+
+---
+
+## Community Platform - Phase 1 Scope
+
+From GATHER_COMMUNITY_PLAN.md, Phase 1 (Foundation) includes:
+- Stream token-minting Edge Function
+- Announcements table + RLS policies
+- Resources table + RLS policies
+- Announcements feed component
+- Newsletter composer (Buttondown API)
+- "Community" tab in navigation
 
 ---
 
@@ -75,15 +79,5 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 | CPF badge | `bg-blue-700 text-white px-2 py-1 rounded-full text-xs` |
 | GGF badge | `bg-orange-500 text-white px-2 py-1 rounded-full text-xs` |
 | ESP badge | `bg-orange-700 text-white px-2 py-1 rounded-full text-xs` |
-| Card | `bg-white rounded-xl shadow-sm border border-gray-100 p-4` |
 
 **Brand orange:** `#E87722`
-
----
-
-## Immediate TODO
-
-1. **Apply notification settings fix** — Replace NotificationSettingsModal in index.html (see NotificationSettings-fix.jsx)
-2. **Create Stream token Edge Function** — Mint tokens for authenticated users
-3. **Add announcements table** — Staff can post, fellows can read
-4. **Build Community tab** — New navigation item with feed view
