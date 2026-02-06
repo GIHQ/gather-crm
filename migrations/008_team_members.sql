@@ -36,6 +36,11 @@ CREATE INDEX IF NOT EXISTS idx_team_members_email ON team_members (email);
 -- RLS: Enable row level security
 ALTER TABLE team_members ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (for idempotent re-runs)
+DROP POLICY IF EXISTS "Anyone can view active team members" ON team_members;
+DROP POLICY IF EXISTS "Admins can manage team members" ON team_members;
+DROP POLICY IF EXISTS "Team can update own profile" ON team_members;
+
 -- Policy: Anyone can view active team members
 CREATE POLICY "Anyone can view active team members" ON team_members
   FOR SELECT USING (is_active = true);
@@ -56,13 +61,14 @@ CREATE POLICY "Team can update own profile" ON team_members
   WITH CHECK (user_id = auth.uid());
 
 -- ============================================
--- Add alternate_emails to fellows table
+-- Add missing columns to fellows table
 -- ============================================
+ALTER TABLE fellows ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
 ALTER TABLE fellows ADD COLUMN IF NOT EXISTS alternate_emails TEXT[] DEFAULT '{}';
-CREATE INDEX IF NOT EXISTS idx_fellows_alternate_emails ON fellows USING GIN (alternate_emails);
-
--- Add staff_notes to fellows table (admin-only notes)
 ALTER TABLE fellows ADD COLUMN IF NOT EXISTS staff_notes TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_fellows_user_id ON fellows (user_id);
+CREATE INDEX IF NOT EXISTS idx_fellows_alternate_emails ON fellows USING GIN (alternate_emails);
 
 -- ============================================
 -- RLS Policies for profile editing
