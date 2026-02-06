@@ -25,12 +25,14 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - Full Community Platform plan created
 - All 292 fellow photos uploaded and linked
 - Focus Areas system working
-- Notification settings mobile overflow fix applied (Feb 6)
-- Component index comment block added to index.html
+- Notification settings mobile overflow fix applied
+- Component index comment block in index.html
+- Team Management page added (admin+ can manage staff accounts)
+- team_members table created with RLS policies
+- Directory updated to show Team members with silver badge
 
 ### In Progress
 - **Community Platform Phase 1** - Stream token minting, announcements, newsletter composer
-- **Staff account setup** - Tyler Stober (stobertg@gmail.com) pending
 
 ### Known Issues
 - Guest users see "0 alumni" in directory (RLS or permission issue)
@@ -56,6 +58,17 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `docs/DATABASE_SCHEMA.md` | All tables and relationships |
 | `docs/STYLE_GUIDE.md` | Colors, fonts, component patterns |
 | `docs/GATHER_COMMUNITY_PLAN.md` | Community platform product plan |
+| `docs/TEAM_MANAGEMENT_SPEC.md` | Team members in directory + admin page |
+
+---
+
+## Team Management
+
+Team members (Goldin Institute staff) are stored in the `team_members` table:
+- Displayed in Directory with silver "Team" badge
+- Managed via Settings > Team Management (admin+ only)
+- Roles: super_admin, admin, manager, team
+- Links to auth.users via user_id after first login
 
 ---
 
@@ -76,6 +89,7 @@ From GATHER_COMMUNITY_PLAN.md, Phase 1 (Foundation) includes:
 | Element | Tailwind Classes |
 |---------|-----------------|
 | Primary button | `bg-orange-500 text-white py-4 rounded-xl font-semibold` |
+| Team badge | `bg-gray-400 text-white px-2 py-1 rounded-full text-xs` |
 | CPF badge | `bg-blue-700 text-white px-2 py-1 rounded-full text-xs` |
 | GGF badge | `bg-orange-500 text-white px-2 py-1 rounded-full text-xs` |
 | ESP badge | `bg-orange-700 text-white px-2 py-1 rounded-full text-xs` |

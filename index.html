@@ -139,6 +139,7 @@ const { useState, useEffect, useMemo, useCallback, useRef, createContext, useCon
 //   SearchPage              - Global search across fellows
 //   CohortCommunicationPage - Cohort messaging tools
 //   SettingsPage            - User settings and preferences
+//   TeamManagementPage      - Admin page for managing staff accounts
 //
 // MODALS:
 //   FellowProfileModal      - Detailed fellow profile view
@@ -314,14 +315,33 @@ function hasPermission(userRole, requiredRole) {
   return (ROLE_LEVELS[userRole] || 0) >= (ROLE_LEVELS[requiredRole] || 0);
 }
 
-// Determine user role based on email
-async function determineUserRole(email) {
+// Determine user role based on email and link user_id on first login
+async function determineUserRole(email, userId = null) {
   if (!email) return ROLES.VIEWER;
 
   const lowerEmail = email.toLowerCase();
 
   try {
-    // 1. Check explicit role assignment in user_roles table
+    // 1. Check team_members table first (staff)
+    const { data: teamMember } = await supabase
+      .from('team_members')
+      .select('role, user_id')
+      .eq('email', lowerEmail)
+      .eq('is_active', true)
+      .single();
+
+    if (teamMember) {
+      // Link user_id on first login if not already set
+      if (userId && !teamMember.user_id) {
+        await supabase
+          .from('team_members')
+          .update({ user_id: userId, updated_at: new Date().toISOString() })
+          .eq('email', lowerEmail);
+      }
+      return teamMember.role;
+    }
+
+    // 2. Check user_roles table (legacy, for any explicit overrides)
     const { data: roleData } = await supabase
       .from('user_roles')
       .select('role')
@@ -330,7 +350,7 @@ async function determineUserRole(email) {
 
     if (roleData?.role) return roleData.role;
 
-    // 2. Check if user is a fellow
+    // 3. Check if user is a fellow
     const { data: fellowData } = await supabase
       .from('fellows')
       .select('id')
@@ -339,13 +359,13 @@ async function determineUserRole(email) {
 
     if (fellowData) return ROLES.FELLOW;
 
-    // 3. Check domain for staff
+    // 4. Check domain for staff (auto-grant team role)
     if (lowerEmail.endsWith('@goldininstitute.org') ||
         lowerEmail.endsWith('@chicagopeacefellows.org')) {
       return ROLES.TEAM;
     }
 
-    // 4. Default to viewer
+    // 5. Default to viewer
     return ROLES.VIEWER;
   } catch (err) {
     console.error('Error determining user role:', err);
@@ -368,6 +388,7 @@ function AppProvider({ children }) {
   const [userRole, setUserRole] = useState(ROLES.VIEWER);
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [fellows, setFellows] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
   const [interactions, setInteractions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notificationSettings, setNotificationSettings] = useState({
@@ -407,8 +428,8 @@ function AppProvider({ children }) {
           setUser(userData);
           localStorage.setItem('gather_user', JSON.stringify(userData));
 
-          // Fetch user role
-          const role = await determineUserRole(session.user.email);
+          // Fetch user role and link user_id
+          const role = await determineUserRole(session.user.email, session.user.id);
           setUserRole(role);
           localStorage.setItem('gather_user_role', role);
         } else {
@@ -463,8 +484,8 @@ function AppProvider({ children }) {
         setUser(userData);
         localStorage.setItem('gather_user', JSON.stringify(userData));
 
-        // Fetch user role
-        const role = await determineUserRole(session.user.email);
+        // Fetch user role and link user_id
+        const role = await determineUserRole(session.user.email, session.user.id);
         setUserRole(role);
         localStorage.setItem('gather_user_role', role);
       } else if (event === 'SIGNED_OUT') {
@@ -562,8 +583,9 @@ function AppProvider({ children }) {
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     try {
-      const [fellowsRes, interactionsRes, categoriesRes, tagsRes, activitiesRes] = await Promise.all([
+      const [fellowsRes, teamMembersRes, interactionsRes, categoriesRes, tagsRes, activitiesRes] = await Promise.all([
         supabase.from('fellows').select('*').eq('status', 'Alumni'),
+        supabase.from('team_members').select('*').eq('is_active', true).order('last_name'),
         supabase.from('interactions').select('*').order('created_at', { ascending: false }).limit(50),
         supabase.from('focus_categories').select('*').order('sort_order'),
         supabase.from('focus_tags').select('*').eq('approved', true).order('name'),
@@ -571,6 +593,7 @@ function AppProvider({ children }) {
       ]);
 
       if (fellowsRes.data) setFellows(fellowsRes.data);
+      if (teamMembersRes.data) setTeamMembers(teamMembersRes.data);
       if (interactionsRes.data) setInteractions(interactionsRes.data);
       if (categoriesRes.data) setFocusCategories(categoriesRes.data);
       if (tagsRes.data) setFocusTags(tagsRes.data);
@@ -614,7 +637,7 @@ function AppProvider({ children }) {
     <AppContext.Provider value={{
       user, userRole, login, loginWithGoogle, logout, canAccess,
       isOnboarded, completeOnboarding,
-      fellows, interactions, activities, fellowFocusTags, fetchData,
+      fellows, teamMembers, interactions, activities, fellowFocusTags, fetchData,
       focusCategories, focusTags,
       notificationSettings, setNotificationSettings,
       language, changeLanguage, t,
@@ -659,6 +682,11 @@ function getProgramBadge(program) {
   if (!program) return { label: '—', bg: 'bg-gray-400' };
 
   const p = program.toLowerCase();
+
+  // Team members (staff)
+  if (p === 'team' || p === 'staff') {
+    return { label: 'Team', bg: 'bg-gray-400' };
+  }
 
   // Normalize program names to 3-letter codes
   if (p === 'cpf' || p.includes('chicago')) {
@@ -3473,16 +3501,47 @@ function FilterSortPanel({ isOpen, onClose, filters, setFilters, sort, setSort }
 }
 
 function DirectoryPage({ onSelectFellow }) {
-  const { fellows, userRole, canAccess } = useContext(AppContext);
+  const { fellows, teamMembers, userRole, canAccess } = useContext(AppContext);
   const [search, setSearch] = useState('');
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
-  const [sort, setSort] = useState('days_desc'); // Default: days since contact (high to low)
+  const [sort, setSort] = useState('name_asc'); // Default: alphabetical for combined directory
   const [filters, setFilters] = useState({
     programs: [],
     regions: [],
     years: [],
     statuses: [],
   });
+
+  // Combine fellows and team members into a unified directory
+  const allMembers = useMemo(() => {
+    // Map team members to match fellow structure for display
+    const teamMapped = (teamMembers || []).map(tm => ({
+      id: tm.id,
+      first_name: tm.first_name,
+      last_name: tm.last_name,
+      program: 'TEAM',
+      cohort_year: null,
+      organization: tm.title || 'Goldin Institute',
+      photo_url: tm.photo_url,
+      bio: tm.bio,
+      email: tm.email,
+      phone: tm.phone,
+      city: null,
+      country: null,
+      region: null,
+      last_contact: null,
+      record_type: 'team_member',
+      role: tm.role,
+    }));
+
+    // Map fellows with record_type
+    const fellowsMapped = (fellows || []).map(f => ({
+      ...f,
+      record_type: 'fellow',
+    }));
+
+    return [...teamMapped, ...fellowsMapped];
+  }, [fellows, teamMembers]);
 
   // Count active filters for badge
   const activeFilterCount = useMemo(() => {
@@ -3502,33 +3561,36 @@ function DirectoryPage({ onSelectFellow }) {
     return counts;
   }, [fellows]);
 
-  // Filter and sort fellows
+  // Filter and sort all members (fellows + team)
   const filtered = useMemo(() => {
-    let result = fellows.filter(f => {
+    let result = allMembers.filter(f => {
       // Search filter
       const term = search.toLowerCase();
       const matchSearch = !search ||
         `${f.first_name} ${f.last_name}`.toLowerCase().includes(term) ||
         f.organization?.toLowerCase().includes(term) ||
         f.city?.toLowerCase().includes(term) ||
-        f.country?.toLowerCase().includes(term);
+        f.country?.toLowerCase().includes(term) ||
+        f.email?.toLowerCase().includes(term);
 
-      // Program filter
+      // Program filter - now includes TEAM
+      const programLabel = getProgramBadge(f.program).label;
       const matchProgram = filters.programs.length === 0 ||
-        filters.programs.includes(f.program);
+        filters.programs.includes(programLabel);
 
-      // Region filter
+      // Region filter (team members have no region, so skip if filtering by region)
       const matchRegion = filters.regions.length === 0 ||
         filters.regions.includes(f.region);
 
-      // Year filter
+      // Year filter (team members have no year)
       const matchYear = filters.years.length === 0 ||
         filters.years.includes(String(f.cohort_year || f.year));
 
-      // Status filter
-      const fellowStatus = getContactStatus(f.last_contact).color;
+      // Status filter (team members have no status tracking)
+      const memberStatus = f.record_type === 'team_member' ? null : getContactStatus(f.last_contact).color;
       const matchStatus = filters.statuses.length === 0 ||
-        filters.statuses.includes(fellowStatus);
+        (f.record_type === 'team_member') || // Team members pass status filter
+        filters.statuses.includes(memberStatus);
 
       return matchSearch && matchProgram && matchRegion && matchYear && matchStatus;
     });
@@ -3585,7 +3647,7 @@ function DirectoryPage({ onSelectFellow }) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search alumni..."
+            placeholder="Search directory..."
             className="w-full pl-12 pr-4 py-3 bg-gray-100 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
           />
         </div>
@@ -3634,7 +3696,7 @@ function DirectoryPage({ onSelectFellow }) {
 
       {/* Count + Sort indicator */}
       <div className="flex items-center justify-between mb-3">
-        <p className="text-sm text-gray-500">{filtered.length} alumni</p>
+        <p className="text-sm text-gray-500">{filtered.length} {filtered.length === 1 ? 'member' : 'members'}</p>
         <p className="text-xs text-gray-400">
           Sorted by: {SORT_OPTIONS.find(o => o.value === sort)?.label.split(' (')[0]}
         </p>
@@ -3689,7 +3751,7 @@ function DirectoryPage({ onSelectFellow }) {
 
         {filtered.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">No alumni found</p>
+            <p className="text-gray-400 text-lg">No members found</p>
             <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
           </div>
         )}
@@ -4279,7 +4341,7 @@ function CohortCommunicationPage() {
   );
 }
 
-function SettingsPage() {
+function SettingsPage({ onNavigate }) {
   const { user, userRole, fellows, fetchData, logout, canAccess, language, changeLanguage, t } = useContext(AppContext);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [myFellow, setMyFellow] = useState(null);
@@ -4692,6 +4754,29 @@ function SettingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Team Management - Admin only */}
+      {canAccess(ROLES.ADMIN) && onNavigate && (
+        <button
+          onClick={() => onNavigate('team-management')}
+          className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4 text-left active:bg-gray-50 transition"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center">
+                <span className="text-xl">👥</span>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Team Management</p>
+                <p className="text-sm text-gray-500">Manage staff accounts and permissions</p>
+              </div>
+            </div>
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </button>
       )}
 
       {/* News Scan Reminder - Travis only */}
@@ -5262,6 +5347,415 @@ function SettingsPage() {
 }
 
 // ============================================
+// TEAM MANAGEMENT PAGE
+// ============================================
+function TeamManagementPage({ onBack }) {
+  const { teamMembers, userRole, canAccess, fetchData } = useContext(AppContext);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState(null);
+  const [formData, setFormData] = useState({
+    email: '',
+    first_name: '',
+    last_name: '',
+    title: '',
+    role: 'team',
+    phone: '',
+    bio: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const isAdmin = canAccess(ROLES.ADMIN);
+  const isSuperAdmin = userRole === ROLES.SUPER_ADMIN;
+
+  // Role options based on current user's role
+  const roleOptions = useMemo(() => {
+    const options = [
+      { value: 'team', label: 'Team', description: 'Basic staff access' },
+      { value: 'manager', label: 'Manager', description: 'Can assign tasks to others' },
+      { value: 'admin', label: 'Admin', description: 'Full access except super admin settings' },
+    ];
+    if (isSuperAdmin) {
+      options.push({ value: 'super_admin', label: 'Super Admin', description: 'Full access to everything' });
+    }
+    return options;
+  }, [isSuperAdmin]);
+
+  // Role badge colors
+  const getRoleBadge = (role) => {
+    switch (role) {
+      case 'super_admin': return { label: 'Super Admin', bg: 'bg-violet-500', text: 'text-violet-700' };
+      case 'admin': return { label: 'Admin', bg: 'bg-blue-500', text: 'text-blue-700' };
+      case 'manager': return { label: 'Manager', bg: 'bg-teal-500', text: 'text-teal-700' };
+      default: return { label: 'Team', bg: 'bg-gray-400', text: 'text-gray-600' };
+    }
+  };
+
+  const openAddModal = () => {
+    setEditingMember(null);
+    setFormData({
+      email: '',
+      first_name: '',
+      last_name: '',
+      title: '',
+      role: 'team',
+      phone: '',
+      bio: '',
+    });
+    setError('');
+    setModalOpen(true);
+  };
+
+  const openEditModal = (member) => {
+    setEditingMember(member);
+    setFormData({
+      email: member.email,
+      first_name: member.first_name,
+      last_name: member.last_name,
+      title: member.title || '',
+      role: member.role,
+      phone: member.phone || '',
+      bio: member.bio || '',
+    });
+    setError('');
+    setModalOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.email || !formData.first_name || !formData.last_name) {
+      setError('Email, first name, and last name are required');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      if (editingMember) {
+        // Update existing member
+        const { error: updateError } = await supabase
+          .from('team_members')
+          .update({
+            first_name: formData.first_name,
+            last_name: formData.last_name,
+            title: formData.title || null,
+            role: formData.role,
+            phone: formData.phone || null,
+            bio: formData.bio || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingMember.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new member
+        const { error: insertError } = await supabase
+          .from('team_members')
+          .insert({
+            email: formData.email.toLowerCase(),
+            first_name: formData.first_name,
+            last_name: formData.last_name,
+            title: formData.title || null,
+            role: formData.role,
+            phone: formData.phone || null,
+            bio: formData.bio || null,
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      await fetchData();
+      setModalOpen(false);
+    } catch (err) {
+      console.error('Save error:', err);
+      setError(err.message || 'Failed to save team member');
+    }
+
+    setSaving(false);
+  };
+
+  const handleDeactivate = async (member) => {
+    if (!confirm(`Deactivate ${member.first_name} ${member.last_name}? They will be removed from the directory.`)) {
+      return;
+    }
+
+    try {
+      await supabase
+        .from('team_members')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', member.id);
+      await fetchData();
+    } catch (err) {
+      console.error('Deactivate error:', err);
+      alert('Failed to deactivate member');
+    }
+  };
+
+  const isGoldinEmail = (email) => {
+    return email?.toLowerCase().endsWith('@goldininstitute.org') ||
+           email?.toLowerCase().endsWith('@chicagopeacefellows.org');
+  };
+
+  if (!isAdmin) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-gray-500">You don't have permission to access this page.</p>
+        <button onClick={onBack} className="mt-4 text-goldin-orange font-medium">Go Back</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 pb-24">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="p-2 -ml-2 rounded-xl hover:bg-gray-100">
+            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900">Team Management</h1>
+        </div>
+        <button
+          onClick={openAddModal}
+          className="flex items-center gap-2 px-4 py-2 bg-goldin-orange text-white rounded-xl font-semibold hover:bg-goldin-orange-dark transition"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add
+        </button>
+      </div>
+
+      {/* Team Member List */}
+      <div className="space-y-3">
+        {(teamMembers || []).map(member => {
+          const roleBadge = getRoleBadge(member.role);
+          const hasLoggedIn = !!member.user_id;
+          const needsMagicLink = !isGoldinEmail(member.email);
+
+          return (
+            <button
+              key={member.id}
+              onClick={() => openEditModal(member)}
+              className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-left active:bg-gray-50 transition"
+            >
+              <div className="flex items-start gap-3">
+                {/* Avatar */}
+                <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                  {member.photo_url ? (
+                    <img src={member.photo_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 font-semibold">
+                      {member.first_name?.[0]}{member.last_name?.[0]}
+                    </div>
+                  )}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">
+                    {member.first_name} {member.last_name}
+                  </p>
+                  <p className="text-sm text-gray-500 truncate">{member.title || 'Staff'}</p>
+                  <p className="text-xs text-gray-400 truncate">{member.email}</p>
+                </div>
+
+                {/* Status & Role */}
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${roleBadge.bg} text-white font-medium`}>
+                    {roleBadge.label}
+                  </span>
+                  <div className="flex items-center gap-1 text-xs">
+                    {hasLoggedIn ? (
+                      <span className="text-green-600 flex items-center gap-1">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 flex items-center gap-1">
+                        <span className="w-2 h-2 bg-gray-300 rounded-full"></span>
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                  {!hasLoggedIn && needsMagicLink && (
+                    <span className="text-xs text-amber-600 flex items-center gap-1">
+                      ⚠️ Magic link
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+
+        {(!teamMembers || teamMembers.length === 0) && (
+          <div className="text-center py-12">
+            <p className="text-gray-400 text-lg">No team members yet</p>
+            <p className="text-gray-400 text-sm mt-1">Add your first team member above</p>
+          </div>
+        )}
+      </div>
+
+      {/* Add/Edit Modal */}
+      {modalOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+            onClick={() => setModalOpen(false)}
+          />
+          <div className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl z-50 max-h-[90vh] overflow-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between rounded-t-3xl">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="text-gray-500 font-medium"
+              >
+                Cancel
+              </button>
+              <h2 className="font-bold text-gray-900">
+                {editingMember ? 'Edit Team Member' : 'Add Team Member'}
+              </h2>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="text-goldin-orange font-semibold disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+
+            <div className="p-4 pb-8 space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData(d => ({ ...d, email: e.target.value }))}
+                  disabled={!!editingMember}
+                  className="w-full px-4 py-3 bg-gray-100 rounded-xl text-gray-900 disabled:opacity-60"
+                  placeholder="jane@goldininstitute.org"
+                />
+                {!editingMember && formData.email && !isGoldinEmail(formData.email) && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    ⚠️ Non-Goldin emails require magic link for login
+                  </p>
+                )}
+                {!editingMember && formData.email && isGoldinEmail(formData.email) && (
+                  <p className="text-xs text-green-600 mt-1">
+                    ✓ Can use Google sign-in
+                  </p>
+                )}
+              </div>
+
+              {/* Name */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                  <input
+                    type="text"
+                    value={formData.first_name}
+                    onChange={(e) => setFormData(d => ({ ...d, first_name: e.target.value }))}
+                    className="w-full px-4 py-3 bg-gray-100 rounded-xl text-gray-900"
+                    placeholder="Jane"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                  <input
+                    type="text"
+                    value={formData.last_name}
+                    onChange={(e) => setFormData(d => ({ ...d, last_name: e.target.value }))}
+                    className="w-full px-4 py-3 bg-gray-100 rounded-xl text-gray-900"
+                    placeholder="Smith"
+                  />
+                </div>
+              </div>
+
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => setFormData(d => ({ ...d, title: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-100 rounded-xl text-gray-900"
+                  placeholder="Program Manager"
+                />
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData(d => ({ ...d, role: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-100 rounded-xl text-gray-900"
+                >
+                  {roleOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {roleOptions.find(o => o.value === formData.role)?.description}
+                </p>
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData(d => ({ ...d, phone: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-100 rounded-xl text-gray-900"
+                  placeholder="+1 (555) 123-4567"
+                />
+              </div>
+
+              {/* Bio */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
+                <textarea
+                  value={formData.bio}
+                  onChange={(e) => setFormData(d => ({ ...d, bio: e.target.value }))}
+                  rows={3}
+                  className="w-full px-4 py-3 bg-gray-100 rounded-xl text-gray-900 resize-none"
+                  placeholder="Brief bio..."
+                />
+              </div>
+
+              {/* Deactivate option for existing members */}
+              {editingMember && (
+                <div className="pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => {
+                      setModalOpen(false);
+                      handleDeactivate(editingMember);
+                    }}
+                    className="w-full py-3 text-red-500 font-medium rounded-xl border border-red-200 hover:bg-red-50 transition"
+                  >
+                    Deactivate Team Member
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // LOG INTERACTION MODAL
 // ============================================
 function LogInteractionModal({ isOpen, onClose, preSelectedFellow }) {
@@ -5646,7 +6140,8 @@ function MainApp() {
     search: 'Search',
     activity: 'Activity',
     'cohort-comm': 'Cohort Communication',
-    settings: 'Settings'
+    settings: 'Settings',
+    'team-management': 'Team Management'
   };
 
   const openLogModal = () => {
@@ -5705,7 +6200,8 @@ function MainApp() {
         {currentPage === 'search' && <SearchPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'activity' && <ActivityPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'cohort-comm' && <CohortCommunicationPage />}
-        {currentPage === 'settings' && <SettingsPage />}
+        {currentPage === 'settings' && <SettingsPage onNavigate={setCurrentPage} />}
+        {currentPage === 'team-management' && <TeamManagementPage onBack={() => setCurrentPage('settings')} />}
       </main>
       
       <FellowProfileModal 
