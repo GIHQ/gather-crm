@@ -30,9 +30,20 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - Team Management page added (admin+ can manage staff accounts)
 - team_members table created with RLS policies
 - Directory updated to show Team members with silver badge
+- **Auth flow updated to check alternate_emails** for both team_members and fellows
+- **My Profile page supports both fellows and team members**
+- **Self-editing profile** (phone, bio, LinkedIn, etc.) - name/email read-only
+- Migration file added: `migrations/008_team_members.sql`
+- Documentation: PROFILE_CLAIMING_SPEC.md, NotificationSettings-fix.jsx, COMPONENT_INDEX.js
 
 ### In Progress
 - **Community Platform Phase 1** - Stream token minting, announcements, newsletter composer
+- Profile claiming flow for unrecognized emails (Phase 2)
+
+### TODO (Next Session)
+1. Run migration 008_team_members.sql in Supabase (adds alternate_emails columns)
+2. Add admin edit button on FellowProfileModal for full field access
+3. Implement "Is This You?" claim flow for unrecognized emails
 
 ### Known Issues
 - Guest users see "0 alumni" in directory (RLS or permission issue)
@@ -59,6 +70,8 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `docs/STYLE_GUIDE.md` | Colors, fonts, component patterns |
 | `docs/GATHER_COMMUNITY_PLAN.md` | Community platform product plan |
 | `docs/TEAM_MANAGEMENT_SPEC.md` | Team members in directory + admin page |
+| `docs/PROFILE_CLAIMING_SPEC.md` | Identity matching + profile claiming |
+| `migrations/008_team_members.sql` | Team members table + alternate_emails |
 
 ---
 
@@ -69,6 +82,24 @@ Team members (Goldin Institute staff) are stored in the `team_members` table:
 - Managed via Settings > Team Management (admin+ only)
 - Roles: super_admin, admin, manager, team
 - Links to auth.users via user_id after first login
+
+---
+
+## Profile Editing
+
+**Self-editing (My Profile in Settings):**
+- Fellows and team members can edit their own profile
+- Editable: phone, bio, LinkedIn, job title, organization, city, country
+- Read-only: name, email (contact admin to change)
+
+**Admin editing:**
+- Admins can edit any profile via FellowProfileModal
+- Full access to all fields including name, email, program/cohort
+- Staff notes field (not visible to the person)
+
+**Identity matching:**
+- Auth flow checks both primary email and `alternate_emails` array
+- See PROFILE_CLAIMING_SPEC.md for claim flow details
 
 ---
 

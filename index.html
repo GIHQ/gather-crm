@@ -322,21 +322,21 @@ async function determineUserRole(email, userId = null) {
   const lowerEmail = email.toLowerCase();
 
   try {
-    // 1. Check team_members table first (staff)
-    const { data: teamMember } = await supabase
+    // 1. Check team_members table first (staff) - check email OR alternate_emails
+    const { data: teamMembers } = await supabase
       .from('team_members')
-      .select('role, user_id')
-      .eq('email', lowerEmail)
+      .select('id, role, user_id, email')
       .eq('is_active', true)
-      .single();
+      .or(`email.eq.${lowerEmail},alternate_emails.cs.{${lowerEmail}}`);
 
+    const teamMember = teamMembers?.[0];
     if (teamMember) {
       // Link user_id on first login if not already set
       if (userId && !teamMember.user_id) {
         await supabase
           .from('team_members')
           .update({ user_id: userId, updated_at: new Date().toISOString() })
-          .eq('email', lowerEmail);
+          .eq('id', teamMember.id);
       }
       return teamMember.role;
     }
@@ -350,16 +350,25 @@ async function determineUserRole(email, userId = null) {
 
     if (roleData?.role) return roleData.role;
 
-    // 3. Check if user is a fellow
-    const { data: fellowData } = await supabase
+    // 3. Check if user is a fellow - check email OR alternate_emails
+    const { data: fellows } = await supabase
       .from('fellows')
-      .select('id')
-      .eq('email', lowerEmail)
-      .single();
+      .select('id, user_id')
+      .or(`email.eq.${lowerEmail},alternate_emails.cs.{${lowerEmail}}`);
 
-    if (fellowData) return ROLES.FELLOW;
+    const fellowData = fellows?.[0];
+    if (fellowData) {
+      // Link user_id on first login if not already set
+      if (userId && !fellowData.user_id) {
+        await supabase
+          .from('fellows')
+          .update({ user_id: userId })
+          .eq('id', fellowData.id);
+      }
+      return ROLES.FELLOW;
+    }
 
-    // 4. Check domain for staff (auto-grant team role)
+    // 4. Check domain for staff (auto-grant team role and create record)
     if (lowerEmail.endsWith('@goldininstitute.org') ||
         lowerEmail.endsWith('@chicagopeacefellows.org')) {
       return ROLES.TEAM;
@@ -4342,9 +4351,11 @@ function CohortCommunicationPage() {
 }
 
 function SettingsPage({ onNavigate }) {
-  const { user, userRole, fellows, fetchData, logout, canAccess, language, changeLanguage, t } = useContext(AppContext);
+  const { user, userRole, fellows, teamMembers, fetchData, logout, canAccess, language, changeLanguage, t } = useContext(AppContext);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [myFellow, setMyFellow] = useState(null);
+  const [myTeamMember, setMyTeamMember] = useState(null);
+  const [profileType, setProfileType] = useState(null); // 'fellow' or 'team_member'
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -4493,11 +4504,31 @@ function SettingsPage({ onNavigate }) {
     fetchData(); // Refresh to show new activities
   };
 
-  // Find user's fellow record by matching email or work_email
+  // Find user's profile - check team_members first (for staff), then fellows
   useEffect(() => {
-    if (user?.email && fellows.length > 0) {
-      const userEmailLower = user.email.toLowerCase();
-      const found = fellows.find(f => {
+    if (!user?.email) return;
+    const userEmailLower = user.email.toLowerCase();
+
+    // Check team_members first (for staff)
+    if (teamMembers && teamMembers.length > 0) {
+      const foundTeam = teamMembers.find(tm => {
+        if (tm.email && tm.email.toLowerCase() === userEmailLower) return true;
+        // Check alternate_emails
+        if (tm.alternate_emails && Array.isArray(tm.alternate_emails)) {
+          if (tm.alternate_emails.some(e => e.toLowerCase() === userEmailLower)) return true;
+        }
+        return false;
+      });
+      if (foundTeam) {
+        setMyTeamMember(foundTeam);
+        setProfileType('team_member');
+        return;
+      }
+    }
+
+    // Check fellows
+    if (fellows && fellows.length > 0) {
+      const foundFellow = fellows.find(f => {
         // Check primary email
         if (f.email && f.email.toLowerCase() === userEmailLower) return true;
         // Check work_email (can be comma-separated list)
@@ -4505,11 +4536,24 @@ function SettingsPage({ onNavigate }) {
           const workEmails = f.work_email.toLowerCase().split(',').map(e => e.trim());
           if (workEmails.includes(userEmailLower)) return true;
         }
+        // Check alternate_emails
+        if (f.alternate_emails && Array.isArray(f.alternate_emails)) {
+          if (f.alternate_emails.some(e => e.toLowerCase() === userEmailLower)) return true;
+        }
         return false;
       });
-      setMyFellow(found || null);
+      if (foundFellow) {
+        setMyFellow(foundFellow);
+        setProfileType('fellow');
+        return;
+      }
     }
-  }, [user?.email, fellows]);
+
+    // No profile found
+    setMyFellow(null);
+    setMyTeamMember(null);
+    setProfileType(null);
+  }, [user?.email, fellows, teamMembers]);
 
   const handleLogout = async () => {
     if (confirm('Are you sure you want to sign out?')) {
@@ -4587,7 +4631,18 @@ function SettingsPage({ onNavigate }) {
   };
 
   const openProfileEditor = () => {
-    if (myFellow) {
+    if (profileType === 'team_member' && myTeamMember) {
+      setEditData({
+        first_name: myTeamMember.first_name || '',
+        last_name: myTeamMember.last_name || '',
+        email: myTeamMember.email || '',
+        phone: myTeamMember.phone || '',
+        title: myTeamMember.title || '',
+        bio: myTeamMember.bio || '',
+        linkedin_url: myTeamMember.linkedin_url || '',
+      });
+      setProfileModalOpen(true);
+    } else if (myFellow) {
       setEditData({
         first_name: myFellow.first_name || '',
         last_name: myFellow.last_name || '',
@@ -4608,12 +4663,31 @@ function SettingsPage({ onNavigate }) {
   };
 
   const saveProfile = async () => {
-    if (!myFellow) return;
     setSaving(true);
-    const { error } = await supabase
-      .from('fellows')
-      .update(editData)
-      .eq('id', myFellow.id);
+    let error = null;
+
+    if (profileType === 'team_member' && myTeamMember) {
+      // Save team member profile
+      const updateData = {
+        phone: editData.phone,
+        title: editData.title,
+        bio: editData.bio,
+        linkedin_url: editData.linkedin_url,
+        updated_at: new Date().toISOString(),
+      };
+      const result = await supabase
+        .from('team_members')
+        .update(updateData)
+        .eq('id', myTeamMember.id);
+      error = result.error;
+    } else if (myFellow) {
+      // Save fellow profile
+      const result = await supabase
+        .from('fellows')
+        .update(editData)
+        .eq('id', myFellow.id);
+      error = result.error;
+    }
 
     if (!error) {
       setProfileModalOpen(false);
@@ -4699,7 +4773,7 @@ function SettingsPage({ onNavigate }) {
       </div>
 
       {/* My Profile */}
-      {myFellow ? (
+      {(myFellow || myTeamMember) ? (
         <button
           onClick={openProfileEditor}
           className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6 text-left active:bg-gray-50"
@@ -4711,7 +4785,9 @@ function SettingsPage({ onNavigate }) {
               </div>
               <div>
                 <p className="font-semibold text-gray-900">My Profile</p>
-                <p className="text-sm text-gray-500">Edit your profile</p>
+                <p className="text-sm text-gray-500">
+                  {profileType === 'team_member' ? 'Edit your staff profile' : 'Edit your profile'}
+                </p>
               </div>
             </div>
             <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4987,14 +5063,15 @@ function SettingsPage({ onNavigate }) {
             </div>
 
             <div className="p-4 space-y-4 pb-8">
+              {/* Name fields - read only for self-editing */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">First Name</label>
                   <input
                     type="text"
                     value={editData.first_name}
-                    onChange={(e) => setEditData(d => ({...d, first_name: e.target.value}))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-500"
                   />
                 </div>
                 <div>
@@ -5002,115 +5079,159 @@ function SettingsPage({ onNavigate }) {
                   <input
                     type="text"
                     value={editData.last_name}
-                    onChange={(e) => setEditData(d => ({...d, last_name: e.target.value}))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-500"
                   />
                 </div>
               </div>
 
+              {/* Email - read only for self-editing */}
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">Email</label>
                 <input
                   type="email"
                   value={editData.email}
-                  onChange={(e) => setEditData(d => ({...d, email: e.target.value}))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-500"
                 />
+                <p className="text-xs text-gray-400 mt-1">Contact an admin to change your email</p>
               </div>
 
+              {/* Phone - editable */}
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">Phone</label>
                 <input
                   type="tel"
-                  value={editData.phone}
+                  value={editData.phone || ''}
                   onChange={(e) => setEditData(d => ({...d, phone: e.target.value}))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
                 />
               </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Job Title</label>
-                <input
-                  type="text"
-                  value={editData.job_title}
-                  onChange={(e) => setEditData(d => ({...d, job_title: e.target.value}))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
-                />
-              </div>
+              {/* Team member specific fields */}
+              {profileType === 'team_member' && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">Job Title</label>
+                    <input
+                      type="text"
+                      value={editData.title || ''}
+                      onChange={(e) => setEditData(d => ({...d, title: e.target.value}))}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                    />
+                  </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Organization</label>
-                <input
-                  type="text"
-                  value={editData.organization}
-                  onChange={(e) => setEditData(d => ({...d, organization: e.target.value}))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
-                />
-              </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">Bio</label>
+                    <textarea
+                      value={editData.bio || ''}
+                      onChange={(e) => setEditData(d => ({...d, bio: e.target.value}))}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30 resize-none"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">City</label>
-                  <input
-                    type="text"
-                    value={editData.city}
-                    onChange={(e) => setEditData(d => ({...d, city: e.target.value}))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Country</label>
-                  <input
-                    type="text"
-                    value={editData.country}
-                    onChange={(e) => setEditData(d => ({...d, country: e.target.value}))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
-                  />
-                </div>
-              </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">LinkedIn URL</label>
+                    <input
+                      type="url"
+                      value={editData.linkedin_url || ''}
+                      onChange={(e) => setEditData(d => ({...d, linkedin_url: e.target.value}))}
+                      placeholder="https://linkedin.com/in/..."
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                    />
+                  </div>
+                </>
+              )}
 
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Biography</label>
-                <textarea
-                  value={editData.biography}
-                  onChange={(e) => setEditData(d => ({...d, biography: e.target.value}))}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30 resize-none"
-                />
-              </div>
+              {/* Fellow specific fields */}
+              {profileType === 'fellow' && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">Job Title</label>
+                    <input
+                      type="text"
+                      value={editData.job_title || ''}
+                      onChange={(e) => setEditData(d => ({...d, job_title: e.target.value}))}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                    />
+                  </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">LinkedIn URL</label>
-                <input
-                  type="url"
-                  value={editData.linkedin}
-                  onChange={(e) => setEditData(d => ({...d, linkedin: e.target.value}))}
-                  placeholder="https://linkedin.com/in/..."
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
-                />
-              </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">Organization</label>
+                    <input
+                      type="text"
+                      value={editData.organization || ''}
+                      onChange={(e) => setEditData(d => ({...d, organization: e.target.value}))}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                    />
+                  </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Website</label>
-                <input
-                  type="url"
-                  value={editData.website}
-                  onChange={(e) => setEditData(d => ({...d, website: e.target.value}))}
-                  placeholder="https://..."
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
-                />
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">City</label>
+                      <input
+                        type="text"
+                        value={editData.city || ''}
+                        onChange={(e) => setEditData(d => ({...d, city: e.target.value}))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">Country</label>
+                      <input
+                        type="text"
+                        value={editData.country || ''}
+                        onChange={(e) => setEditData(d => ({...d, country: e.target.value}))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                      />
+                    </div>
+                  </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Languages</label>
-                <input
-                  type="text"
-                  value={editData.languages}
-                  onChange={(e) => setEditData(d => ({...d, languages: e.target.value}))}
-                  placeholder="English, Spanish, ..."
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
-                />
-              </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">Biography</label>
+                    <textarea
+                      value={editData.biography || ''}
+                      onChange={(e) => setEditData(d => ({...d, biography: e.target.value}))}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30 resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">LinkedIn URL</label>
+                    <input
+                      type="url"
+                      value={editData.linkedin || ''}
+                      onChange={(e) => setEditData(d => ({...d, linkedin: e.target.value}))}
+                      placeholder="https://linkedin.com/in/..."
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">Website</label>
+                    <input
+                      type="url"
+                      value={editData.website || ''}
+                      onChange={(e) => setEditData(d => ({...d, website: e.target.value}))}
+                      placeholder="https://..."
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">Languages</label>
+                    <input
+                      type="text"
+                      value={editData.languages || ''}
+                      onChange={(e) => setEditData(d => ({...d, languages: e.target.value}))}
+                      placeholder="English, Spanish, ..."
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </>
