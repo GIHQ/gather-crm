@@ -2,17 +2,17 @@
 
 **Last updated:** Feb 7, 2026
 
-This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO section in SESSION_HANDOFF.md.
+This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO Tracker in SESSION_HANDOFF.md.
 
 ---
 
-## Phase 1: Foundation (Current)
-*Core CRM + Directory — mostly complete*
+## Phase 1: Foundation ✅
+*Core CRM + Directory — complete*
 
 | Feature | Status |
 |---------|--------|
 | Fellow database (292 fellows, 3 programs) | ✅ Done |
-| Photo management | ✅ Done |
+| Photo management (all 292 uploaded) | ✅ Done |
 | Focus areas system (Skills, Populations, Focus, Community) | ✅ Done |
 | Google OAuth + magic link auth | ✅ Done |
 | 6-tier permission system | ✅ Done |
@@ -21,22 +21,22 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Self-editing profiles | ✅ Done |
 | Admin editing + staff notes | ✅ Done |
 | Interaction logging | ✅ Done |
-| News scanner (SerpAPI) | ⚠️ Returns 0 results — deferred 1 week |
+| News scanner (SerpAPI) | ⚠️ Returns 0 results — deferred |
 
 ---
 
 ## Phase 2: Community Platform
-*GetStream + Buttondown integration — next up*
+*GetStream + Buttondown integration — in progress*
 
 ### Phase 2a: Broadcast (Weeks 1-2)
 | Feature | Status |
 |---------|--------|
-| Community tables (announcements, resources, newsletter_sends, stream_tokens) | 🔲 In progress |
-| Stream token-minting Edge Function | 🔲 In progress |
+| Community tables (announcements, resources, newsletter_sends, stream_tokens) | 🔲 Not started |
+| Stream token-minting Edge Function | 🔲 Not started |
 | Announcements feed component | 🔲 Not started |
 | Resource library component | 🔲 Not started |
 | Newsletter composer (Buttondown) | 🔲 Not started |
-| "Community" tab in navigation | 🔲 Not started |
+| "Community" tab in navigation | 🔲 Not started (wireframe complete) |
 | Import 292 fellow emails to Buttondown | 🔲 Not started |
 
 ### Phase 2b: Discovery (Weeks 3-4)
@@ -55,7 +55,6 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Comments / discussion threads | 🔲 |
 | Direct messaging (Stream Chat) | 🔲 |
 | Program channels (CPF, GGF, ESP) | 🔲 |
-| Unread indicators & notification badges | 🔲 |
 | Weekly digest email (automated) | 🔲 |
 
 ### Phase 2d: Collaboration (Month 2+)
@@ -70,7 +69,6 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 ---
 
 ## Phase 3: Analytics & Insights
-*Data-driven engagement tracking*
 
 | Feature | Status |
 |---------|--------|
@@ -83,7 +81,6 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 ---
 
 ## Phase 4: Scale & Polish
-*Production hardening*
 
 | Feature | Status |
 |---------|--------|
@@ -102,9 +99,9 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 |------|----------|-----------|
 | Jan 2026 | Single HTML file | Simplicity for small team, appropriate at current scale |
 | Jan 2026 | Supabase over Firebase | Better Postgres features, RLS, Edge Functions |
-| Feb 2026 | GetStream for community | Real-time feeds without building from scratch |
+| Feb 2026 | GetStream for community | Real-time feeds without building from scratch; free Maker tier covers 292 MAU |
 | Feb 2026 | Buttondown for email | Simple API, good for newsletters at this volume |
-| Feb 2026 | Lurker-first architecture | 30-50% active engagement realistic; design for passive consumption |
+| Feb 2026 | Lurker-first architecture | 30-50% active engagement realistic; design for passive consumption first |
 
 ---
 
@@ -113,7 +110,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Service | Tier | Monthly Cost | Notes |
 |---------|------|-------------|-------|
 | GetStream | Maker (free) | $0 | <5 team members, <$10K revenue |
-| Buttondown | Basic | $9/mo | 292 subscribers (free tier is 100) |
+| Buttondown | Basic | $9/mo | 292 subscribers (free tier caps at 100) |
 | Supabase | Free | $0 | Already using |
 | Netlify | Free | $0 | Already using |
 | **Total** | | **$9/mo** | Check if nonprofit discount applies |

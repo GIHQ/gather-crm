@@ -16,68 +16,68 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 
 ---
 
-## TODO Tracker
-
-### 🔴 Immediate (This Session / Next Session)
-- [ ] Build Community tab UI components (announcements feed, resource library, newsletter composer)
-- [ ] Wire up Stream token minting on login
-- [ ] Diagnose news scanner (SerpAPI returning 0 results) — deferred 1 week
-
-### 🟡 Short-Term (This Week)
-- [ ] Announcements feed component (read for fellows, write for staff)
-- [ ] Resource library component (browse by category)
-- [ ] Newsletter composer in admin settings
-- [ ] Import 292 fellow emails to Buttondown as subscribers
-- [ ] Test profile claiming flow end-to-end
-
-### 🟢 Medium-Term (This Month)
-- [ ] Community Platform Phase 2b: Discovery
-- [ ] Community Platform Phase 2c: Engagement
-- [ ] Engagement dashboard for staff
-
-### 🔵 Long-Term (Quarter)
-- [ ] Community Platform Phase 2d: Collaboration
-- [ ] Analytics & insights dashboard
-- [ ] Multi-language support for ESP fellows
-
-*For full feature roadmap, see `docs/ROADMAP.md`*
-
----
-
 ## Current State (Updated Feb 7, 2026)
 
 ### Recently Completed
-- ✅ **Community tables created** — announcements, resources, newsletter_sends, stream_tokens (migration 010)
-- ✅ **stream-token Edge Function** — mints GetStream JWT tokens for authenticated users, caches in DB
-- ✅ **fellows table extended** — added `working_on` and `working_on_updated_at` columns
-- ✅ **Staff import complete** — 11 team members in `team_members` table with bios, photos, fellowship links
-- ✅ Google OAuth login redirect fixed
-- ✅ GetStream account created, API keys stored in Supabase + Netlify
-- ✅ Buttondown account created, API key stored in Supabase
-- ✅ Full Community Platform plan created (GATHER_COMMUNITY_PLAN.md)
-- ✅ All 292 fellow photos uploaded and linked
-- ✅ Focus Areas system working
-- ✅ Notification settings mobile overflow fix applied
-- ✅ Component index comment block in index.html
-- ✅ Team Management page added (admin+ can manage staff accounts)
-- ✅ team_members table created with RLS policies
-- ✅ Directory updated to show Team members with silver badge
-- ✅ Auth flow updated to check alternate_emails for both team_members and fellows
-- ✅ My Profile page supports both fellows and team members
-- ✅ Self-editing profile (phone, bio, LinkedIn, etc.) - name/email read-only
-- ✅ Admin edit button on FellowProfileModal with full field access + staff notes
-- ✅ Multiple badges for staff with fellowships (Team badge + program badges)
-- ✅ Profile claiming flow - "Is This You?" screen for unrecognized emails
-- ✅ Claim approval queue in Team Management page for admins
-- ✅ RLS fixes - Directory now visible to all users (guests see fellows)
-- ✅ Focus areas RLS fix - All focus tables publicly readable
-- ✅ ROADMAP.md created for long-term planning
+- Google OAuth login redirect fixed
+- GetStream account created, API keys stored in Supabase + Netlify
+- Buttondown account created, API key stored in Supabase
+- Full Community Platform plan created (see GATHER_COMMUNITY_PLAN.md)
+- All 292 fellow photos uploaded and linked
+- Focus Areas system working (Skills, Populations, Focus Areas, Community Areas)
+- Notification settings mobile overflow fix applied
+- Component index comment block in index.html
+- Team Management page added (admin+ can manage staff accounts)
+- team_members table created with RLS policies
+- **11 team members imported** with full bios, photos, fellowship links
+- Directory updated to show Team members with silver "Team" badge
+- Auth flow checks alternate_emails for both team_members and fellows
+- My Profile page supports both fellows and team members
+- Self-editing profile (phone, bio, LinkedIn, etc.) - name/email read-only
+- Admin edit button on FellowProfileModal with full field access + staff notes
+- Multiple badges for staff with fellowships (Team badge + program badges)
+- Profile claiming flow with "Is This You?" screen
+- Claim approval queue in Team Management page for admins
+- RLS fixes: Directory visible to all, focus tables publicly readable
+- Community tab wireframe designed (Feed, Resources, Newsletter, Directory with Team filter)
 
 ### In Progress
-- **Community Platform Phase 2a** — backend complete, building frontend UI components next
+- **Community Platform Phase 2a** — Backend tables and Edge Functions not yet created
+- Community tab wireframe ready; frontend build waiting on backend
 
 ### Known Issues
-- News scanner returns 0 results (SerpAPI key may need verification — deferred to medium-term)
+- News scanner returns 0 results (likely no fellows in news; deferred 1 week)
+
+---
+
+## TODO Tracker
+
+### 🔴 Immediate (This Week)
+- [ ] Create community tables in Supabase (announcements, resources, newsletter_sends, stream_tokens)
+- [ ] Create stream-token Edge Function
+- [ ] Build Community tab components in index.html (based on wireframe)
+- [ ] Import 292 fellow emails to Buttondown
+
+### 🟡 Short-Term (Next 2 Weeks)
+- [ ] Wire announcements feed to Supabase
+- [ ] Wire newsletter composer to Buttondown API
+- [ ] Add "working_on" field to fellows table
+- [ ] Test end-to-end announcement posting
+- [ ] Test end-to-end newsletter sending
+
+### 🟢 Medium-Term (This Month)
+- [ ] GetStream activity feed integration
+- [ ] Enhanced directory search & filters (live in app)
+- [ ] Push notification support
+- [ ] Fellow spotlight feature
+- [ ] Weekly digest email (automated)
+
+### 🔵 Long-Term (See ROADMAP.md)
+- [ ] Direct messaging (Stream Chat)
+- [ ] Program-specific channels
+- [ ] Mentorship matching
+- [ ] Analytics dashboard
+- [ ] Multi-language support
 
 ---
 
@@ -94,46 +94,30 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Main app - all React components embedded |
+| `index.html` | Main app — all React components embedded |
 | `docs/ARCHITECTURE.md` | System overview |
 | `docs/DATABASE_SCHEMA.md` | All tables and relationships |
 | `docs/STYLE_GUIDE.md` | Colors, fonts, component patterns |
+| `docs/ROADMAP.md` | Long-term project roadmap and phase tracking |
 | `docs/GATHER_COMMUNITY_PLAN.md` | Community platform product plan |
 | `docs/TEAM_MANAGEMENT_SPEC.md` | Team members in directory + admin page |
 | `docs/PROFILE_CLAIMING_SPEC.md` | Identity matching + profile claiming |
-| `docs/ROADMAP.md` | Long-term feature roadmap |
 | `migrations/008_team_members.sql` | Team members table + alternate_emails |
 | `migrations/009_profile_claims.sql` | Profile claim requests table |
-| `migrations/010_community_tables.sql` | Community platform tables (announcements, resources, newsletter_sends, stream_tokens) |
-| `supabase/functions/stream-token/index.ts` | GetStream token minting Edge Function |
-
----
-
-## Team Members (11 Staff)
-
-| Name | Email | Role | Title | Fellowship |
-|------|-------|------|-------|------------|
-| Travis Rejman | travis@goldininstitute.org | super_admin | Executive Director | — |
-| Tyler Stober | stobertg@gmail.com | team | GATHER UX Designer | — |
-| Yusuph Masanja | yusuph@goldininstitute.org | team | Director, Dar es Salaam Peace Fellows | GGF 2018 |
-| Lissette Mateus Roa | lissette@goldininstitute.org | team | Director, Bogota Peace Fellows | GGF 2018 |
-| Jassi Sandhar | jassi@goldininstitute.org | team | Director, Storytelling & Community Engagement | — |
-| Grese Sermaxhaj | grese@goldininstitute.org | team | Communications Associate | GGF 2023 |
-| John Zeigler | john@goldininstitute.org | team | Senior Director of Programs | — |
-| Oz Ozburn | oz@goldininstitute.org | team | Senior Director of Design | — |
-| Michael Henderson | michael@goldininstitute.org | team | Director, Chicago Peace Fellows | — |
-| Zeki Salah | zeki@goldininstitute.org | team | Communications Associate | — |
-| Dorcas Kiplagat | dorcas@goldininstitute.org | team | — | GGF 2011 |
+| `migrations/011_team_import.sql` | 11 staff members imported |
 
 ---
 
 ## Team Management
 
 Team members (Goldin Institute staff) are stored in the `team_members` table:
-- Displayed in Directory with silver "Team" badge
+- Displayed in Directory with silver "Team" badge (`bg-gray-400 text-white`)
+- Staff who are also fellows show dual badges (e.g., Team + GGF '18)
 - Managed via Settings > Team Management (admin+ only)
 - Roles: super_admin, admin, manager, team
 - Links to auth.users via user_id after first login
+- 11 staff imported: Travis, Tyler, Yusuph, Lissette, Jassi, Gresë, John, Oz, Michael, Zeki, Dorcas
+- Fellowship links: Yusuph (GGF '18), Lissette (GGF '18), Gresë (GGF '23), Dorcas (GGF '11)
 
 ---
 
@@ -156,36 +140,21 @@ Team members (Goldin Institute staff) are stored in the `team_members` table:
 
 ---
 
-## Multiple Badges
+## Community Platform — Next Steps
 
-Team members who are also fellows display multiple badges:
-- Primary "Team" badge (gray-400)
-- Additional program badges for each fellowship in their `fellowships` JSONB
+Phase 2a (Broadcast) is next. Backend needs:
+1. Four new tables: announcements, resources, newsletter_sends, stream_tokens
+2. Stream token-minting Edge Function (GetStream JWT, 24hr cache)
+3. RLS policies for all new tables
 
-The `getBadges()` function handles badge generation for both fellows and team members.
+Frontend needs (wireframe complete):
+1. Community tab with Feed / Resources / Newsletter sub-tabs
+2. Announcements feed with reactions, pinned posts, program targeting
+3. Resource library with category filters
+4. Newsletter composer (staff only) with Buttondown API integration
+5. Directory Team filter pill (silver, matching Team badge)
 
----
-
-## Profile Claiming
-
-When a user logs in with an unrecognized email:
-1. **IsThisYouScreen** displays potential profile matches (parsed from email name)
-2. User can claim a profile or request a new profile creation
-3. Claims go into **profile_claim_requests** table with status 'pending'
-4. Admins review in Team Management > Pending Claims section
-5. Approved claims add the email to `alternate_emails` on the target profile
-
----
-
-## Community Platform - Phase 2a Scope
-
-From GATHER_COMMUNITY_PLAN.md, Phase 2a (Broadcast) includes:
-- Stream token-minting Edge Function
-- Announcements table + RLS policies
-- Resources table + RLS policies
-- Announcements feed component
-- Newsletter composer (Buttondown API)
-- "Community" tab in navigation
+See GATHER_COMMUNITY_PLAN.md for full spec.
 
 ---
 
