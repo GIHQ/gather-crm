@@ -33,6 +33,8 @@ The main table storing all 292 Goldin Institute fellows.
 | is_active | boolean | Whether currently active in network |
 | user_id | uuid | FK → auth.users.id (linked on first login) |
 | staff_notes | text | Internal notes visible only to admins |
+| working_on | text | Fellow's current project/focus (community feature) |
+| working_on_updated_at | timestamptz | When working_on was last changed |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -119,6 +121,63 @@ Tracks requests from users to claim an existing profile when their email isn't r
 5. Admin reviews in Team Management page
 6. If approved: alternate_emails updated on target profile
 7. User can now log in and access their profile
+
+---
+
+## Community Tables
+
+### announcements
+Staff-created announcements broadcast to fellows. Supports program targeting and pinning.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| title | text | Announcement title |
+| content | text | Full announcement body |
+| author_id | uuid | FK → auth.users.id |
+| target_programs | text[] | Program filter (empty = all programs) |
+| is_pinned | boolean | Whether pinned to top of feed |
+| published_at | timestamptz | When published (null = draft) |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+### resources
+Shared documents, links, videos, and templates curated by staff.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| title | text | Resource title |
+| description | text | Brief description |
+| url | text | Link to the resource |
+| category | text | 'document', 'link', 'video', 'template' |
+| target_programs | text[] | Program filter (empty = all programs) |
+| uploaded_by | uuid | FK → auth.users.id |
+| created_at | timestamptz | |
+
+### newsletter_sends
+Tracks newsletters sent via Buttondown for audit and analytics.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| buttondown_id | text | Buttondown's email ID |
+| subject | text | Email subject line |
+| body_preview | text | First ~200 chars of body |
+| recipient_count | integer | Number of recipients |
+| target_programs | text[] | Which programs were targeted |
+| sent_by | uuid | FK → auth.users.id |
+| sent_at | timestamptz | When the email was sent |
+
+### stream_tokens
+Caches GetStream JWT tokens to avoid re-minting on every request.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| user_id | uuid | PK, FK → auth.users.id |
+| token | text | GetStream JWT token |
+| expires_at | timestamptz | Token expiration (24h from creation) |
+| created_at | timestamptz | |
 
 ---
 
@@ -229,6 +288,22 @@ All tables have RLS enabled. Key policies:
 - **focus_tags:** Public SELECT (`USING (true)`)
 - **fellow_focus_tags:** Public SELECT, authenticated can manage
 - Staff+ can manage all assignments
+
+### announcements
+- **SELECT:** Anyone can read published announcements (`published_at IS NOT NULL AND published_at <= NOW()`)
+- **ALL (staff):** Active team_members can manage all announcements
+
+### resources
+- **SELECT:** Anyone (`USING (true)`)
+- **ALL (staff):** Active team_members can manage all resources
+
+### newsletter_sends
+- **SELECT (staff):** Active team_members can view send history
+- **INSERT (staff):** Active team_members can log sends
+
+### stream_tokens
+- **SELECT (self):** Users can read only their own token (`user_id = auth.uid()`)
+- **INSERT/UPDATE:** Service role only (via Edge Function)
 
 ### user_roles
 - Super admin only for all operations

@@ -19,30 +19,26 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 ## TODO Tracker
 
 ### 🔴 Immediate (This Session / Next Session)
-- [ ] **Community Platform Phase 2a: Broadcast** — Stream token minting, announcements, newsletter
-  - [ ] Stream token-minting Edge Function
-  - [ ] Create `announcements` table + RLS policies
-  - [ ] Create `resources` table + RLS policies
-  - [ ] Build announcements feed component
-  - [ ] Build newsletter composer (Buttondown API)
-  - [ ] Add "Community" tab to navigation
+- [ ] Build Community tab UI components (announcements feed, resource library, newsletter composer)
+- [ ] Wire up Stream token minting on login
+- [ ] Diagnose news scanner (SerpAPI returning 0 results) — deferred 1 week
 
 ### 🟡 Short-Term (This Week)
-- [ ] Verify notification preferences fix deployed and working on mobile
-- [ ] Test profile claiming flow end-to-end with a test account
+- [ ] Announcements feed component (read for fellows, write for staff)
+- [ ] Resource library component (browse by category)
+- [ ] Newsletter composer in admin settings
+- [ ] Import 292 fellow emails to Buttondown as subscribers
+- [ ] Test profile claiming flow end-to-end
 
 ### 🟢 Medium-Term (This Month)
-- [ ] Diagnose news scanner (SerpAPI returning 0 results)
-- [ ] Community Platform Phase 2b: Discovery (search, recommendations, spotlights)
-- [ ] Community Platform Phase 2c: Engagement (reactions, comments, messaging)
+- [ ] Community Platform Phase 2b: Discovery
+- [ ] Community Platform Phase 2c: Engagement
 - [ ] Engagement dashboard for staff
 
 ### 🔵 Long-Term (Quarter)
-- [ ] Community Platform Phase 2d: Collaboration (projects, mentorship, resources)
+- [ ] Community Platform Phase 2d: Collaboration
 - [ ] Analytics & insights dashboard
-- [ ] Social media scanning expansion (FB, IG, Twitter, LinkedIn)
 - [ ] Multi-language support for ESP fellows
-- [ ] Code splitting when index.html exceeds 10K lines
 
 *For full feature roadmap, see `docs/ROADMAP.md`*
 
@@ -51,6 +47,9 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 ## Current State (Updated Feb 7, 2026)
 
 ### Recently Completed
+- ✅ **Community tables created** — announcements, resources, newsletter_sends, stream_tokens (migration 010)
+- ✅ **stream-token Edge Function** — mints GetStream JWT tokens for authenticated users, caches in DB
+- ✅ **fellows table extended** — added `working_on` and `working_on_updated_at` columns
 - ✅ **Staff import complete** — 11 team members in `team_members` table with bios, photos, fellowship links
 - ✅ Google OAuth login redirect fixed
 - ✅ GetStream account created, API keys stored in Supabase + Netlify
@@ -75,7 +74,7 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - ✅ ROADMAP.md created for long-term planning
 
 ### In Progress
-- **Community Platform Phase 2a** — Stream token minting, announcements, newsletter composer
+- **Community Platform Phase 2a** — backend complete, building frontend UI components next
 
 ### Known Issues
 - News scanner returns 0 results (SerpAPI key may need verification — deferred to medium-term)
@@ -105,6 +104,8 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `docs/ROADMAP.md` | Long-term feature roadmap |
 | `migrations/008_team_members.sql` | Team members table + alternate_emails |
 | `migrations/009_profile_claims.sql` | Profile claim requests table |
+| `migrations/010_community_tables.sql` | Community platform tables (announcements, resources, newsletter_sends, stream_tokens) |
+| `supabase/functions/stream-token/index.ts` | GetStream token minting Edge Function |
 
 ---
 
