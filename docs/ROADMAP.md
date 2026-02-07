@@ -2,89 +2,118 @@
 
 **Last updated:** Feb 7, 2026
 
----
-
-## Phase 1: Foundation (Core CRM + Directory) — ✅ Complete
-
-- Fellow database with 292 records across CPF, GGF, ESP
-- Google OAuth login with identity matching
-- Directory with search, filters, and focus area tags
-- Fellow profile pages with photo, bio, and contact info
-- Interaction logging (calls, emails, meetings, events)
-- Team management (11 staff with roles and permissions)
-- Profile claiming flow for unrecognized emails
-- Focus areas system (20 focus areas, 77 Chicago community areas)
-- News scanner (SerpAPI integration)
-- Mobile-first PWA with service worker
+This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO section in SESSION_HANDOFF.md.
 
 ---
 
-## Phase 2: Community Platform — 🟡 In Progress
+## Phase 1: Foundation (Current)
+*Core CRM + Directory — mostly complete*
 
-### Phase 2a: Broadcast (Weeks 1-2) — backend done, frontend next
+| Feature | Status |
+|---------|--------|
+| Fellow database (292 fellows, 3 programs) | ✅ Done |
+| Photo management | ✅ Done |
+| Focus areas system (Skills, Populations, Focus, Community) | ✅ Done |
+| Google OAuth + magic link auth | ✅ Done |
+| 6-tier permission system | ✅ Done |
+| Staff directory (team_members table, 11 staff imported) | ✅ Done |
+| Profile claiming flow | ✅ Done |
+| Self-editing profiles | ✅ Done |
+| Admin editing + staff notes | ✅ Done |
+| Interaction logging | ✅ Done |
+| News scanner (SerpAPI) | ⚠️ Returns 0 results — deferred 1 week |
 
-**Goal:** Staff can broadcast. Fellows can receive.
+---
 
-- [x] GetStream account created, API keys configured
-- [x] Buttondown account created, API key configured
-- [x] Community tables: announcements, resources, newsletter_sends, stream_tokens
-- [x] stream-token Edge Function (JWT minting + user sync)
-- [x] Fellows table extended with `working_on` field
-- [ ] Announcements feed component (read for fellows, write for staff)
-- [ ] Resource library component (browse by category)
-- [ ] Newsletter composer in admin settings (Buttondown API)
-- [ ] "Community" tab in main navigation
-- [ ] Import 292 fellow emails to Buttondown as subscribers
+## Phase 2: Community Platform
+*GetStream + Buttondown integration — next up*
+
+### Phase 2a: Broadcast (Weeks 1-2)
+| Feature | Status |
+|---------|--------|
+| Community tables (announcements, resources, newsletter_sends, stream_tokens) | 🔲 In progress |
+| Stream token-minting Edge Function | 🔲 In progress |
+| Announcements feed component | 🔲 Not started |
+| Resource library component | 🔲 Not started |
+| Newsletter composer (Buttondown) | 🔲 Not started |
+| "Community" tab in navigation | 🔲 Not started |
+| Import 292 fellow emails to Buttondown | 🔲 Not started |
 
 ### Phase 2b: Discovery (Weeks 3-4)
-
-**Goal:** Fellows can see what each other are doing.
-
-- [ ] "Currently working on" field in fellow profiles
-- [ ] Enhanced directory filters (focus area, skills, location, program)
-- [ ] Activity feed component using GetStream
-- [ ] Fellow Spotlight automation (weekly rotation)
-- [ ] Push notification support via service worker update
+| Feature | Status |
+|---------|--------|
+| Enhanced directory search & filters | 🔲 |
+| "Currently working on" field for fellows | 🔲 |
+| Fellow spotlight / featured profiles | 🔲 |
+| Activity feed (GetStream) | 🔲 |
+| Push notification support | 🔲 |
 
 ### Phase 2c: Engagement (Weeks 5-6)
-
-**Goal:** Fellows can interact with each other.
-
-- [ ] Reactions on announcements and feed posts
-- [ ] Comments on announcements
-- [ ] Direct messaging UI (1:1 conversations)
-- [ ] Program channels (CPF, GGF, ESP group chats)
-- [ ] General cross-program channel
-- [ ] Unread indicators and notification badges
-- [ ] Weekly digest email via Buttondown
+| Feature | Status |
+|---------|--------|
+| Reactions on announcements | 🔲 |
+| Comments / discussion threads | 🔲 |
+| Direct messaging (Stream Chat) | 🔲 |
+| Program channels (CPF, GGF, ESP) | 🔲 |
+| Unread indicators & notification badges | 🔲 |
+| Weekly digest email (automated) | 🔲 |
 
 ### Phase 2d: Collaboration (Month 2+)
-
-**Goal:** Deepen connections beyond chat.
-
-- [ ] Interest-based channels (auto-created from popular focus areas)
-- [ ] Project board (post, browse, connect)
-- [ ] Event calendar with RSVP
-- [ ] Mentorship opt-in and matching
-- [ ] Job/opportunity board
+| Feature | Status |
+|---------|--------|
+| Interest-based channels | 🔲 |
+| Project board | 🔲 |
+| Mentorship matching | 🔲 |
+| Event calendar with RSVP | 🔲 |
+| Job/opportunity board | 🔲 |
 
 ---
 
 ## Phase 3: Analytics & Insights
+*Data-driven engagement tracking*
 
-- [ ] Engagement dashboard for staff (MAU, message volume, feed activity)
-- [ ] Newsletter analytics (open rates, click rates via Buttondown)
-- [ ] Fellow activity reports (who's active, who's gone quiet)
-- [ ] Annual engagement report for Goldin Institute
-- [ ] Directory search analytics
+| Feature | Status |
+|---------|--------|
+| Engagement dashboard (staff view) | 🔲 |
+| Fellow activity scoring | 🔲 |
+| Outreach priority suggestions | 🔲 |
+| Program health metrics | 🔲 |
+| Export / reporting tools | 🔲 |
 
 ---
 
 ## Phase 4: Scale & Polish
+*Production hardening*
 
-- [ ] Code splitting when index.html exceeds 10K lines
-- [ ] Multi-language support for ESP fellows
-- [ ] Social media scanning expansion (FB, IG, Twitter, LinkedIn)
-- [ ] Performance optimization and caching
-- [ ] Accessibility audit and improvements
-- [ ] Automated testing suite
+| Feature | Status |
+|---------|--------|
+| Social media scanning (FB, IG, Twitter, LinkedIn) | 🔲 |
+| Multi-language support (Spanish for ESP fellows) | 🔲 |
+| Offline/PWA caching improvements | 🔲 |
+| Performance optimization | 🔲 |
+| Split index.html into modules (at 10K+ lines) | 🔲 |
+| Automated testing | 🔲 |
+
+---
+
+## Architecture Decisions Log
+
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| Jan 2026 | Single HTML file | Simplicity for small team, appropriate at current scale |
+| Jan 2026 | Supabase over Firebase | Better Postgres features, RLS, Edge Functions |
+| Feb 2026 | GetStream for community | Real-time feeds without building from scratch |
+| Feb 2026 | Buttondown for email | Simple API, good for newsletters at this volume |
+| Feb 2026 | Lurker-first architecture | 30-50% active engagement realistic; design for passive consumption |
+
+---
+
+## Cost Projection
+
+| Service | Tier | Monthly Cost | Notes |
+|---------|------|-------------|-------|
+| GetStream | Maker (free) | $0 | <5 team members, <$10K revenue |
+| Buttondown | Basic | $9/mo | 292 subscribers (free tier is 100) |
+| Supabase | Free | $0 | Already using |
+| Netlify | Free | $0 | Already using |
+| **Total** | | **$9/mo** | Check if nonprofit discount applies |
