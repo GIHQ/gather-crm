@@ -263,7 +263,8 @@ serve(async (req) => {
     let query = supabase
       .from("fellows")
       .select("id, first_name, last_name, organization, city")
-      .eq("status", "Alumni");
+      .eq("status", "Alumni")
+      .order("last_news_search", { ascending: true, nullsFirst: true });
 
     if (specificFellowId) {
       query = query.eq("id", specificFellowId);
