@@ -16,13 +16,16 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 
 ---
 
-## Current State (Updated Feb 7, 2026)
+## Current State (Updated Feb 10, 2026)
 
 ### Recently Completed
-- Custom search terms for news scanner (stored in `app_settings` table, admin-editable)
-- Removed quick scan option — all scans now search all fellows (non-Travis still 3/day limit)
+- **News scanner fully working** — scans all 292 fellows in batches of 5, across Google News, LinkedIn, Twitter, Facebook, Instagram
+- Custom search terms for news scanner (stored in `app_settings` table, admin-editable orange chips)
+- Removed quick scan option — single "Scan All Fellows" button (non-Travis still 3/day limit)
+- Edge Function auth fixed: uses anon key (HS256) instead of session JWT (ES256 was rejected)
+- `is_admin()` SECURITY DEFINER function created to prevent RLS infinite recursion on team_members
+- `app_settings` table created with proper RLS (`auth.uid() IS NOT NULL` for SELECT)
 - AI-powered focus area assignment script for fellows missing tags (`scripts/assign-focus-areas.js`)
-- `app_settings` table created for shared key-value configuration
 - Google OAuth login redirect fixed
 - GetStream account created, API keys stored in Supabase + Netlify
 - Buttondown account created, API key stored in Supabase
@@ -50,7 +53,10 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - Community tab wireframe ready; frontend build waiting on backend
 
 ### Known Issues
-- News scanner: custom search terms now supplement fellow name searches; `app_settings` migration (012) must be run in Supabase
+- News scanner Edge Function must be deployed via Supabase dashboard (user does not have CLI) — current version is live and working
+- Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment
+- `DATABASE_SCHEMA.md` column names don't match actual DB (e.g., `status` not `is_active`, `biography` not `bio`, `job_title` not `title`, `cohort` not `cohort_year`)
+- AI focus area script (`scripts/assign-focus-areas.js`) needs env vars to run — not yet executed
 
 ---
 
@@ -82,6 +88,27 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - [ ] Mentorship matching
 - [ ] Analytics dashboard
 - [ ] Multi-language support
+
+---
+
+## Critical Technical Notes
+
+### Edge Function Deployment
+- User (Travis) deploys Edge Functions via **Supabase dashboard** (no CLI installed)
+- After deploying, must toggle **JWT Verification OFF** in Edge Function settings
+- Edge Function uses `SUPABASE_ANON_KEY` (HS256) for auth — ES256 session JWTs are rejected by gateway
+- News scanner processes fellows in **batches of 5** from the frontend to avoid compute/timeout limits
+
+### RLS Patterns
+- Use `auth.uid() IS NOT NULL` for authenticated checks (NOT `auth.role() = 'authenticated'`)
+- Use `is_admin()` SECURITY DEFINER function when checking team_members roles (avoids infinite recursion)
+- The `is_admin()` function is used by both `app_settings` and `team_members` policies
+
+### Database Schema vs Docs
+The `DATABASE_SCHEMA.md` has inaccurate column names. Actual fellows columns:
+- `status` (not `is_active`) — all 292 have status = 'Alumni'
+- `biography` (not `bio`), `job_title` (not `title`), `cohort` (not `cohort_year`)
+- No `fellow_id` column exists
 
 ---
 
