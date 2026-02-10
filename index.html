@@ -4912,45 +4912,69 @@ function SettingsPage({ onNavigate }) {
     if (!isTravis && !canScanMore) return;
 
     setScanning(true);
-    setScanResults(null);
+    setScanResults({ scanned: 0, found: 0, total: fellows.length, inProgress: true });
 
     try {
-      // Call the Supabase Edge Function for news search
-      // All scans now search all fellows
-      const maxFellows = fellows.length;
+      // Process fellows in batches of 20 to avoid Edge Function compute limits
+      const BATCH_SIZE = 20;
+      const totalFellows = fellows.length;
+      let totalScanned = 0;
+      let totalFound = 0;
 
-      const { data: session } = await supabase.auth.getSession();
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/search-news`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-        },
-        body: JSON.stringify({ max_fellows: maxFellows, platforms: selectedPlatforms, customTerms: customSearchTerms })
-      });
+      for (let offset = 0; offset < totalFellows; offset += BATCH_SIZE) {
+        const batchSize = Math.min(BATCH_SIZE, totalFellows - offset);
 
-      const result = await response.json();
-
-      if (result.error) {
-        console.error('News scan error:', result.error);
-        setScanResults({ scanned: 0, found: 0, inProgress: false, error: result.error });
-      } else {
-        const totalFound = result.results?.reduce((sum, r) => sum + r.activitiesFound, 0) || 0;
-        setScanResults({
-          scanned: result.fellowsSearched || 0,
-          found: totalFound,
-          inProgress: false
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/search-news`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({
+            max_fellows: batchSize,
+            platforms: selectedPlatforms,
+            customTerms: customSearchTerms
+          })
         });
 
-        // Increment scan count for non-Travis users
-        if (!isTravis) {
-          incrementScanCount();
-          setDailyScanCount(getDailyScanCount() + 1);
+        const result = await response.json();
+
+        if (result.error || result.code) {
+          console.error('News scan batch error:', result.error || result.message);
+          // Continue to next batch instead of stopping completely
+          totalScanned += batchSize;
+        } else {
+          const batchFound = result.results?.reduce((sum, r) => sum + r.activitiesFound, 0) || 0;
+          totalScanned += result.fellowsSearched || batchSize;
+          totalFound += batchFound;
         }
 
-        // Update last scan date and dismiss reminder
-        setLastScanDate();
-        setShowScanReminder(false);
+        // Update progress after each batch
+        setScanResults({
+          scanned: totalScanned,
+          found: totalFound,
+          total: totalFellows,
+          inProgress: offset + BATCH_SIZE < totalFellows
+        });
+      }
+
+      // Final results
+      setScanResults({
+        scanned: totalScanned,
+        found: totalFound,
+        total: totalFellows,
+        inProgress: false
+      });
+
+      // Increment scan count for non-Travis users
+      if (!isTravis) {
+        incrementScanCount();
+        setDailyScanCount(getDailyScanCount() + 1);
+      }
+
+      // Update last scan date and dismiss reminder
+      setLastScanDate();
+      setShowScanReminder(false);
       }
     } catch (err) {
       console.error('News scan failed:', err);
