@@ -25,7 +25,8 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - Edge Function auth fixed: uses anon key (HS256) instead of session JWT (ES256 was rejected)
 - `is_admin()` SECURITY DEFINER function created to prevent RLS infinite recursion on team_members
 - `app_settings` table created with proper RLS (`auth.uid() IS NOT NULL` for SELECT)
-- AI-powered focus area assignment script for fellows missing tags (`scripts/assign-focus-areas.js`)
+- **Focus area tags assigned to 274/292 fellows** (94% coverage) via SQL keyword matching
+- AI focus area assignment script (`scripts/assign-focus-areas.js`) and SQL alternative (`scripts/assign-focus-areas.sql`)
 - Google OAuth login redirect fixed
 - GetStream account created, API keys stored in Supabase + Netlify
 - Buttondown account created, API key stored in Supabase
@@ -55,8 +56,8 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 ### Known Issues
 - News scanner Edge Function must be deployed via Supabase dashboard (user does not have CLI) — current version is live and working
 - Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment
-- `DATABASE_SCHEMA.md` column names don't match actual DB (e.g., `status` not `is_active`, `biography` not `bio`, `job_title` not `title`, `cohort` not `cohort_year`)
-- AI focus area script (`scripts/assign-focus-areas.js`) needs env vars to run — not yet executed
+- News scanner processed ~75-90 of 292 fellows before Edge Function timeout; can be re-run to pick up remaining
+- 18 fellows still missing focus area tags (sparse bios, no keyword matches) — can be assigned manually
 
 ---
 
@@ -137,7 +138,8 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `migrations/009_profile_claims.sql` | Profile claim requests table |
 | `migrations/011_team_import.sql` | 11 staff members imported |
 | `migrations/012_app_settings.sql` | App settings key-value table |
-| `scripts/assign-focus-areas.js` | AI-powered focus area assignment for fellows |
+| `scripts/assign-focus-areas.js` | AI-powered focus area assignment (Node.js, needs API keys) |
+| `scripts/assign-focus-areas.sql` | SQL keyword-based focus area assignment (paste into Supabase SQL editor) |
 
 ---
 
