@@ -15,28 +15,43 @@ The main table storing all 292 Goldin Institute fellows.
 | Column | Type | Description |
 |--------|------|-------------|
 | id | uuid | Primary key |
-| fellow_id | text | Human-readable ID (P001-P292) |
 | first_name | text | |
 | last_name | text | |
 | email | text | Primary contact email |
+| work_email | text | Work email address |
 | alternate_emails | text[] | Additional email addresses for identity matching |
 | phone | text | Phone number |
 | program | text | CPF, GGF, or ESP |
-| cohort_year | integer | Year they joined (2019-2024) |
+| cohort | text | Cohort identifier (e.g., "2019", "2024") |
 | city | text | Current city |
 | country | text | Country of residence |
+| region | text | Geographic region |
+| sub_region | text | Sub-region |
+| community_area | text | Chicago community area (CPF fellows) |
 | organization | text | Current employer/org |
-| title | text | Job title |
-| bio | text | Biography/description |
+| job_title | text | Job title |
+| biography | text | Biography/description |
 | photo_url | text | URL to photo in Supabase Storage |
 | linkedin_url | text | LinkedIn profile |
-| is_active | boolean | Whether currently active in network |
+| linkedin_org | text | Organization LinkedIn |
+| twitter_org | text | Organization Twitter |
+| instagram_org | text | Organization Instagram |
+| facebook_org | text | Organization Facebook |
+| website_org | text | Organization website |
+| languages | text | Languages spoken |
+| focus_area_1 | text | Primary focus area (free text) |
+| focus_area_2 | text | Secondary focus area (free text) |
+| focus_area_3 | text | Tertiary focus area (free text) |
+| status | text | Fellow status — all 292 have status = 'Alumni' |
 | user_id | uuid | FK → auth.users.id (linked on first login) |
 | staff_notes | text | Internal notes visible only to admins |
 | working_on | text | Fellow's current project/focus (community feature) |
 | working_on_updated_at | timestamptz | When working_on was last changed |
+| last_news_search | timestamptz | When fellow was last included in news scan |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
+
+> **Note:** Earlier versions of this doc listed incorrect column names (`is_active`, `bio`, `title`, `cohort_year`, `fellow_id`). The columns above reflect the actual database schema as of Feb 2026.
 
 ### interactions
 Logs all touchpoints between staff and fellows.
@@ -212,7 +227,7 @@ The four main groupings for fellow expertise.
 | display_order | integer | Sort order in UI |
 
 ### focus_tags
-Individual tags within each category (20 focus areas, 77 community areas, etc.).
+Individual tags within each category (44 focus areas, 77 community areas, etc.).
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -237,29 +252,55 @@ Junction table linking fellows to their tags.
 
 ## Focus Area Reference
 
-### Focus Areas (FA001-FA020)
-| Code | Name | Emoji |
-|------|------|-------|
-| FA001 | Peacebuilding & Conflict Resolution | 🕊️ |
-| FA002 | Youth Development & Mentorship | 👥 |
-| FA003 | Violence Prevention & Intervention | 🛡️ |
-| FA004 | Community Organizing & Civic Engagement | 📢 |
-| FA005 | Education & Academic Support | 📚 |
-| FA006 | Arts, Culture & Creative Expression | 🎨 |
-| FA007 | Economic Empowerment & Workforce Dev | 💼 |
-| FA008 | Mental Health & Wellness | 🧠 |
-| FA009 | Trauma-Informed Care & Healing | 💚 |
-| FA010 | Restorative Justice & Reentry | ⚖️ |
-| FA011 | Public Health & Health Equity | 🏥 |
-| FA012 | Environmental Justice & Sustainability | 🌱 |
-| FA013 | Housing & Urban Development | 🏘️ |
-| FA014 | Food Security & Nutrition | 🍎 |
-| FA015 | Immigration & Refugee Services | 🌍 |
-| FA016 | Gender Equity & Women's Empowerment | ♀️ |
-| FA017 | LGBTQ+ Advocacy & Support | 🏳️‍🌈 |
-| FA018 | Policy & Advocacy | 📋 |
-| FA019 | Media, Communications & Storytelling | 📱 |
-| FA020 | Interfaith Dialogue & Spiritual Wellness | 🙏 |
+### Focus Areas (44 tags)
+| Name |
+|------|
+| Arts & Culture |
+| Arts, Culture & Media |
+| Child Protection & Rights |
+| Civic Engagement |
+| Climate Action |
+| Climate Action & Environmental Justice |
+| Community Building |
+| Community Development & Empowerment |
+| Criminal Justice Reform & Reentry |
+| Economic Development |
+| Economic Development & Entrepreneurship |
+| Education |
+| Education & Academic Support |
+| Environmental Justice |
+| Food Security |
+| Gender Equality |
+| Gender Justice & Womens Empowerment |
+| Health & Disability Justice |
+| Health/Wellness |
+| Housing |
+| Human Rights |
+| Human Rights & Advocacy |
+| Humanitarian Aid & Disaster Response |
+| Immigration Services |
+| Indigenous Rights & Cultural Preservation |
+| Interfaith Dialogue & Spiritual Wellness |
+| Legal Services |
+| LGBTQ+ Rights & Inclusion |
+| Mental Health |
+| Mental Health & Trauma Support |
+| Migration & Refugee Support |
+| Peacebuilding |
+| Peacebuilding & Conflict Resolution |
+| Public Safety |
+| Racial Justice |
+| Social Enterprise |
+| Social Justice & Racial Equity |
+| Substance Abuse |
+| Technology Access |
+| Violence Prevention |
+| Violence Prevention & Survivor Support |
+| Workforce Development |
+| Youth Development |
+| Youth Development & Leadership |
+
+As of Feb 2026, **274 of 292 fellows** have focus area tags assigned (1-4 per fellow).
 
 ### Community Areas (Chicago - CPF only)
 77 Chicago neighborhoods. See full list in `migrations/seed_community_areas.sql`.
@@ -332,17 +373,21 @@ All tables have RLS enabled. Key policies:
 
 ### Fellows missing focus areas
 ```sql
-SELECT f.fellow_id, f.first_name, f.last_name, f.program
+SELECT f.first_name, f.last_name, f.program
 FROM fellows f
-LEFT JOIN fellow_focus_tags fft ON f.id = fft.fellow_id
-WHERE fft.id IS NULL
-ORDER BY f.program, f.fellow_id;
+WHERE f.status = 'Alumni'
+AND NOT EXISTS (
+  SELECT 1 FROM fellow_focus_tags fft
+  JOIN focus_tags ft ON fft.tag_id = ft.id
+  JOIN focus_categories fc ON ft.category_id = fc.id
+  WHERE fft.fellow_id = f.id AND fc.slug = 'focus-areas'
+)
+ORDER BY f.program, f.last_name;
 ```
 
 ### Interaction counts by fellow
 ```sql
-SELECT 
-  f.fellow_id,
+SELECT
   f.first_name || ' ' || f.last_name as name,
   f.program,
   COUNT(i.id) as interaction_count,
