@@ -16,42 +16,35 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 
 ---
 
-## Current State (Updated Feb 10, 2026)
+## Current State (Updated Feb 10, 2026 - Evening)
 
 ### Recently Completed
-- **News scanner fully working** — scans all 292 fellows in batches of 5, across Google News, LinkedIn, Twitter, Facebook, Instagram
-- Custom search terms for news scanner (stored in `app_settings` table, admin-editable orange chips)
-- Removed quick scan option — single "Scan All Fellows" button (non-Travis still 3/day limit)
-- Edge Function auth fixed: uses anon key (HS256) instead of session JWT (ES256 was rejected)
-- `is_admin()` SECURITY DEFINER function created to prevent RLS infinite recursion on team_members
-- `app_settings` table created with proper RLS (`auth.uid() IS NOT NULL` for SELECT)
-- **Focus area tags assigned to 274/292 fellows** (94% coverage) via SQL keyword matching
-- AI focus area assignment script (`scripts/assign-focus-areas.js`) and SQL alternative (`scripts/assign-focus-areas.sql`)
-- Google OAuth login redirect fixed
+- **Community Platform Phase 2a COMPLETE:**
+  - Community tables created: `announcements`, `resources`, `newsletter_sends`, `stream_tokens`
+  - `stream-token` Edge Function deployed (mints GetStream JWTs, caches 24hr)
+  - `working_on` field added to fellows table
+  - Community page built with Feed / Resources / Newsletter tabs
+  - Staff can post announcements and add resources
+  - Newsletter tab logs sends (Buttondown API integration pending)
+- Auth session persistence fixed (explicit Supabase auth options with `storageKey: 'gather-auth'`)
+- Translation system secured (requires auth token, JWT verification ON for translate Edge Function)
+- Notification settings UI fixed: toggle contrast + overflow on mobile
+- **News scanner fully working** — scans all 292 fellows in batches of 5
+- Custom search terms for news scanner (stored in `app_settings` table)
+- `is_admin()` SECURITY DEFINER function created
+- **Focus area tags assigned to 274/292 fellows** (94% coverage)
 - GetStream account created, API keys stored in Supabase + Netlify
 - Buttondown account created, API key stored in Supabase
-- Full Community Platform plan created (see GATHER_COMMUNITY_PLAN.md)
 - All 292 fellow photos uploaded and linked
 - Focus Areas system working (Skills, Populations, Focus Areas, Community Areas)
-- Notification settings UI fixed: toggle contrast on enabled cards + flex layout overflow on mobile
-- Component index comment block in index.html
-- Team Management page added (admin+ can manage staff accounts)
-- team_members table created with RLS policies
+- Team Management page (admin+ can manage staff accounts)
 - **11 team members imported** with full bios, photos, fellowship links
-- Directory updated to show Team members with silver "Team" badge
-- Auth flow checks alternate_emails for both team_members and fellows
-- My Profile page supports both fellows and team members
-- Self-editing profile (phone, bio, LinkedIn, etc.) - name/email read-only
-- Admin edit button on FellowProfileModal with full field access + staff notes
-- Multiple badges for staff with fellowships (Team badge + program badges)
-- Profile claiming flow with "Is This You?" screen
-- Claim approval queue in Team Management page for admins
-- RLS fixes: Directory visible to all, focus tables publicly readable
-- Community tab wireframe designed (Feed, Resources, Newsletter, Directory with Team filter)
+- Directory shows Team members with silver "Team" badge
+- Profile claiming flow with approval queue
+- Self-editing profiles + admin editing with staff notes
 
 ### In Progress
-- **Community Platform Phase 2a** — Backend tables and Edge Functions not yet created
-- Community tab wireframe ready; frontend build waiting on backend
+- **Community Platform Phase 2b** — Discovery features (activity feed, enhanced search, fellow spotlight)
 
 ### Known Issues
 - News scanner Edge Function must be deployed via Supabase dashboard (user does not have CLI) — current version is live and working
@@ -64,31 +57,28 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 ## TODO Tracker
 
 ### 🔴 Immediate (This Week)
-- [ ] Create community tables in Supabase (announcements, resources, newsletter_sends, stream_tokens)
-- [ ] Create stream-token Edge Function
-- [ ] Build Community tab components in index.html (based on wireframe)
+- [x] Create community tables in Supabase ✅
+- [x] Create stream-token Edge Function ✅
+- [x] Build Community tab components ✅
 - [ ] Import 292 fellow emails to Buttondown
-
-### 🟡 Short-Term (Next 2 Weeks)
-- [ ] Wire announcements feed to Supabase
-- [ ] Wire newsletter composer to Buttondown API
-- [ ] Add "working_on" field to fellows table
-- [ ] Test end-to-end announcement posting
+- [ ] Wire newsletter composer to Buttondown API (create Edge Function)
 - [ ] Test end-to-end newsletter sending
 
-### 🟢 Medium-Term (This Month)
+### 🟡 Short-Term (Next 2 Weeks)
 - [ ] GetStream activity feed integration
-- [ ] Enhanced directory search & filters (live in app)
-- [ ] Push notification support
+- [ ] Enhanced directory search & filters
 - [ ] Fellow spotlight feature
+- [ ] Push notification support (see ROADMAP.md for implementation notes)
+
+### 🟢 Medium-Term (This Month)
 - [ ] Weekly digest email (automated)
+- [ ] Reactions/comments on announcements
+- [ ] Direct messaging (Stream Chat)
 
 ### 🔵 Long-Term (See ROADMAP.md)
-- [ ] Direct messaging (Stream Chat)
 - [ ] Program-specific channels
 - [ ] Mentorship matching
 - [ ] Analytics dashboard
-- [ ] Multi-language support
 
 ---
 
@@ -96,8 +86,10 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 
 ### Edge Function Deployment
 - User (Travis) deploys Edge Functions via **Supabase dashboard** (no CLI installed)
-- After deploying, must toggle **JWT Verification OFF** in Edge Function settings
-- Edge Function uses `SUPABASE_ANON_KEY` (HS256) for auth — ES256 session JWTs are rejected by gateway
+- JWT Verification settings per function:
+  - `search-news`: OFF (uses anon key)
+  - `stream-token`: OFF (uses anon key, validates auth internally)
+  - `translate`: **ON** (requires user auth token for security)
 - News scanner processes fellows in **batches of 5** from the frontend to avoid compute/timeout limits
 
 ### RLS Patterns
@@ -177,19 +169,19 @@ Team members (Goldin Institute staff) are stored in the `team_members` table:
 
 ## Community Platform — Next Steps
 
-Phase 2a (Broadcast) is next. Backend needs:
-1. Four new tables: announcements, resources, newsletter_sends, stream_tokens
-2. Stream token-minting Edge Function (GetStream JWT, 24hr cache)
-3. RLS policies for all new tables
+**Phase 2a (Broadcast) — COMPLETE:**
+- ✅ Community tables created with RLS
+- ✅ stream-token Edge Function deployed
+- ✅ Community page with Feed / Resources / Newsletter tabs
+- ⏳ Buttondown API integration for newsletter sending (Edge Function needed)
 
-Frontend needs (wireframe complete):
-1. Community tab with Feed / Resources / Newsletter sub-tabs
-2. Announcements feed with reactions, pinned posts, program targeting
-3. Resource library with category filters
-4. Newsletter composer (staff only) with Buttondown API integration
-5. Directory Team filter pill (silver, matching Team badge)
+**Phase 2b (Discovery) — UP NEXT:**
+1. GetStream activity feed integration
+2. Enhanced directory search & filters
+3. Fellow spotlight / featured profiles
+4. Push notification support
 
-See GATHER_COMMUNITY_PLAN.md for full spec.
+See GATHER_COMMUNITY_PLAN.md and ROADMAP.md for full specs.
 
 ---
 
