@@ -257,11 +257,18 @@ async function batchTranslate(texts, targetLang) {
 
   if (uncached.length > 0) {
     try {
+      // Get auth token for authenticated request
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = { 'Content-Type': 'application/json' };
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
       const response = await fetch(
         `${SUPABASE_URL}/functions/v1/translate`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ texts: uncached, targetLang: targetLang, sourceLang: 'en' })
         }
       );
