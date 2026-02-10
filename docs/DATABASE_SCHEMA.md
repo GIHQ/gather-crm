@@ -364,6 +364,10 @@ All tables have RLS enabled. Key policies:
 - **SELECT (self):** Users can read only their own token (`user_id = auth.uid()`)
 - **INSERT/UPDATE:** Service role only (via Edge Function)
 
+### activities
+- **SELECT:** Anyone can view non-dismissed or verified activities
+- **ALL (staff):** Staff (`@goldininstitute.org` / `@chicagopeacefellows.org`) can manage all activities
+
 ### user_roles
 - Super admin only for all operations
 
