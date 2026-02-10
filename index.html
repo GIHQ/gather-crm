@@ -140,6 +140,7 @@ const { useState, useEffect, useMemo, useCallback, useRef, createContext, useCon
 //   CohortCommunicationPage - Cohort messaging tools
 //   SettingsPage            - User settings and preferences
 //   TeamManagementPage      - Admin page for managing staff accounts
+//   CommunityPage           - Community hub with announcements, resources, newsletter
 //
 // MODALS:
 //   FellowProfileModal      - Detailed fellow profile view
@@ -1949,6 +1950,7 @@ function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '🏠', minRole: ROLES.TEAM },
     { id: 'directory', label: 'Directory', icon: '👥' }, // Public
+    { id: 'community', label: 'Community', icon: '🌐' }, // Public
     { id: 'search', label: 'Search', icon: '🔍' }, // Public
     { id: 'activity', label: 'Activity', icon: '📋', minRole: ROLES.TEAM },
     { id: 'cohort-comm', label: 'Cohort Communication', icon: '📧', minRole: ROLES.TEAM },
@@ -6531,6 +6533,504 @@ function TeamManagementPage({ onBack }) {
 }
 
 // ============================================
+// COMMUNITY PAGE
+// ============================================
+function CommunityPage() {
+  const { user, canAccess } = useContext(AppContext);
+  const isStaff = canAccess(ROLES.TEAM);
+  const [activeTab, setActiveTab] = useState('feed');
+
+  // Announcements state
+  const [announcements, setAnnouncements] = useState([]);
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
+  const [showNewAnnouncement, setShowNewAnnouncement] = useState(false);
+  const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', is_pinned: false });
+  const [savingAnnouncement, setSavingAnnouncement] = useState(false);
+
+  // Resources state
+  const [resources, setResources] = useState([]);
+  const [loadingResources, setLoadingResources] = useState(true);
+  const [resourceFilter, setResourceFilter] = useState('all');
+  const [showNewResource, setShowNewResource] = useState(false);
+  const [newResource, setNewResource] = useState({ title: '', description: '', url: '', category: 'link' });
+  const [savingResource, setSavingResource] = useState(false);
+
+  // Newsletter state
+  const [newsletterSubject, setNewsletterSubject] = useState('');
+  const [newsletterBody, setNewsletterBody] = useState('');
+  const [sendingNewsletter, setSendingNewsletter] = useState(false);
+  const [newsletterHistory, setNewsletterHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  // Fetch announcements
+  useEffect(() => {
+    const fetchAnnouncements = async () => {
+      setLoadingAnnouncements(true);
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .lte('published_at', new Date().toISOString())
+        .order('is_pinned', { ascending: false })
+        .order('published_at', { ascending: false });
+
+      if (!error && data) {
+        setAnnouncements(data);
+      }
+      setLoadingAnnouncements(false);
+    };
+    fetchAnnouncements();
+  }, []);
+
+  // Fetch resources
+  useEffect(() => {
+    const fetchResources = async () => {
+      setLoadingResources(true);
+      const { data, error } = await supabase
+        .from('resources')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setResources(data);
+      }
+      setLoadingResources(false);
+    };
+    fetchResources();
+  }, []);
+
+  // Fetch newsletter history (staff only)
+  useEffect(() => {
+    if (!isStaff) return;
+    const fetchHistory = async () => {
+      setLoadingHistory(true);
+      const { data, error } = await supabase
+        .from('newsletter_sends')
+        .select('*')
+        .order('sent_at', { ascending: false })
+        .limit(10);
+
+      if (!error && data) {
+        setNewsletterHistory(data);
+      }
+      setLoadingHistory(false);
+    };
+    fetchHistory();
+  }, [isStaff]);
+
+  // Create announcement
+  const handleCreateAnnouncement = async () => {
+    if (!newAnnouncement.title.trim() || !newAnnouncement.content.trim()) return;
+    setSavingAnnouncement(true);
+
+    const { data, error } = await supabase
+      .from('announcements')
+      .insert({
+        title: newAnnouncement.title,
+        content: newAnnouncement.content,
+        is_pinned: newAnnouncement.is_pinned,
+        author_id: user?.id,
+        published_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setAnnouncements(prev => [data, ...prev]);
+      setNewAnnouncement({ title: '', content: '', is_pinned: false });
+      setShowNewAnnouncement(false);
+    } else {
+      alert('Error creating announcement: ' + (error?.message || 'Unknown error'));
+    }
+    setSavingAnnouncement(false);
+  };
+
+  // Create resource
+  const handleCreateResource = async () => {
+    if (!newResource.title.trim() || !newResource.url.trim()) return;
+    setSavingResource(true);
+
+    const { data, error } = await supabase
+      .from('resources')
+      .insert({
+        title: newResource.title,
+        description: newResource.description,
+        url: newResource.url,
+        category: newResource.category,
+        uploaded_by: user?.id,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setResources(prev => [data, ...prev]);
+      setNewResource({ title: '', description: '', url: '', category: 'link' });
+      setShowNewResource(false);
+    } else {
+      alert('Error creating resource: ' + (error?.message || 'Unknown error'));
+    }
+    setSavingResource(false);
+  };
+
+  // Send newsletter (placeholder - needs Buttondown Edge Function)
+  const handleSendNewsletter = async () => {
+    if (!newsletterSubject.trim() || !newsletterBody.trim()) return;
+    setSendingNewsletter(true);
+
+    // For now, just log it to newsletter_sends table
+    // Full Buttondown integration would call an Edge Function
+    const { data, error } = await supabase
+      .from('newsletter_sends')
+      .insert({
+        subject: newsletterSubject,
+        body_preview: newsletterBody.substring(0, 200),
+        sent_by: user?.id,
+        recipient_count: 292, // placeholder
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setNewsletterHistory(prev => [data, ...prev]);
+      setNewsletterSubject('');
+      setNewsletterBody('');
+      alert('Newsletter logged! Note: Full Buttondown sending not yet implemented.');
+    } else {
+      alert('Error: ' + (error?.message || 'Unknown error'));
+    }
+    setSendingNewsletter(false);
+  };
+
+  const filteredResources = resourceFilter === 'all'
+    ? resources
+    : resources.filter(r => r.category === resourceFilter);
+
+  const resourceCategories = [
+    { id: 'all', label: 'All', icon: '📁' },
+    { id: 'document', label: 'Docs', icon: '📄' },
+    { id: 'link', label: 'Links', icon: '🔗' },
+    { id: 'video', label: 'Videos', icon: '🎬' },
+    { id: 'template', label: 'Templates', icon: '📋' },
+  ];
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-200 sticky top-16 z-10">
+        <div className="flex">
+          <button
+            onClick={() => setActiveTab('feed')}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
+              activeTab === 'feed'
+                ? 'text-orange-600 border-orange-500'
+                : 'text-gray-500 border-transparent'
+            }`}
+          >
+            📢 Feed
+          </button>
+          <button
+            onClick={() => setActiveTab('resources')}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
+              activeTab === 'resources'
+                ? 'text-orange-600 border-orange-500'
+                : 'text-gray-500 border-transparent'
+            }`}
+          >
+            📚 Resources
+          </button>
+          {isStaff && (
+            <button
+              onClick={() => setActiveTab('newsletter')}
+              className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
+                activeTab === 'newsletter'
+                  ? 'text-orange-600 border-orange-500'
+                  : 'text-gray-500 border-transparent'
+              }`}
+            >
+              ✉️ Newsletter
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4">
+        {/* FEED TAB */}
+        {activeTab === 'feed' && (
+          <div className="space-y-4">
+            {/* New Announcement Button (Staff only) */}
+            {isStaff && !showNewAnnouncement && (
+              <button
+                onClick={() => setShowNewAnnouncement(true)}
+                className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold"
+              >
+                + New Announcement
+              </button>
+            )}
+
+            {/* New Announcement Form */}
+            {isStaff && showNewAnnouncement && (
+              <div className="bg-white rounded-xl p-4 border border-gray-200 space-y-3">
+                <input
+                  type="text"
+                  placeholder="Announcement title..."
+                  value={newAnnouncement.title}
+                  onChange={(e) => setNewAnnouncement(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                />
+                <textarea
+                  placeholder="What would you like to share?"
+                  value={newAnnouncement.content}
+                  onChange={(e) => setNewAnnouncement(prev => ({ ...prev, content: e.target.value }))}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 resize-none"
+                />
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={newAnnouncement.is_pinned}
+                    onChange={(e) => setNewAnnouncement(prev => ({ ...prev, is_pinned: e.target.checked }))}
+                    className="w-4 h-4 text-orange-500"
+                  />
+                  <span className="text-sm text-gray-600">Pin this announcement</span>
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowNewAnnouncement(false)}
+                    className="flex-1 py-2 border border-gray-200 rounded-lg text-gray-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateAnnouncement}
+                    disabled={savingAnnouncement || !newAnnouncement.title.trim() || !newAnnouncement.content.trim()}
+                    className="flex-1 py-2 bg-orange-500 text-white rounded-lg font-semibold disabled:opacity-50"
+                  >
+                    {savingAnnouncement ? 'Posting...' : 'Post'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Announcements List */}
+            {loadingAnnouncements ? (
+              <div className="text-center py-8 text-gray-500">Loading announcements...</div>
+            ) : announcements.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-4xl mb-2">📢</p>
+                <p>No announcements yet</p>
+              </div>
+            ) : (
+              announcements.map(announcement => (
+                <div
+                  key={announcement.id}
+                  className={`bg-white rounded-xl p-4 border ${
+                    announcement.is_pinned ? 'border-orange-300 bg-orange-50' : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    {announcement.is_pinned && (
+                      <span className="text-orange-500">📌</span>
+                    )}
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900">{announcement.title}</h3>
+                      <p className="text-gray-600 mt-1 whitespace-pre-wrap">{announcement.content}</p>
+                      <p className="text-xs text-gray-400 mt-2">{formatDate(announcement.published_at)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* RESOURCES TAB */}
+        {activeTab === 'resources' && (
+          <div className="space-y-4">
+            {/* Category Filter */}
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {resourceCategories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setResourceFilter(cat.id)}
+                  className={`flex items-center gap-1 px-3 py-2 rounded-full text-sm whitespace-nowrap transition ${
+                    resourceFilter === cat.id
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-white text-gray-600 border border-gray-200'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* New Resource Button (Staff only) */}
+            {isStaff && !showNewResource && (
+              <button
+                onClick={() => setShowNewResource(true)}
+                className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold"
+              >
+                + Add Resource
+              </button>
+            )}
+
+            {/* New Resource Form */}
+            {isStaff && showNewResource && (
+              <div className="bg-white rounded-xl p-4 border border-gray-200 space-y-3">
+                <input
+                  type="text"
+                  placeholder="Resource title..."
+                  value={newResource.title}
+                  onChange={(e) => setNewResource(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                />
+                <input
+                  type="url"
+                  placeholder="URL (https://...)"
+                  value={newResource.url}
+                  onChange={(e) => setNewResource(prev => ({ ...prev, url: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                />
+                <textarea
+                  placeholder="Description (optional)"
+                  value={newResource.description}
+                  onChange={(e) => setNewResource(prev => ({ ...prev, description: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 resize-none"
+                />
+                <select
+                  value={newResource.category}
+                  onChange={(e) => setNewResource(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                >
+                  <option value="link">🔗 Link</option>
+                  <option value="document">📄 Document</option>
+                  <option value="video">🎬 Video</option>
+                  <option value="template">📋 Template</option>
+                </select>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowNewResource(false)}
+                    className="flex-1 py-2 border border-gray-200 rounded-lg text-gray-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateResource}
+                    disabled={savingResource || !newResource.title.trim() || !newResource.url.trim()}
+                    className="flex-1 py-2 bg-orange-500 text-white rounded-lg font-semibold disabled:opacity-50"
+                  >
+                    {savingResource ? 'Adding...' : 'Add'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Resources List */}
+            {loadingResources ? (
+              <div className="text-center py-8 text-gray-500">Loading resources...</div>
+            ) : filteredResources.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-4xl mb-2">📚</p>
+                <p>No resources yet</p>
+              </div>
+            ) : (
+              filteredResources.map(resource => (
+                <a
+                  key={resource.id}
+                  href={resource.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-white rounded-xl p-4 border border-gray-200 hover:border-orange-300 transition"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">
+                      {resource.category === 'document' ? '📄' :
+                       resource.category === 'video' ? '🎬' :
+                       resource.category === 'template' ? '📋' : '🔗'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900">{resource.title}</h3>
+                      {resource.description && (
+                        <p className="text-sm text-gray-600 mt-1">{resource.description}</p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-2 truncate">{resource.url}</p>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </div>
+                </a>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* NEWSLETTER TAB (Staff only) */}
+        {activeTab === 'newsletter' && isStaff && (
+          <div className="space-y-4">
+            {/* Compose */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200 space-y-3">
+              <h3 className="font-semibold text-gray-900">Compose Newsletter</h3>
+              <input
+                type="text"
+                placeholder="Subject line..."
+                value={newsletterSubject}
+                onChange={(e) => setNewsletterSubject(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+              />
+              <textarea
+                placeholder="Newsletter content..."
+                value={newsletterBody}
+                onChange={(e) => setNewsletterBody(e.target.value)}
+                rows={6}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 resize-none"
+              />
+              <button
+                onClick={handleSendNewsletter}
+                disabled={sendingNewsletter || !newsletterSubject.trim() || !newsletterBody.trim()}
+                className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-50"
+              >
+                {sendingNewsletter ? 'Sending...' : '📧 Send to All Fellows (292)'}
+              </button>
+              <p className="text-xs text-gray-400 text-center">
+                Note: Full Buttondown integration coming soon
+              </p>
+            </div>
+
+            {/* History */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">Recent Sends</h3>
+              {loadingHistory ? (
+                <div className="text-center py-4 text-gray-500">Loading...</div>
+              ) : newsletterHistory.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">No newsletters sent yet</div>
+              ) : (
+                <div className="space-y-2">
+                  {newsletterHistory.map(send => (
+                    <div key={send.id} className="bg-white rounded-lg p-3 border border-gray-200">
+                      <p className="font-medium text-gray-900">{send.subject}</p>
+                      <p className="text-sm text-gray-500">
+                        {formatDate(send.sent_at)} · {send.recipient_count || 0} recipients
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // LOG INTERACTION MODAL
 // ============================================
 function LogInteractionModal({ isOpen, onClose, preSelectedFellow }) {
@@ -6931,6 +7431,7 @@ function MainApp() {
   const pageTitles = {
     dashboard: 'Dashboard',
     directory: 'Directory',
+    community: 'Community',
     search: 'Search',
     activity: 'Activity',
     'cohort-comm': 'Cohort Communication',
@@ -6991,6 +7492,7 @@ function MainApp() {
       <main className="pt-16 pb-8" style={{ marginTop: isRefreshing ? 60 : 0 }}>
         {currentPage === 'dashboard' && <DashboardPage onLogInteraction={openLogModal} onSelectFellow={handleSelectFellow} />}
         {currentPage === 'directory' && <DirectoryPage onSelectFellow={handleSelectFellow} />}
+        {currentPage === 'community' && <CommunityPage />}
         {currentPage === 'search' && <SearchPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'activity' && <ActivityPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'cohort-comm' && <CohortCommunicationPage />}
