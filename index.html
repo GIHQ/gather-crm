@@ -4821,6 +4821,13 @@ function SettingsPage({ onNavigate }) {
   });
   const [platformsExpanded, setPlatformsExpanded] = useState(false);
 
+  // Custom search terms state
+  const [customSearchTerms, setCustomSearchTerms] = useState([]);
+  const [newTermInput, setNewTermInput] = useState('');
+  const [loadingTerms, setLoadingTerms] = useState(false);
+  const isAdmin = canAccess(ROLES.ADMIN);
+  const defaultTerms = ['Goldin Institute', 'Chicago Peace Fellows', 'Goldin Global Fellows', 'GATHER'];
+
   const platformOptions = [
     { id: 'google_news', label: 'Google News', icon: '📰', description: 'Traditional news articles' },
     { id: 'linkedin', label: 'LinkedIn', icon: '💼', description: 'Professional profiles & posts' },
@@ -4839,6 +4846,66 @@ function SettingsPage({ onNavigate }) {
     localStorage.setItem('gatherScanPlatforms', JSON.stringify(updated));
   };
 
+  // Load custom search terms from app_settings
+  useEffect(() => {
+    if (!isStaff) return;
+    const loadTerms = async () => {
+      setLoadingTerms(true);
+      try {
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'news_search_terms')
+          .single();
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error loading search terms:', error);
+        }
+        if (data?.value) {
+          setCustomSearchTerms(Array.isArray(data.value) ? data.value : []);
+        } else {
+          // Use defaults if no setting exists yet
+          setCustomSearchTerms(defaultTerms);
+        }
+      } catch (err) {
+        console.error('Failed to load search terms:', err);
+        setCustomSearchTerms(defaultTerms);
+      }
+      setLoadingTerms(false);
+    };
+    loadTerms();
+  }, [isStaff]);
+
+  // Save custom search terms to app_settings
+  const saveCustomTerms = async (terms) => {
+    try {
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({
+          key: 'news_search_terms',
+          value: terms,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+      if (error) console.error('Error saving search terms:', error);
+    } catch (err) {
+      console.error('Failed to save search terms:', err);
+    }
+  };
+
+  const addCustomTerm = () => {
+    const term = newTermInput.trim();
+    if (!term || customSearchTerms.includes(term)) return;
+    const updated = [...customSearchTerms, term];
+    setCustomSearchTerms(updated);
+    setNewTermInput('');
+    saveCustomTerms(updated);
+  };
+
+  const removeCustomTerm = (term) => {
+    const updated = customSearchTerms.filter(t => t !== term);
+    setCustomSearchTerms(updated);
+    saveCustomTerms(updated);
+  };
+
   // Scan for news about fellows using Supabase Edge Function
   const scanForNews = async (fullScan = false) => {
     if (!isStaff) return;
@@ -4849,8 +4916,8 @@ function SettingsPage({ onNavigate }) {
 
     try {
       // Call the Supabase Edge Function for news search
-      // Travis gets full scan (up to 50), others get 10 at a time
-      const maxFellows = (isTravis && fullScan) ? 50 : 10;
+      // All scans now search all fellows
+      const maxFellows = fellows.length;
 
       const { data: session } = await supabase.auth.getSession();
       const response = await fetch(`${SUPABASE_URL}/functions/v1/search-news`, {
@@ -4859,7 +4926,7 @@ function SettingsPage({ onNavigate }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.session?.access_token || SUPABASE_ANON_KEY}`
         },
-        body: JSON.stringify({ max_fellows: maxFellows, platforms: selectedPlatforms })
+        body: JSON.stringify({ max_fellows: maxFellows, platforms: selectedPlatforms, customTerms: customSearchTerms })
       });
 
       const result = await response.json();
@@ -5353,28 +5420,62 @@ function SettingsPage({ onNavigate }) {
             )}
           </div>
 
-          {/* Travis gets full scan option */}
-          {isTravis && (
-            <button
-              onClick={() => scanForNews(true)}
-              disabled={scanning || selectedPlatforms.length === 0}
-              className="w-full py-3 rounded-xl font-semibold transition mb-2"
-              style={{
-                backgroundColor: (scanning || selectedPlatforms.length === 0) ? '#E5E7EB' : '#3B82F6',
-                color: (scanning || selectedPlatforms.length === 0) ? '#6B7280' : '#FFFFFF'
-              }}
-            >
-              {scanning ? `Scanning... ${scanResults?.scanned || 0}/${scanResults?.total || fellows.length}` : `Full Scan (${fellows.length} fellows × ${selectedPlatforms.length} platforms)`}
-            </button>
-          )}
+          {/* Custom Search Terms */}
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-gray-700 mb-1">Custom Search Terms</p>
+            <p className="text-xs text-gray-500 mb-3">Add organizational keywords to search alongside fellow names</p>
 
-          {/* Everyone gets quick scan (Travis unlimited, others 3/day) */}
+            {/* Term chips */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {loadingTerms ? (
+                <span className="text-sm text-gray-400">Loading terms...</span>
+              ) : customSearchTerms.length === 0 ? (
+                <span className="text-sm text-gray-400">No custom terms added</span>
+              ) : customSearchTerms.map(term => (
+                <span key={term} className="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm">
+                  {term}
+                  {isAdmin && (
+                    <button onClick={() => removeCustomTerm(term)} className="text-orange-400 hover:text-orange-600 ml-1">
+                      &times;
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+
+            {/* Add new term (admin only) */}
+            {isAdmin && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTermInput}
+                  onChange={(e) => setNewTermInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addCustomTerm(); }}
+                  placeholder="Add a search term..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                />
+                <button
+                  onClick={addCustomTerm}
+                  disabled={!newTermInput.trim()}
+                  className="px-4 py-2 rounded-xl font-semibold text-sm transition"
+                  style={{
+                    backgroundColor: newTermInput.trim() ? '#E87722' : '#E5E7EB',
+                    color: newTermInput.trim() ? '#FFFFFF' : '#6B7280'
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Full scan button for all staff (Travis unlimited, others 3/day) */}
           <button
-            onClick={() => scanForNews(false)}
+            onClick={() => scanForNews(true)}
             disabled={scanning || (!isTravis && !canScanMore) || selectedPlatforms.length === 0}
             className="w-full py-3 rounded-xl font-semibold transition"
             style={{
-              backgroundColor: (scanning || (!isTravis && !canScanMore) || selectedPlatforms.length === 0) ? '#E5E7EB' : '#10B981',
+              backgroundColor: (scanning || (!isTravis && !canScanMore) || selectedPlatforms.length === 0) ? '#E5E7EB' : '#3B82F6',
               color: (scanning || (!isTravis && !canScanMore) || selectedPlatforms.length === 0) ? '#6B7280' : '#FFFFFF'
             }}
           >
@@ -5383,8 +5484,8 @@ function SettingsPage({ onNavigate }) {
               : !isTravis && !canScanMore
                 ? 'Daily limit reached (3/3)'
                 : scanning
-                  ? `Scanning... ${scanResults?.scanned || 0}/${scanResults?.total || 10}`
-                  : `Quick Scan (10 fellows × ${selectedPlatforms.length} platforms)${!isTravis ? ` - ${3 - dailyScanCount} left today` : ''}`}
+                  ? `Scanning... ${scanResults?.scanned || 0}/${scanResults?.total || fellows.length}`
+                  : `Scan All Fellows (${fellows.length} × ${selectedPlatforms.length} platforms)${!isTravis ? ` - ${3 - dailyScanCount} left today` : ''}`}
           </button>
 
           {scanResults && (

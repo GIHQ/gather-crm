@@ -19,6 +19,10 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 ## Current State (Updated Feb 7, 2026)
 
 ### Recently Completed
+- Custom search terms for news scanner (stored in `app_settings` table, admin-editable)
+- Removed quick scan option — all scans now search all fellows (non-Travis still 3/day limit)
+- AI-powered focus area assignment script for fellows missing tags (`scripts/assign-focus-areas.js`)
+- `app_settings` table created for shared key-value configuration
 - Google OAuth login redirect fixed
 - GetStream account created, API keys stored in Supabase + Netlify
 - Buttondown account created, API key stored in Supabase
@@ -46,7 +50,7 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - Community tab wireframe ready; frontend build waiting on backend
 
 ### Known Issues
-- News scanner returns 0 results (likely no fellows in news; deferred 1 week)
+- News scanner: custom search terms now supplement fellow name searches; `app_settings` migration (012) must be run in Supabase
 
 ---
 
@@ -105,6 +109,8 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `migrations/008_team_members.sql` | Team members table + alternate_emails |
 | `migrations/009_profile_claims.sql` | Profile claim requests table |
 | `migrations/011_team_import.sql` | 11 staff members imported |
+| `migrations/012_app_settings.sql` | App settings key-value table |
+| `scripts/assign-focus-areas.js` | AI-powered focus area assignment for fellows |
 
 ---
 

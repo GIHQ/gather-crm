@@ -1,6 +1,7 @@
 // GATHER CRM - News & Social Media Search Edge Function
 // Searches for news/web mentions of fellows using SerpAPI across multiple platforms
 // Platforms: Google News, LinkedIn, Twitter/X, Facebook, Instagram
+// Also searches custom organizational terms and links results to fellows
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -26,6 +27,7 @@ interface SearchResult {
   date?: string;
   thumbnail?: string;
   relevanceScore: number;
+  fellowId?: string;
 }
 
 type PlatformType = 'google_news' | 'linkedin' | 'twitter' | 'facebook' | 'instagram';
@@ -106,6 +108,12 @@ function calculateRelevance(
   );
 }
 
+// Check if a result mentions a fellow's name in title or snippet
+function resultMentionsFellow(fellow: Fellow, title: string, snippet: string): boolean {
+  const text = `${title} ${snippet}`.toLowerCase();
+  return text.includes(fellow.first_name.toLowerCase()) && text.includes(fellow.last_name.toLowerCase());
+}
+
 async function searchPlatform(
   fellow: Fellow,
   platform: PlatformType,
@@ -183,6 +191,40 @@ async function searchAllPlatforms(
   return results;
 }
 
+// Search a custom term via Google News and return results
+async function searchCustomTerm(
+  term: string,
+  apiKey: string
+): Promise<Array<{ title: string; link: string; snippet: string; date: string; thumbnail: string }>> {
+  const searchUrl = new URL("https://serpapi.com/search.json");
+  searchUrl.searchParams.set("api_key", apiKey);
+  searchUrl.searchParams.set("q", `"${term}"`);
+  searchUrl.searchParams.set("engine", "google_news");
+  searchUrl.searchParams.set("num", "5");
+
+  try {
+    const response = await fetch(searchUrl.toString());
+    const data = await response.json();
+
+    if (data.error) {
+      console.error(`SerpAPI error for custom term "${term}":`, data.error);
+      return [];
+    }
+
+    const rawResults = data.news_results || [];
+    return rawResults.slice(0, 5).map((item: any) => ({
+      title: item.title || item.headline || '',
+      link: item.link || item.url || '',
+      snippet: item.snippet || item.description || '',
+      date: item.date || item.published_date || '',
+      thumbnail: item.thumbnail || '',
+    }));
+  } catch (error) {
+    console.error(`Error searching custom term "${term}":`, error);
+    return [];
+  }
+}
+
 serve(async (req) => {
   // Handle CORS
   if (req.method === "OPTIONS") {
@@ -212,8 +254,10 @@ serve(async (req) => {
     const maxFellows = body.max_fellows || 10;
     // Default to google_news only for backward compatibility
     const platforms: PlatformType[] = body.platforms || ['google_news'];
+    // Custom search terms (organizational keywords)
+    const customTerms: string[] = body.customTerms || [];
 
-    console.log(`Starting search with platforms: ${platforms.join(', ')}, max_fellows: ${maxFellows}`);
+    console.log(`Starting search with platforms: ${platforms.join(', ')}, max_fellows: ${maxFellows}, custom_terms: ${customTerms.length}`);
 
     // Fetch fellows to search
     let query = supabase
@@ -245,6 +289,9 @@ serve(async (req) => {
 
     console.log(`Found ${fellows.length} fellows to search across ${platforms.length} platforms`);
 
+    // Track all URLs we've already inserted to deduplicate
+    const seenUrls = new Set<string>();
+
     const results: Array<{
       fellow: string;
       activitiesFound: number;
@@ -257,6 +304,9 @@ serve(async (req) => {
       let activitiesFound = 0;
 
       for (const result of searchResults) {
+        if (seenUrls.has(`${fellow.id}:${result.link}`)) continue;
+        seenUrls.add(`${fellow.id}:${result.link}`);
+
         const config = SEARCH_CONFIGS[result.source];
         const sourceName = result.source === 'google_news'
           ? (new URL(result.link).hostname.replace('www.', ''))
@@ -306,6 +356,67 @@ serve(async (req) => {
       console.log(`${fellow.first_name} ${fellow.last_name}: ${activitiesFound} results`);
     }
 
+    // Search custom terms independently and link results to fellows
+    let customTermResults = 0;
+    if (customTerms.length > 0) {
+      console.log(`Searching ${customTerms.length} custom terms...`);
+
+      for (const term of customTerms) {
+        const termResults = await searchCustomTerm(term, SERPAPI_KEY);
+
+        for (const item of termResults) {
+          // Check if this result mentions any fellow's name
+          for (const fellow of fellows as Fellow[]) {
+            if (!resultMentionsFellow(fellow, item.title, item.snippet)) continue;
+            if (seenUrls.has(`${fellow.id}:${item.link}`)) continue;
+            seenUrls.add(`${fellow.id}:${item.link}`);
+
+            let sourceName = 'Unknown';
+            try {
+              sourceName = new URL(item.link).hostname.replace('www.', '');
+            } catch { /* ignore invalid URLs */ }
+
+            const { error: insertError } = await supabase
+              .from("activities")
+              .upsert({
+                fellow_id: fellow.id,
+                activity_type: 'news_mention',
+                source_name: sourceName,
+                source_url: item.link,
+                source_domain: sourceName,
+                title: item.title,
+                snippet: item.snippet || "",
+                image_url: item.thumbnail || null,
+                published_at: item.date || null,
+                search_query: `"${term}"`,
+                relevance_score: 0.6,
+                verified: false,
+                dismissed: false,
+                notified: false,
+              }, {
+                onConflict: "fellow_id,source_url",
+                ignoreDuplicates: true,
+              });
+
+            if (!insertError) {
+              customTermResults++;
+              // Update the fellow's result count
+              const existing = results.find(r => r.fellow === `${fellow.first_name} ${fellow.last_name}`);
+              if (existing) {
+                existing.activitiesFound++;
+                existing.byPlatform['custom_term'] = (existing.byPlatform['custom_term'] || 0) + 1;
+              }
+            }
+          }
+        }
+
+        // Delay between custom term searches
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      console.log(`Custom term searches found ${customTermResults} fellow-linked results`);
+    }
+
     const totalFound = results.reduce((sum, r) => sum + r.activitiesFound, 0);
 
     return new Response(
@@ -313,6 +424,8 @@ serve(async (req) => {
         success: true,
         fellowsSearched: results.length,
         platformsSearched: platforms,
+        customTermsSearched: customTerms.length,
+        customTermResults,
         totalFound,
         results,
       }),

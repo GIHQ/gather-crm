@@ -122,6 +122,24 @@ Tracks requests from users to claim an existing profile when their email isn't r
 6. If approved: alternate_emails updated on target profile
 7. User can now log in and access their profile
 
+### app_settings
+Key-value store for shared application configuration (e.g., news scanner search terms).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| key | text | Unique setting key |
+| value | jsonb | Setting value (any JSON) |
+| updated_at | timestamptz | Last modification timestamp |
+| updated_by | uuid | FK → auth.users.id (who last changed it) |
+
+**Current keys:**
+- `news_search_terms` — JSON array of custom organizational keywords for the news scanner (default: `["Goldin Institute", "Chicago Peace Fellows", "Goldin Global Fellows", "GATHER"]`)
+
+**RLS:**
+- **SELECT:** Authenticated users can read all settings
+- **ALL:** Admins (admin, super_admin via team_members) can insert/update/delete
+
 ---
 
 ## Community Tables
