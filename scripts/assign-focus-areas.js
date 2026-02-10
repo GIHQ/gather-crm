@@ -53,12 +53,18 @@ async function main() {
     };
     const res = await fetch(url, { ...options, headers });
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Supabase error (${res.status}): ${text}`);
+      const errBody = await res.text();
+      throw new Error(`Supabase error (${res.status}): ${errBody}`);
     }
-    const text = await res.text();
-    if (!text) return null;
-    return JSON.parse(text);
+    // POST with return=minimal returns empty body (201/204)
+    if (res.status === 201 || res.status === 204) return null;
+    const body = await res.text();
+    if (!body || !body.trim()) return null;
+    try {
+      return JSON.parse(body);
+    } catch {
+      return null;
+    }
   }
 
   // Step 1: Get the focus_areas category ID
