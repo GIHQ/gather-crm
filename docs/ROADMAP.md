@@ -1,6 +1,6 @@
 # GATHER Roadmap
 
-**Last updated:** Feb 7, 2026
+**Last updated:** Feb 10, 2026
 
 This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO Tracker in SESSION_HANDOFF.md.
 
@@ -46,7 +46,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | "Currently working on" field for fellows | 🔲 |
 | Fellow spotlight / featured profiles | 🔲 |
 | Activity feed (GetStream) | 🔲 |
-| Push notification support | 🔲 |
+| Push notification support | 🔲 | See implementation notes below |
 
 ### Phase 2c: Engagement (Weeks 5-6)
 | Feature | Status |
@@ -90,6 +90,34 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Performance optimization | 🔲 |
 | Split index.html into modules (at 10K+ lines) | 🔲 |
 | Automated testing | 🔲 |
+
+---
+
+## Implementation Notes
+
+### Push Notifications
+Service worker (sw.js) already has push/notification handlers. To complete:
+
+1. **Generate VAPID keys** — `npx web-push generate-vapid-keys`
+2. **Frontend subscription** — Call `pushManager.subscribe()` with VAPID public key when user enables push
+3. **Store subscriptions** — Create `push_subscriptions` table in Supabase:
+   ```sql
+   create table push_subscriptions (
+     id uuid primary key default gen_random_uuid(),
+     user_id uuid references auth.users(id),
+     endpoint text not null,
+     p256dh text not null,
+     auth text not null,
+     created_at timestamptz default now(),
+     unique(user_id, endpoint)
+   );
+   ```
+4. **Edge Function** — Create `send-push` function using web-push library
+5. **Trigger notifications** — Call Edge Function when:
+   - Overdue alerts (daily check)
+   - News mentions found
+   - New announcements posted
+   - Weekly/daily summaries
 
 ---
 
