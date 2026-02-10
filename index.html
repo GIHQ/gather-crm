@@ -4975,7 +4975,6 @@ function SettingsPage({ onNavigate }) {
       // Update last scan date and dismiss reminder
       setLastScanDate();
       setShowScanReminder(false);
-      }
     } catch (err) {
       console.error('News scan failed:', err);
       setScanResults({ scanned: 0, found: 0, inProgress: false, error: err.message });
