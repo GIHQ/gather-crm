@@ -16,8 +16,10 @@
  *   node scripts/assign-focus-areas.js --dry-run   # Preview without writing
  */
 
-const BATCH_SIZE = 5;
-const BATCH_DELAY_MS = 2000;
+const BATCH_SIZE = 4;
+const REQUEST_DELAY_MS = 13000; // 13s between requests = ~4.6/min (under 5/min limit)
+const RATE_LIMIT_RETRY_MS = 65000; // Wait 65s on rate limit before retrying
+const MAX_RETRIES = 2;
 
 const FOCUS_AREA_MAP = {
   FA001: 'Peacebuilding & Conflict Resolution',
@@ -171,29 +173,48 @@ Respond with ONLY a JSON array of selected codes, e.g.: ["FA001", "FA004", "FA01
 If there is insufficient information to make any selection, respond with: []`;
 
       try {
-        // Call Claude API
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-5-20250929',
-            max_tokens: 100,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        });
+        // Call Claude API with retry on rate limit
+        let data = null;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-5-20250929',
+              max_tokens: 100,
+              messages: [{ role: 'user', content: prompt }],
+            }),
+          });
 
-        if (!response.ok) {
-          const errText = await response.text();
-          console.error(`  API error for ${label}: ${response.status} ${errText}`);
-          summary.errors++;
-          continue;
+          if (response.status === 429) {
+            if (attempt < MAX_RETRIES) {
+              console.log(`  Rate limited for ${label}, waiting 65s before retry (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+              await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_RETRY_MS));
+              continue;
+            }
+            console.error(`  Rate limited for ${label} after ${MAX_RETRIES} retries, skipping`);
+            summary.errors++;
+            data = null;
+            break;
+          }
+
+          if (!response.ok) {
+            const errText = await response.text();
+            console.error(`  API error for ${label}: ${response.status} ${errText}`);
+            summary.errors++;
+            data = null;
+            break;
+          }
+
+          data = await response.json();
+          break;
         }
 
-        const data = await response.json();
+        if (!data) continue;
         const text = data.content?.[0]?.text?.trim() || '[]';
 
         // Parse the response - extract JSON array
@@ -248,17 +269,16 @@ If there is insufficient information to make any selection, respond with: []`;
         for (const code of validCodes) {
           summary.tagCounts[code] = (summary.tagCounts[code] || 0) + 1;
         }
+        // Delay between requests to respect rate limit (5/min)
+        console.log(`  Waiting ${REQUEST_DELAY_MS / 1000}s before next request...`);
+        await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
       } catch (err) {
         console.error(`  Error processing ${label}: ${err.message}`);
         summary.errors++;
       }
     }
 
-    // Delay between batches
-    if (i + BATCH_SIZE < fellowsMissingTags.length) {
-      console.log(`  Waiting ${BATCH_DELAY_MS / 1000}s before next batch...\n`);
-      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
-    }
+    console.log('');
   }
 
   // Step 5: Print summary
