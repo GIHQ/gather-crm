@@ -4915,8 +4915,8 @@ function SettingsPage({ onNavigate }) {
     setScanResults({ scanned: 0, found: 0, total: fellows.length, inProgress: true });
 
     try {
-      // Process fellows in batches of 20 to avoid Edge Function compute limits
-      const BATCH_SIZE = 20;
+      // Process fellows in small batches to stay within Edge Function timeout
+      const BATCH_SIZE = 5;
       const totalFellows = fellows.length;
       let totalScanned = 0;
       let totalFound = 0;
