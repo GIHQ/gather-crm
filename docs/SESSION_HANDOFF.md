@@ -33,7 +33,7 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - Full Community Platform plan created (see GATHER_COMMUNITY_PLAN.md)
 - All 292 fellow photos uploaded and linked
 - Focus Areas system working (Skills, Populations, Focus Areas, Community Areas)
-- Notification settings mobile overflow fix applied
+- Notification settings UI fixed: toggle contrast on enabled cards + flex layout overflow on mobile
 - Component index comment block in index.html
 - Team Management page added (admin+ can manage staff accounts)
 - team_members table created with RLS policies
