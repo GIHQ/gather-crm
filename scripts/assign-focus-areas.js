@@ -116,7 +116,7 @@ async function main() {
 
   // Get all fellows
   const allFellows = await supabaseRequest(
-    'fellows?select=id,first_name,last_name,bio,title,organization,program,city,country,fellow_id&order=program,fellow_id'
+    'fellows?select=id,first_name,last_name,biography,job_title,organization,program,city,country&status=eq.Alumni&order=program'
   );
 
   const fellowsMissingTags = allFellows.filter(f => !fellowsWithTags.has(f.id));
@@ -144,11 +144,11 @@ async function main() {
 
     for (const fellow of batch) {
       summary.processed++;
-      const label = `${fellow.first_name} ${fellow.last_name} (${fellow.fellow_id}, ${fellow.program})`;
+      const label = `${fellow.first_name} ${fellow.last_name} (${fellow.program})`;
 
       // Build the prompt
-      const bioInfo = fellow.bio || 'No bio available';
-      const titleInfo = fellow.title || 'Unknown';
+      const bioInfo = fellow.biography || 'No bio available';
+      const titleInfo = fellow.job_title || 'Unknown';
       const orgInfo = fellow.organization || 'Unknown';
       const locationInfo = [fellow.city, fellow.country].filter(Boolean).join(', ') || 'Unknown';
 
