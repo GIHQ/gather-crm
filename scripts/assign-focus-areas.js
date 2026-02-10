@@ -41,35 +41,46 @@ async function main() {
     console.log('=== DRY RUN MODE - No database writes ===\n');
   }
 
-  // Helper to call Supabase REST API
-  async function supabaseRequest(path, options = {}) {
+  // Helper to GET from Supabase REST API (returns parsed JSON)
+  async function supabaseGet(path) {
     const url = `${SUPABASE_URL}/rest/v1/${path}`;
-    const headers = {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: options.prefer || 'return=representation',
-      ...options.headers,
-    };
-    const res = await fetch(url, { ...options, headers });
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    });
     if (!res.ok) {
       const errBody = await res.text();
-      throw new Error(`Supabase error (${res.status}): ${errBody}`);
+      throw new Error(`Supabase GET error (${res.status}): ${errBody}`);
     }
-    // POST with return=minimal returns empty body (201/204)
-    if (res.status === 201 || res.status === 204) return null;
-    const body = await res.text();
-    if (!body || !body.trim()) return null;
-    try {
-      return JSON.parse(body);
-    } catch {
-      return null;
+    return res.json();
+  }
+
+  // Helper to INSERT into Supabase (does not parse response)
+  async function supabaseInsert(table, data) {
+    const url = `${SUPABASE_URL}/rest/v1/${table}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=ignore-duplicates,return=minimal',
+      },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`Supabase INSERT error (${res.status}): ${errBody}`);
     }
+    // Don't try to parse the response - just consume it
+    await res.text();
   }
 
   // Step 1: Get the focus_areas category ID
   console.log('Fetching focus area category...');
-  const categories = await supabaseRequest('focus_categories?slug=eq.focus-areas&select=id,name');
+  const categories = await supabaseGet('focus_categories?slug=eq.focus-areas&select=id,name');
   if (!categories || categories.length === 0) {
     console.error('Could not find focus-areas category');
     process.exit(1);
@@ -79,7 +90,7 @@ async function main() {
 
   // Step 2: Get all focus area tags from the database (dynamic, not hardcoded)
   console.log('Fetching focus area tags from database...');
-  const focusTags = await supabaseRequest(
+  const focusTags = await supabaseGet(
     `focus_tags?category_id=eq.${focusCategoryId}&select=id,name&order=name`
   );
   const tagNameToId = {};
@@ -101,13 +112,13 @@ async function main() {
   console.log('Finding fellows without focus area tags...');
 
   // Get all fellow IDs that already have focus area tags
-  const existingAssignments = await supabaseRequest(
+  const existingAssignments = await supabaseGet(
     `fellow_focus_tags?select=fellow_id,tag_id&tag_id=in.(${focusTags.map(t => `"${t.id}"`).join(',')})`
   );
   const fellowsWithTags = new Set(existingAssignments.map(a => a.fellow_id));
 
   // Get all fellows
-  const allFellows = await supabaseRequest(
+  const allFellows = await supabaseGet(
     'fellows?select=id,first_name,last_name,biography,job_title,organization,program,city,country&status=eq.Alumni&order=program'
   );
 
@@ -239,15 +250,10 @@ If there is insufficient information to make any selection, respond with: []`;
             continue;
           }
 
-          await supabaseRequest('fellow_focus_tags', {
-            method: 'POST',
-            body: JSON.stringify({
-              fellow_id: fellow.id,
-              tag_id: tagId,
-              is_primary: false,
-            }),
-            prefer: 'return=minimal',
-            headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+          await supabaseInsert('fellow_focus_tags', {
+            fellow_id: fellow.id,
+            tag_id: tagId,
+            is_primary: false,
           });
         }
       }
