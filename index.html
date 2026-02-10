@@ -167,7 +167,14 @@ const { useState, useEffect, useMemo, useCallback, useRef, createContext, useCon
 // ============================================
 const SUPABASE_URL = 'https://pwazurumpzydxyppbvee.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3YXp1cnVtcHp5ZHh5cHBidmVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MjM3MDUsImV4cCI6MjA4NTA5OTcwNX0.iGLmSpTPM84lMGGizSfBnkDCvpMZaJVaFhcRJ9cYDrs';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storageKey: 'gather-auth',
+    storage: window.localStorage,
+  }
+});
 
 // GATHER Logo from Supabase Storage
 // Local icon file (just the logo, no text)
@@ -5852,7 +5859,7 @@ function SettingsPage({ onNavigate }) {
                     </div>
                     <button
                       onClick={() => setNotificationSettings(s => ({ ...s, dailySummary: !s.dailySummary }))}
-                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ${
+                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 overflow-hidden ${
                         notificationSettings.dailySummary ? 'bg-orange-600 ring-2 ring-orange-600/30' : 'bg-gray-300'
                       }`}
                     >
@@ -5879,7 +5886,7 @@ function SettingsPage({ onNavigate }) {
                     </div>
                     <button
                       onClick={() => setNotificationSettings(s => ({ ...s, weeklySummary: !s.weeklySummary }))}
-                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ${
+                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 overflow-hidden ${
                         notificationSettings.weeklySummary ? 'bg-orange-600 ring-2 ring-orange-600/30' : 'bg-gray-300'
                       }`}
                     >
@@ -5906,7 +5913,7 @@ function SettingsPage({ onNavigate }) {
                     </div>
                     <button
                       onClick={() => setNotificationSettings(s => ({ ...s, teamActivity: !s.teamActivity }))}
-                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ${
+                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 overflow-hidden ${
                         notificationSettings.teamActivity ? 'bg-orange-600 ring-2 ring-orange-600/30' : 'bg-gray-300'
                       }`}
                     >
@@ -5933,7 +5940,7 @@ function SettingsPage({ onNavigate }) {
                     </div>
                     <button
                       onClick={() => setNotificationSettings(s => ({ ...s, overdueAlerts: !s.overdueAlerts }))}
-                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ${
+                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 overflow-hidden ${
                         notificationSettings.overdueAlerts ? 'bg-orange-600 ring-2 ring-orange-600/30' : 'bg-gray-300'
                       }`}
                     >
@@ -5960,7 +5967,7 @@ function SettingsPage({ onNavigate }) {
                     </div>
                     <button
                       onClick={() => setNotificationSettings(s => ({ ...s, newsMentions: !s.newsMentions }))}
-                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ${
+                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 overflow-hidden ${
                         notificationSettings.newsMentions ? 'bg-orange-600 ring-2 ring-orange-600/30' : 'bg-gray-300'
                       }`}
                     >
