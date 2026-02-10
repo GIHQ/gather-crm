@@ -5,6 +5,7 @@
  *
  * Finds fellows with no focus area tags and uses Claude API to analyze their
  * bio, title, organization, and program to suggest 1-4 focus areas.
+ * Tag names are loaded dynamically from the database (not hardcoded).
  *
  * Environment variables required:
  *   SUPABASE_URL - Supabase project URL
@@ -16,37 +17,9 @@
  *   node scripts/assign-focus-areas.js --dry-run   # Preview without writing
  */
 
-const BATCH_SIZE = 4;
 const REQUEST_DELAY_MS = 13000; // 13s between requests = ~4.6/min (under 5/min limit)
 const RATE_LIMIT_RETRY_MS = 65000; // Wait 65s on rate limit before retrying
 const MAX_RETRIES = 2;
-
-const FOCUS_AREA_MAP = {
-  FA001: 'Peacebuilding & Conflict Resolution',
-  FA002: 'Youth Development & Mentorship',
-  FA003: 'Violence Prevention & Intervention',
-  FA004: 'Community Organizing & Civic Engagement',
-  FA005: 'Education & Academic Support',
-  FA006: 'Arts, Culture & Creative Expression',
-  FA007: 'Economic Empowerment & Workforce Dev',
-  FA008: 'Mental Health & Wellness',
-  FA009: 'Trauma-Informed Care & Healing',
-  FA010: 'Restorative Justice & Reentry',
-  FA011: 'Public Health & Health Equity',
-  FA012: 'Environmental Justice & Sustainability',
-  FA013: 'Housing & Urban Development',
-  FA014: 'Food Security & Nutrition',
-  FA015: 'Immigration & Refugee Services',
-  FA016: "Gender Equity & Women's Empowerment",
-  FA017: 'LGBTQ+ Advocacy & Support',
-  FA018: 'Policy & Advocacy',
-  FA019: 'Media, Communications & Storytelling',
-  FA020: 'Interfaith Dialogue & Spiritual Wellness',
-};
-
-const FOCUS_AREA_LIST = Object.entries(FOCUS_AREA_MAP)
-  .map(([code, name]) => `${code}: ${name}`)
-  .join('\n');
 
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
@@ -96,16 +69,25 @@ async function main() {
   const focusCategoryId = categories[0].id;
   console.log(`Focus Areas category ID: ${focusCategoryId}`);
 
-  // Step 2: Get all focus area tags (to map names to IDs)
-  console.log('Fetching focus area tags...');
+  // Step 2: Get all focus area tags from the database (dynamic, not hardcoded)
+  console.log('Fetching focus area tags from database...');
   const focusTags = await supabaseRequest(
-    `focus_tags?category_id=eq.${focusCategoryId}&select=id,name`
+    `focus_tags?category_id=eq.${focusCategoryId}&select=id,name&order=name`
   );
   const tagNameToId = {};
+  const tagIdToName = {};
   for (const tag of focusTags) {
     tagNameToId[tag.name] = tag.id;
+    tagIdToName[tag.id] = tag.name;
   }
-  console.log(`Found ${Object.keys(tagNameToId).length} focus area tags\n`);
+
+  const tagNames = Object.keys(tagNameToId);
+  console.log(`Found ${tagNames.length} focus area tags in database:`);
+  tagNames.forEach((name, i) => console.log(`  ${i + 1}. ${name}`));
+  console.log('');
+
+  // Build numbered list for the AI prompt
+  const numberedTagList = tagNames.map((name, i) => `${i + 1}. ${name}`).join('\n');
 
   // Step 3: Find fellows missing focus area tags
   console.log('Finding fellows without focus area tags...');
@@ -131,7 +113,7 @@ async function main() {
     return;
   }
 
-  // Step 4: Process fellows in batches
+  // Step 4: Process fellows one at a time with rate limit delays
   const summary = {
     processed: 0,
     assigned: 0,
@@ -140,23 +122,20 @@ async function main() {
     errors: 0,
   };
 
-  for (let i = 0; i < fellowsMissingTags.length; i += BATCH_SIZE) {
-    const batch = fellowsMissingTags.slice(i, i + BATCH_SIZE);
-    console.log(`--- Batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(fellowsMissingTags.length / BATCH_SIZE)} ---`);
+  for (let i = 0; i < fellowsMissingTags.length; i++) {
+    const fellow = fellowsMissingTags[i];
+    summary.processed++;
+    const label = `[${i + 1}/${fellowsMissingTags.length}] ${fellow.first_name} ${fellow.last_name} (${fellow.program})`;
 
-    for (const fellow of batch) {
-      summary.processed++;
-      const label = `${fellow.first_name} ${fellow.last_name} (${fellow.program})`;
+    // Build the prompt
+    const bioInfo = fellow.biography || 'No bio available';
+    const titleInfo = fellow.job_title || 'Unknown';
+    const orgInfo = fellow.organization || 'Unknown';
+    const locationInfo = [fellow.city, fellow.country].filter(Boolean).join(', ') || 'Unknown';
 
-      // Build the prompt
-      const bioInfo = fellow.biography || 'No bio available';
-      const titleInfo = fellow.job_title || 'Unknown';
-      const orgInfo = fellow.organization || 'Unknown';
-      const locationInfo = [fellow.city, fellow.country].filter(Boolean).join(', ') || 'Unknown';
+    const prompt = `You are helping categorize alumni fellows for the Goldin Institute alumni network.
 
-      const prompt = `You are helping categorize alumni fellows for the Goldin Institute alumni network.
-
-Based on the following fellow's information, select the 1-4 most relevant Focus Areas from the list below. Only select areas that clearly match their work or background. If you're unsure, select fewer rather than more.
+Based on the following fellow's information, select the 1-4 most relevant Focus Areas from the numbered list below. Only select areas that clearly match their work or background. If you're unsure, select fewer rather than more.
 
 Fellow Information:
 - Name: ${fellow.first_name} ${fellow.last_name}
@@ -166,119 +145,119 @@ Fellow Information:
 - Location: ${locationInfo}
 - Bio: ${bioInfo}
 
-Available Focus Areas (select 1-4 by code):
-${FOCUS_AREA_LIST}
+Available Focus Areas (select 1-4 by number):
+${numberedTagList}
 
-Respond with ONLY a JSON array of selected codes, e.g.: ["FA001", "FA004", "FA018"]
+Respond with ONLY a JSON array of the selected numbers, e.g.: [1, 4, 18]
 If there is insufficient information to make any selection, respond with: []`;
 
-      try {
-        // Call Claude API with retry on rate limit
-        let data = null;
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-          const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': ANTHROPIC_API_KEY,
-              'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify({
-              model: 'claude-sonnet-4-5-20250929',
-              max_tokens: 100,
-              messages: [{ role: 'user', content: prompt }],
-            }),
-          });
+    try {
+      // Call Claude API with retry on rate limit
+      let data = null;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-5-20250929',
+            max_tokens: 100,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
 
-          if (response.status === 429) {
-            if (attempt < MAX_RETRIES) {
-              console.log(`  Rate limited for ${label}, waiting 65s before retry (attempt ${attempt + 1}/${MAX_RETRIES})...`);
-              await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_RETRY_MS));
-              continue;
-            }
-            console.error(`  Rate limited for ${label} after ${MAX_RETRIES} retries, skipping`);
-            summary.errors++;
-            data = null;
-            break;
+        if (response.status === 429) {
+          if (attempt < MAX_RETRIES) {
+            console.log(`  Rate limited for ${label}, waiting 65s before retry (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_RETRY_MS));
+            continue;
           }
-
-          if (!response.ok) {
-            const errText = await response.text();
-            console.error(`  API error for ${label}: ${response.status} ${errText}`);
-            summary.errors++;
-            data = null;
-            break;
-          }
-
-          data = await response.json();
+          console.error(`  Rate limited for ${label} after ${MAX_RETRIES} retries, skipping`);
+          summary.errors++;
+          data = null;
           break;
         }
 
-        if (!data) continue;
-        const text = data.content?.[0]?.text?.trim() || '[]';
-
-        // Parse the response - extract JSON array
-        let codes = [];
-        try {
-          const match = text.match(/\[.*\]/s);
-          if (match) {
-            codes = JSON.parse(match[0]);
-          }
-        } catch (parseErr) {
-          console.error(`  Parse error for ${label}: ${text}`);
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error(`  API error for ${label}: ${response.status} ${errText}`);
           summary.errors++;
-          continue;
+          data = null;
+          break;
         }
 
-        // Validate codes
-        const validCodes = codes.filter(c => FOCUS_AREA_MAP[c]);
+        data = await response.json();
+        break;
+      }
 
-        if (validCodes.length === 0) {
-          console.log(`  ${label}: SKIPPED (insufficient info or no valid codes)`);
-          summary.skipped++;
-          continue;
+      if (!data) continue;
+      const text = data.content?.[0]?.text?.trim() || '[]';
+
+      // Parse the response - extract JSON array of numbers
+      let numbers = [];
+      try {
+        const match = text.match(/\[.*\]/s);
+        if (match) {
+          numbers = JSON.parse(match[0]);
         }
+      } catch (parseErr) {
+        console.error(`  Parse error for ${label}: ${text}`);
+        summary.errors++;
+        continue;
+      }
 
-        const tagNames = validCodes.map(c => FOCUS_AREA_MAP[c]);
-        console.log(`  ${label}: ${tagNames.join(', ')}`);
+      // Convert numbers to tag names (1-indexed)
+      const selectedTags = numbers
+        .filter(n => typeof n === 'number' && n >= 1 && n <= tagNames.length)
+        .map(n => tagNames[n - 1]);
 
-        // Insert tags
-        if (!dryRun) {
-          for (const code of validCodes) {
-            const tagName = FOCUS_AREA_MAP[code];
-            const tagId = tagNameToId[tagName];
-            if (!tagId) {
-              console.error(`    Tag not found in DB: "${tagName}"`);
-              continue;
-            }
+      if (selectedTags.length === 0) {
+        console.log(`  ${label}: SKIPPED (insufficient info or no valid selections)`);
+        summary.skipped++;
+        continue;
+      }
 
-            await supabaseRequest('fellow_focus_tags', {
-              method: 'POST',
-              body: JSON.stringify({
-                fellow_id: fellow.id,
-                tag_id: tagId,
-                is_primary: false,
-              }),
-              prefer: 'return=minimal',
-              headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
-            });
+      console.log(`  ${label}: ${selectedTags.join(', ')}`);
+
+      // Insert tags
+      if (!dryRun) {
+        for (const tagName of selectedTags) {
+          const tagId = tagNameToId[tagName];
+          if (!tagId) {
+            console.error(`    Tag not found in DB: "${tagName}"`);
+            continue;
           }
-        }
 
-        summary.assigned++;
-        for (const code of validCodes) {
-          summary.tagCounts[code] = (summary.tagCounts[code] || 0) + 1;
+          await supabaseRequest('fellow_focus_tags', {
+            method: 'POST',
+            body: JSON.stringify({
+              fellow_id: fellow.id,
+              tag_id: tagId,
+              is_primary: false,
+            }),
+            prefer: 'return=minimal',
+            headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+          });
         }
-        // Delay between requests to respect rate limit (5/min)
+      }
+
+      summary.assigned++;
+      for (const tagName of selectedTags) {
+        summary.tagCounts[tagName] = (summary.tagCounts[tagName] || 0) + 1;
+      }
+
+      // Delay between requests to respect rate limit (5/min)
+      if (i < fellowsMissingTags.length - 1) {
         console.log(`  Waiting ${REQUEST_DELAY_MS / 1000}s before next request...`);
         await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
-      } catch (err) {
-        console.error(`  Error processing ${label}: ${err.message}`);
-        summary.errors++;
       }
+    } catch (err) {
+      console.error(`  Error processing ${label}: ${err.message}`);
+      summary.errors++;
     }
-
-    console.log('');
   }
 
   // Step 5: Print summary
@@ -293,8 +272,8 @@ If there is insufficient information to make any selection, respond with: []`;
   const sortedTags = Object.entries(summary.tagCounts)
     .sort((a, b) => b[1] - a[1]);
 
-  for (const [code, count] of sortedTags) {
-    console.log(`  ${code} ${FOCUS_AREA_MAP[code]}: ${count}`);
+  for (const [name, count] of sortedTags) {
+    console.log(`  ${name}: ${count}`);
   }
 
   if (dryRun) {
