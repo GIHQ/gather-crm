@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welcome to GATHER Alumni App</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --orange: #E87722;
+    --orange-dark: #D56A1C;
+    --orange-light: #FFF3EB;
+    --orange-glow: rgba(232, 119, 34, 0.15);
+    --gray-900: #1a1a2e;
+    --gray-700: #374151;
+    --gray-500: #6B7280;
+    --gray-300: #D1D5DB;
+    --gray-100: #F3F4F6;
+    --gray-50: #F9FAFB;
+    --blue-700: #1D4ED8;
+    --blue-50: #EFF6FF;
+    --green-600: #059669;
+    --green-50: #ECFDF5;
+    --violet-600: #7C3AED;
+    --violet-50: #F5F3FF;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    color: var(--gray-700);
+    background: var(--gray-50);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, var(--gray-900) 0%, #16213e 50%, #0f3460 100%);
+    color: white;
+    padding: 3rem 1.5rem 4rem;
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%; right: -30%;
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, var(--orange-glow) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -40%; left: -20%;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(29, 78, 216, 0.1) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero-content { position: relative; z-index: 1; max-width: 640px; margin: 0 auto; }
+  .hero-logo {
+    width: 72px; height: 72px;
+    border-radius: 20px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 8px 32px rgba(232, 119, 34, 0.3);
+    object-fit: cover;
+  }
+  .hero h1 {
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.5px;
+  }
+  .hero h1 span { color: var(--orange); }
+  .hero p {
+    font-size: 1.05rem;
+    color: rgba(255,255,255,0.7);
+    max-width: 480px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* ── Beta Banner ── */
+  .beta-banner {
+    background: linear-gradient(90deg, var(--orange-light), #FFF8F2);
+    border-left: 4px solid var(--orange);
+    padding: 1.25rem 1.5rem;
+    max-width: 720px;
+    margin: -1.5rem auto 0;
+    position: relative;
+    z-index: 2;
+    border-radius: 0 12px 12px 0;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .beta-banner strong { color: var(--orange-dark); }
+  .beta-banner p { font-size: 0.925rem; color: var(--gray-700); margin-top: 0.25rem; }
+
+  /* ── Container ── */
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  /* ── Section ── */
+  .section {
+    padding: 3rem 0;
+  }
+  .section + .section { border-top: 1px solid #E5E7EB; }
+
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--orange);
+    margin-bottom: 0.5rem;
+  }
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.3px;
+  }
+  .section-desc {
+    color: var(--gray-500);
+    font-size: 0.95rem;
+    margin-bottom: 2rem;
+    max-width: 560px;
+  }
+
+  /* ── Step Cards ── */
+  .steps { display: flex; flex-direction: column; gap: 1rem; }
+  .step {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    background: white;
+    padding: 1.25rem;
+    border-radius: 16px;
+    border: 1px solid #E5E7EB;
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+  .step:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    border-color: var(--orange);
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 36px; height: 36px;
+    background: var(--orange);
+    color: white;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+  .step-body h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 0.25rem;
+  }
+  .step-body p {
+    font-size: 0.875rem;
+    color: var(--gray-500);
+    line-height: 1.5;
+  }
+  .step-body code {
+    background: var(--gray-100);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--orange-dark);
+    font-family: 'DM Sans', monospace;
+  }
+
+  /* ── Feature Grid ── */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  @media (min-width: 540px) {
+    .feature-grid { grid-template-columns: 1fr 1fr; }
+  }
+  .feature-card {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #E5E7EB;
+    padding: 1.5rem;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .feature-card:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    transform: translateY(-2px);
+  }
+  .feature-icon {
+    width: 48px; height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .feature-card h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 0.35rem;
+  }
+  .feature-card p {
+    font-size: 0.85rem;
+    color: var(--gray-500);
+    line-height: 1.5;
+  }
+
+  /* ── Phone Mockup ── */
+  .phone-mockup {
+    background: var(--gray-900);
+    border-radius: 28px;
+    padding: 12px;
+    max-width: 280px;
+    margin: 0 auto 2rem;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15), inset 0 0 0 2px rgba(255,255,255,0.1);
+  }
+  .phone-screen {
+    background: white;
+    border-radius: 20px;
+    overflow: hidden;
+    min-height: 420px;
+  }
+  .phone-statusbar {
+    background: var(--gray-900);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 6px 20px;
+    display: flex;
+    justify-content: space-between;
+    border-radius: 20px 20px 0 0;
+  }
+  .phone-header {
+    background: white;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--gray-100);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .phone-header-icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    object-fit: cover;
+  }
+  .phone-header span {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--gray-900);
+  }
+
+  /* ── Mock fellow cards ── */
+  .mock-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .mock-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .mock-name { font-size: 0.8rem; font-weight: 600; color: var(--gray-900); }
+  .mock-org { font-size: 0.65rem; color: var(--gray-500); }
+  .mock-badge {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  /* ── Checklist ── */
+  .checklist { display: flex; flex-direction: column; gap: 0.75rem; }
+  .check-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #E5E7EB;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.15s;
+  }
+  .check-item:hover { border-color: var(--orange); }
+  .check-item.checked { background: var(--green-50); border-color: var(--green-600); }
+  .check-item.checked .check-box { background: var(--green-600); border-color: var(--green-600); }
+  .check-item.checked .check-box::after { opacity: 1; }
+  .check-item.checked .check-text { text-decoration: line-through; color: var(--gray-500); }
+  .check-box {
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    border: 2px solid var(--gray-300);
+    border-radius: 6px;
+    position: relative;
+    transition: all 0.15s;
+    margin-top: 1px;
+  }
+  .check-box::after {
+    content: '✓';
+    position: absolute;
+    top: -1px; left: 3px;
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 700;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .check-text { font-size: 0.9rem; color: var(--gray-700); line-height: 1.4; }
+  .check-text strong { color: var(--gray-900); }
+
+  /* ── Suggestion Box ── */
+  .suggestion-box {
+    background: white;
+    border-radius: 20px;
+    border: 2px solid #E5E7EB;
+    padding: 2rem;
+    transition: border-color 0.2s;
+  }
+  .suggestion-box:focus-within { border-color: var(--orange); }
+  .suggestion-box h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 0.25rem;
+  }
+  .suggestion-box > p {
+    font-size: 0.85rem;
+    color: var(--gray-500);
+    margin-bottom: 1.25rem;
+  }
+  .form-group { margin-bottom: 1rem; }
+  .form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin-bottom: 0.35rem;
+  }
+  .form-select, .form-textarea, .form-input {
+    width: 100%;
+    padding: 0.7rem 0.9rem;
+    border: 1.5px solid var(--gray-300);
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.875rem;
+    color: var(--gray-700);
+    background: white;
+    transition: border-color 0.15s;
+    outline: none;
+  }
+  .form-select:focus, .form-textarea:focus, .form-input:focus {
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px var(--orange-glow);
+  }
+  .form-textarea { resize: vertical; min-height: 100px; }
+  .btn-submit {
+    width: 100%;
+    padding: 0.85rem;
+    background: var(--orange);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    margin-top: 0.5rem;
+  }
+  .btn-submit:hover { background: var(--orange-dark); }
+  .btn-submit:active { transform: scale(0.98); }
+  .success-toast {
+    display: none;
+    background: var(--green-600);
+    color: white;
+    padding: 0.75rem 1.25rem;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: center;
+    margin-top: 1rem;
+    animation: slideUp 0.3s ease-out;
+  }
+  .success-toast.show { display: block; }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Tag Pills ── */
+  .tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+  .tag-pill {
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 500;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 2rem 1.5rem;
+    color: var(--gray-500);
+    font-size: 0.8rem;
+  }
+  .footer a { color: var(--orange); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+
+  /* ── Quick Tip ── */
+  .tip {
+    background: var(--blue-50);
+    border-left: 3px solid var(--blue-700);
+    padding: 0.85rem 1rem;
+    border-radius: 0 10px 10px 0;
+    font-size: 0.85rem;
+    color: var(--gray-700);
+    margin-top: 1.5rem;
+  }
+  .tip strong { color: var(--blue-700); }
+
+  /* ── Responsive ── */
+  @media (max-width: 480px) {
+    .hero { padding: 2rem 1.25rem 3rem; }
+    .hero h1 { font-size: 1.75rem; }
+    .beta-banner { margin: -1rem 0.75rem 0; border-radius: 12px; border-left: none; border-top: 4px solid var(--orange); }
+    .container { padding: 0 1.25rem; }
+    .phone-mockup { max-width: 240px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ HERO ═══════════════════ -->
+<div class="hero">
+  <div class="hero-content">
+    <img src="https://gathertracker.netlify.app/Gathericon.png" alt="GATHER" class="hero-logo">
+    <h1>Welcome to <span>GATHER</span> Alumni App</h1>
+    <p>Your guide to the Goldin Institute's alumni network app. GATHER is designed as a mobile app — we'd love for you to test it from your phone.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════ BETA BANNER ═══════════════════ -->
+<div class="container">
+  <div class="beta-banner">
+    <strong>🧪 You're our testing crew!</strong>
+    <p>We're building GATHER with the team first — exploring features, populating content, and shaping the experience before we invite our 292 fellows across CPF, GGF, and ESP. Your feedback directly shapes what they'll see.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════ GETTING STARTED ═══════════════════ -->
+<div class="container">
+  <div class="section">
+    <div class="section-label">Getting Started</div>
+    <div class="section-title">Logging In</div>
+    <div class="section-desc">GATHER uses your Goldin Institute Google account — no new passwords to remember.</div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Open the app on your phone</h3>
+          <p>Open <code>gathertracker.netlify.app</code> in your phone's browser. GATHER is designed mobile-first, so your phone is the best way to experience it. (It works on desktop too, but the phone is where it shines.)</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Sign in with Google</h3>
+          <p>Tap <strong>"Sign in with Google"</strong> and use your <code>@goldininstitute.org</code> email. Only Goldin team emails are accepted for staff access.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>You're in!</h3>
+          <p>The system automatically recognizes you as a team member and gives you the right permissions. You'll land on the Dashboard.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <strong>📱 Use it on your phone!</strong> GATHER is built mobile-first, so we'd prefer you test from your phone whenever possible. To get the best experience, add it to your home screen — it'll look and feel like a real app. In Safari (iPhone), tap Share → "Add to Home Screen". In Chrome (Android), tap the menu → "Add to Home Screen".
+    </div>
+  </div>
+
+  <!-- ═══════════════════ WHAT YOU'LL FIND ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">Your Toolkit</div>
+    <div class="section-title">What's Inside</div>
+    <div class="section-desc">Here's what you can do in GATHER right now.</div>
+
+    <!-- Phone mockup -->
+    <div class="phone-mockup">
+      <div class="phone-screen">
+        <div class="phone-statusbar">
+          <span>9:41</span>
+          <span>●●●</span>
+        </div>
+        <div class="phone-header">
+          <img src="https://gathertracker.netlify.app/Gathericon.png" alt="GATHER" class="phone-header-icon">
+          <span>Directory</span>
+        </div>
+        <div style="padding:8px 16px;">
+          <div style="background:var(--gray-100);border-radius:8px;padding:8px 12px;font-size:0.7rem;color:var(--gray-500);">🔍 Search 292 fellows...</div>
+        </div>
+        <div class="mock-card">
+          <div class="mock-avatar" style="background: linear-gradient(135deg, #E87722, #D56A1C);"></div>
+          <div>
+            <div class="mock-name">Amara Johnson</div>
+            <div class="mock-org">Neighborhood Alliance</div>
+          </div>
+          <div class="mock-badge" style="background: #1D4ED8;">CPF</div>
+        </div>
+        <div class="mock-card">
+          <div class="mock-avatar" style="background: linear-gradient(135deg, #059669, #047857);"></div>
+          <div>
+            <div class="mock-name">Carlos Mendoza</div>
+            <div class="mock-org">Comunidad Fuerte</div>
+          </div>
+          <div class="mock-badge" style="background: #C2410C;">ESP</div>
+        </div>
+        <div class="mock-card">
+          <div class="mock-avatar" style="background: linear-gradient(135deg, #7C3AED, #6D28D9);"></div>
+          <div>
+            <div class="mock-name">Fatima Al-Rahman</div>
+            <div class="mock-org">Peace Bridge Network</div>
+          </div>
+          <div class="mock-badge" style="background: #EA580C;">GGF</div>
+        </div>
+        <div class="mock-card">
+          <div class="mock-avatar" style="background: linear-gradient(135deg, #2563EB, #1D4ED8);"></div>
+          <div>
+            <div class="mock-name">Tyler Stober</div>
+            <div class="mock-org">Goldin Institute</div>
+          </div>
+          <div class="mock-badge" style="background: #9CA3AF;">Team</div>
+        </div>
+        <div style="padding: 12px 16px; text-align: center; font-size: 0.65rem; color: var(--gray-500);">
+          ↕ Scroll to browse all fellows
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon" style="background: var(--blue-50); color: var(--blue-700);">📊</div>
+        <h3>Dashboard</h3>
+        <p>At-a-glance health stats — who's been contacted recently, who needs outreach, and network-wide metrics across all three programs.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: var(--orange-light); color: var(--orange);">👥</div>
+        <h3>Directory</h3>
+        <p>Browse and search all 292 fellows plus team members. Filter by program (CPF, GGF, ESP), search by name, and tap any profile for full details.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: var(--green-50); color: var(--green-600);">📝</div>
+        <h3>Log Interactions</h3>
+        <p>Record calls, emails, meetings, and other touchpoints with fellows. Every interaction updates the fellow's contact timeline and priority score.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: var(--violet-50); color: var(--violet-600);">🏷️</div>
+        <h3>Focus Areas</h3>
+        <p>See each fellow's skills, populations served, focus areas, and community areas. Great for finding the right people for events or partnerships.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #FEF3C7; color: #D97706;">⚙️</div>
+        <h3>Settings</h3>
+        <p>Edit your profile, manage notification preferences, and — for admins — manage team member accounts and review profile claims.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #FCE7F3; color: #DB2777;">🔔</div>
+        <h3>Notifications</h3>
+        <p>Set up daily or weekly summaries, activity alerts, and overdue outreach reminders. Choose push notifications or email delivery.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ QUICK TUTORIALS ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">Quick Tutorials</div>
+    <div class="section-title">How to Do Key Tasks</div>
+    <div class="section-desc">Step-by-step guides for the things you'll do most.</div>
+
+    <!-- Tutorial 1: View a fellow profile -->
+    <div style="margin-bottom: 2rem;">
+      <h3 style="font-size: 1.05rem; font-weight: 600; color: var(--gray-900); margin-bottom: 0.75rem;">📋 View a Fellow's Profile</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num" style="background: var(--blue-700);">1</div>
+          <div class="step-body">
+            <h3>Open the Directory</h3>
+            <p>Tap the Directory icon in the navigation. You'll see all fellows listed with their name, organization, and program badge.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background: var(--blue-700);">2</div>
+          <div class="step-body">
+            <h3>Find & tap a fellow</h3>
+            <p>Use the search bar or scroll to find someone, then tap their card to open their full profile — bio, contact info, focus areas, and interaction history.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tutorial 2: Log an interaction -->
+    <div style="margin-bottom: 2rem;">
+      <h3 style="font-size: 1.05rem; font-weight: 600; color: var(--gray-900); margin-bottom: 0.75rem;">✏️ Log an Interaction</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num" style="background: var(--green-600);">1</div>
+          <div class="step-body">
+            <h3>Open a fellow's profile</h3>
+            <p>Navigate to the fellow you contacted in the Directory.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background: var(--green-600);">2</div>
+          <div class="step-body">
+            <h3>Tap the + button</h3>
+            <p>Look for the add interaction button — usually an orange "+" circle.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background: var(--green-600);">3</div>
+          <div class="step-body">
+            <h3>Fill in the details</h3>
+            <p>Choose the type (Call, Email, Meeting, etc.), add a title and any notes, then save. The fellow's "last contacted" date updates automatically.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tutorial 3: Edit your profile -->
+    <div>
+      <h3 style="font-size: 1.05rem; font-weight: 600; color: var(--gray-900); margin-bottom: 0.75rem;">👤 Edit Your Profile</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num" style="background: var(--violet-600);">1</div>
+          <div class="step-body">
+            <h3>Go to Settings → My Profile</h3>
+            <p>Open Settings from the navigation, then tap "My Profile".</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background: var(--violet-600);">2</div>
+          <div class="step-body">
+            <h3>Update your info</h3>
+            <p>You can edit your phone number, bio, LinkedIn URL, job title, organization, and location. Name and email are locked — contact an admin if those need changing.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ TESTING CHECKLIST ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">Your Mission</div>
+    <div class="section-title">Beta Testing Checklist</div>
+    <div class="section-desc">Try each of these and let us know how it goes. Check them off as you go — your progress saves locally on this device.</div>
+
+    <div class="checklist" id="checklist">
+      <div class="check-item" onclick="toggleCheck(this)" data-key="check-login">
+        <div class="check-box"></div>
+        <div class="check-text"><strong>Log in</strong> with your @goldininstitute.org Google account</div>
+      </div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="check-directory">
+        <div class="check-box"></div>
+        <div class="check-text"><strong>Browse the Directory</strong> — search for a few fellows, check their profiles</div>
+      </div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="check-profile">
+        <div class="check-box"></div>
+        <div class="check-text"><strong>Edit your own profile</strong> — add your bio, phone, LinkedIn</div>
+      </div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="check-dashboard">
+        <div class="check-box"></div>
+        <div class="check-text"><strong>Check the Dashboard</strong> — see the health metrics and priority outreach list</div>
+      </div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="check-interaction">
+        <div class="check-box"></div>
+        <div class="check-text"><strong>Log a test interaction</strong> — record a call or email with any fellow</div>
+      </div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="check-focus">
+        <div class="check-box"></div>
+        <div class="check-text"><strong>Explore Focus Areas</strong> — browse fellow skills and populations served</div>
+      </div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="check-mobile">
+        <div class="check-box"></div>
+        <div class="check-text"><strong>Try it on your phone</strong> — add to home screen for the full app experience</div>
+      </div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="check-feedback">
+        <div class="check-box"></div>
+        <div class="check-text"><strong>Submit a suggestion</strong> below — tell us what's missing or broken!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SUGGESTION BOX ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">Shape the Platform</div>
+    <div class="section-title">Share Your Ideas</div>
+    <div class="section-desc">Found a bug? Want a feature? Have a content idea? We want to hear it all — this is your chance to shape what GATHER becomes before the fellows see it.</div>
+
+    <div class="suggestion-box">
+      <h3>💬 Submit a Suggestion</h3>
+      <p>This opens a pre-formatted email to the team. Quick and easy.</p>
+
+      <div class="form-group">
+        <label class="form-label">Your Name</label>
+        <input type="text" class="form-input" id="sg-name" placeholder="e.g., Tyler">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-select" id="sg-category">
+          <option value="">Choose one...</option>
+          <option value="🐛 Bug Report">🐛 Bug Report — something isn't working right</option>
+          <option value="✨ Feature Request">✨ Feature Request — something I wish existed</option>
+          <option value="📝 Content Idea">📝 Content Idea — something to add or change</option>
+          <option value="🎨 Design Feedback">🎨 Design Feedback — how it looks or feels</option>
+          <option value="💡 General Thought">💡 General Thought — anything else</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Tell us more</label>
+        <textarea class="form-textarea" id="sg-detail" placeholder="What did you notice? What would you love to see? What felt confusing?"></textarea>
+      </div>
+
+      <button class="btn-submit" onclick="submitSuggestion()">Open in Email ✉️</button>
+
+      <div class="success-toast" id="toast">Email draft opened! Send when ready.</div>
+    </div>
+
+    <div class="tip" style="margin-top:1.5rem;">
+      <strong>📸 Screenshots welcome!</strong> If something looks wrong on your screen, take a screenshot and attach it to the email. Visuals help us fix things faster.
+    </div>
+  </div>
+
+  <!-- ═══════════════════ FAQ ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">Questions?</div>
+    <div class="section-title">Quick Answers</div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" style="background: var(--gray-500);">?</div>
+        <div class="step-body">
+          <h3>Who can see what?</h3>
+          <p>Right now, only team members with @goldininstitute.org accounts can log in and access full features. When we invite fellows, they'll have more limited access — they can view the directory and edit their own profiles, but won't see staff notes or admin tools.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background: var(--gray-500);">?</div>
+        <div class="step-body">
+          <h3>Is the data real?</h3>
+          <p>Yes! All 292 fellow records with photos, program info, and focus areas are real and imported from our existing database. Interactions you log are real too, so feel free to record genuine touchpoints.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background: var(--gray-500);">?</div>
+        <div class="step-body">
+          <h3>What's coming next?</h3>
+          <p>We're building a Community tab with announcements, a resource library, and a newsletter tool. We're also adding better search, cohort messaging, and more notification options.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background: var(--gray-500);">?</div>
+        <div class="step-body">
+          <h3>Something's broken — what do I do?</h3>
+          <p>Use the suggestion box above! Select "Bug Report" and describe what happened. Screenshots are incredibly helpful. Don't worry about breaking anything — that's what testing is for.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ FOOTER ═══════════════════ -->
+<div class="footer">
+  <p style="margin-bottom:0.5rem;">
+    <a href="https://gathertracker.netlify.app" target="_blank" style="font-weight:600;">Launch GATHER →</a>
+  </p>
+  <p>Goldin Institute · GATHER Alumni App · Team Beta · 2026</p>
+</div>
+
+<script>
+  // ── Checklist persistence ──
+  function toggleCheck(el) {
+    el.classList.toggle('checked');
+    const key = el.dataset.key;
+    if (key) {
+      try {
+        const checked = el.classList.contains('checked');
+        localStorage.setItem(key, checked ? '1' : '0');
+      } catch(e) {}
+    }
+  }
+
+  // Restore checklist state on load
+  document.querySelectorAll('.check-item[data-key]').forEach(el => {
+    try {
+      if (localStorage.getItem(el.dataset.key) === '1') {
+        el.classList.add('checked');
+      }
+    } catch(e) {}
+  });
+
+  // ── Suggestion email ──
+  function submitSuggestion() {
+    const name = document.getElementById('sg-name').value.trim() || 'Team Member';
+    const category = document.getElementById('sg-category').value || 'General Feedback';
+    const detail = document.getElementById('sg-detail').value.trim() || '(No details provided)';
+
+    const subject = encodeURIComponent(`[GATHER Alumni App] ${category}`);
+    const body = encodeURIComponent(
+      `Hi team,\n\n` +
+      `Here's my feedback on GATHER Alumni App:\n\n` +
+      `Category: ${category}\n` +
+      `From: ${name}\n\n` +
+      `${detail}\n\n` +
+      `---\n` +
+      `Sent from GATHER Alumni App Welcome Kit`
+    );
+
+    // Open mailto — user can add screenshots as attachments
+    window.location.href = `mailto:info@goldininstitute.org?subject=${subject}&body=${body}`;
+
+    // Show toast
+    const toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 4000);
+  }
+</script>
+
+</body>
+</html>
