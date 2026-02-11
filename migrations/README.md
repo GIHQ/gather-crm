@@ -18,6 +18,14 @@ Run these in the Supabase SQL Editor in order:
 | `004_chicago_community_areas.sql` | 77 Chicago community areas for CPF |
 | `005_fellow_focus_tags.sql` | Junction table linking fellows to tags |
 | `006_views_and_helpers.sql` | Useful views and functions |
+| `007_activities_table.sql` | News/activities tracking table |
+| `008_team_members.sql` | Team members table with alternate_emails |
+| `009_profile_claims.sql` | Profile claim requests for identity matching |
+| `010_community_tables.sql` | Announcements, resources, newsletter_sends, stream_tokens |
+| `011_team_import.sql` | Import of 11 staff members |
+| `012_app_settings.sql` | App settings key-value table |
+| `013_fix_security_definer_views_and_rls.sql` | Fix security definer views + enable RLS on activities |
+| `014_auto_link_team_members.sql` | **Auto-link team_members/fellows to auth.users on signup** |
 
 ## How to Run
 

@@ -16,16 +16,28 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 
 ---
 
-## Current State (Updated Feb 10, 2026 - Evening)
+## Current State (Updated Feb 11, 2026)
 
 ### Recently Completed
+- **Menu & Navigation Restructure:**
+  - Removed desktop directory/dashboard links from menu
+  - Renamed "Cohort Communication" → "Broadcast"
+  - Added "Library" as separate menu item
+- **Community page simplified** — now shows only the Feed (announcements), no tabs
+- **Library page (new)** — standalone page for resources (docs, links, videos, templates)
+- **Broadcast page (redesigned)** — two tabs:
+  - "Announcement" (default) — posts to in-app Community feed
+  - "Newsletter" — sends email to selected cohorts
+- **Auth flow fixes:**
+  - Fixed RLS policy issue: `team_members.user_id` must be linked to `auth.users.id`
+  - Created auto-link trigger (`migrations/014_auto_link_team_members.sql`) — automatically links team_members and fellows to auth.users on signup/login
+  - Fixed stale session handling — clears localStorage when Supabase session expires, forces re-login
+  - Added route protection — guests redirected from team-only pages (dashboard, activity, broadcast) to directory
+  - Onboarding step resets when session expires
 - **Community Platform Phase 2a COMPLETE:**
   - Community tables created: `announcements`, `resources`, `newsletter_sends`, `stream_tokens`
   - `stream-token` Edge Function deployed (mints GetStream JWTs, caches 24hr)
   - `working_on` field added to fellows table
-  - Community page built with Feed / Resources / Newsletter tabs
-  - Staff can post announcements and add resources
-  - Newsletter tab logs sends (Buttondown API integration pending)
 - Auth session persistence fixed (explicit Supabase auth options with `storageKey: 'gather-auth'`)
 - Translation system secured (requires auth token, JWT verification ON for translate Edge Function)
 - Notification settings UI fixed: toggle contrast + overflow on mobile
@@ -60,6 +72,8 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - [x] Create community tables in Supabase ✅
 - [x] Create stream-token Edge Function ✅
 - [x] Build Community tab components ✅
+- [x] Restructure menu: Community (feed), Library (resources), Broadcast (messaging) ✅
+- [x] Fix auth flow: auto-link team_members, route protection, stale session handling ✅
 - [ ] Import 292 fellow emails to Buttondown
 - [ ] Wire newsletter composer to Buttondown API (create Edge Function)
 - [ ] Test end-to-end newsletter sending
@@ -96,6 +110,18 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 - Use `auth.uid() IS NOT NULL` for authenticated checks (NOT `auth.role() = 'authenticated'`)
 - Use `is_admin()` SECURITY DEFINER function when checking team_members roles (avoids infinite recursion)
 - The `is_admin()` function is used by both `app_settings` and `team_members` policies
+- **team_members.user_id MUST be linked to auth.users.id** for RLS policies to work (announcements, resources, etc.)
+- Auto-link trigger (`014_auto_link_team_members.sql`) handles this automatically on signup/login
+
+### Auth & Session Handling
+- Guest users use fake email `guest@gathertracker.app` — preserved across sessions
+- When Supabase session expires and user isn't a guest, localStorage is cleared and user sees login screen
+- Route protection redirects guests from team-only pages: dashboard, activity, broadcast, team-management
+- Team members must run this SQL if their account isn't linked:
+  ```sql
+  UPDATE team_members SET user_id = (SELECT id FROM auth.users WHERE email = 'YOUR_EMAIL')
+  WHERE email = 'YOUR_EMAIL';
+  ```
 
 ### Database Schema vs Docs
 The `DATABASE_SCHEMA.md` has inaccurate column names. Actual fellows columns:
@@ -130,6 +156,7 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `migrations/009_profile_claims.sql` | Profile claim requests table |
 | `migrations/011_team_import.sql` | 11 staff members imported |
 | `migrations/012_app_settings.sql` | App settings key-value table |
+| `migrations/014_auto_link_team_members.sql` | Auto-link team_members/fellows to auth.users on signup |
 | `scripts/assign-focus-areas.js` | AI-powered focus area assignment (Node.js, needs API keys) |
 | `scripts/assign-focus-areas.sql` | SQL keyword-based focus area assignment (paste into Supabase SQL editor) |
 
@@ -167,12 +194,20 @@ Team members (Goldin Institute staff) are stored in the `team_members` table:
 
 ---
 
-## Community Platform — Next Steps
+## Community Platform — Current Structure
+
+**Pages:**
+- **Community** — Feed of in-app announcements (public, read-only for non-staff)
+- **Library** — Shared resources: documents, links, videos, templates (public)
+- **Broadcast** (staff only) — Two tabs:
+  - *Announcement* — Post to Community feed (in-app, default)
+  - *Newsletter* — Email to selected cohorts (external)
 
 **Phase 2a (Broadcast) — COMPLETE:**
 - ✅ Community tables created with RLS
 - ✅ stream-token Edge Function deployed
-- ✅ Community page with Feed / Resources / Newsletter tabs
+- ✅ Menu restructured: Community (feed), Library (resources), Broadcast (staff messaging)
+- ✅ Auto-link trigger for team_members/fellows
 - ⏳ Buttondown API integration for newsletter sending (Edge Function needed)
 
 **Phase 2b (Discovery) — UP NEXT:**
