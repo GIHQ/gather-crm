@@ -434,8 +434,8 @@ function useStreamFeed() {
       throw new Error('Failed to get stream token');
     }
 
-    const { token, appId } = await response.json();
-    return { token, appId, userId: session.user.id };
+    const { token, api_key } = await response.json();
+    return { token, apiKey: api_key, userId: session.user.id };
   }, []);
 
   const initialize = useCallback(async () => {
@@ -450,10 +450,10 @@ function useStreamFeed() {
         return;
       }
 
-      const { token, appId, userId } = tokenData;
+      const { token, apiKey } = tokenData;
 
-      // Initialize GetStream client
-      const client = window.stream.connect(appId, token, appId);
+      // Initialize GetStream client (apiKey, userToken, appId)
+      const client = window.stream.connect(apiKey, token, '1497007');
       clientRef.current = client;
 
       // Get community feed
@@ -4741,8 +4741,8 @@ function BroadcastPage() {
             }
           );
           if (tokenRes.ok) {
-            const { token, appId } = await tokenRes.json();
-            const client = window.stream.connect(appId, token, appId);
+            const { token, api_key } = await tokenRes.json();
+            const client = window.stream.connect(api_key, token, '1497007');
             const feed = client.feed('flat', 'community');
             await feed.addActivity({
               actor: `user:${session.user.id}`,
