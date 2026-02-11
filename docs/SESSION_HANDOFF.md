@@ -16,6 +16,42 @@ GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 p
 
 ---
 
+## Supabase Configuration
+
+```javascript
+const SUPABASE_URL = 'https://pwazurumpzydxyppbvee.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3YXp1cnVtcHp5ZHh5cHBidmVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MjM3MDUsImV4cCI6MjA4NTA5OTcwNX0.iGLmSpTPM84lMGGizSfBnkDCvpMZaJVaFhcRJ9cYDrs';
+```
+
+**Storage Buckets:**
+- `Photos` — Fellow photos and logos
+- Square logo: `https://pwazurumpzydxyppbvee.supabase.co/storage/v1/object/public/Photos/Gather%20logomark%20square.png`
+- Full logo: `https://pwazurumpzydxyppbvee.supabase.co/storage/v1/object/public/Photos/Gather%20-%20Logo.png`
+
+---
+
+## File Structure
+
+```
+/
+├── index.html              # Main mobile PWA (~7500 lines) - PRIMARY FILE
+├── directory.html          # Desktop public directory (legacy)
+├── dashboard.html          # Desktop staff CRM (legacy)
+├── manifest.json           # PWA manifest
+├── sw.js                   # Service worker
+├── docs/                   # Documentation
+│   ├── SESSION_HANDOFF.md  # THIS FILE - start here
+│   ├── ARCHITECTURE.md     # System overview
+│   ├── DATABASE_SCHEMA.md  # Tables and relationships
+│   ├── ROADMAP.md          # Long-term roadmap
+│   └── ...
+├── migrations/             # SQL migrations (run in Supabase SQL Editor)
+├── scripts/                # Utility scripts
+└── supabase/functions/     # Edge Functions
+```
+
+---
+
 ## Current State (Updated Feb 11, 2026)
 
 ### Recently Completed
@@ -220,8 +256,35 @@ See GATHER_COMMUNITY_PLAN.md and ROADMAP.md for full specs.
 
 ---
 
-## Style Quick Reference
+## Design System
 
+**Brand Colors:**
+| Color | Hex | Usage |
+|-------|-----|-------|
+| Goldin Orange | `#E87722` | Primary buttons, accents |
+| Goldin Orange Dark | `#D56A1C` | Hover states |
+| Gray | `#6B7280` | Secondary text |
+| Gray Dark | `#374151` | Primary text |
+
+**Program Colors:**
+| Program | Color | Tailwind |
+|---------|-------|----------|
+| CPF (Chicago) | Blue | `bg-blue-500` / `bg-blue-700` |
+| GGF (Global) | Orange | `bg-orange-500` |
+| ESP (Spanish) | Purple | `bg-purple-500` / `bg-orange-700` |
+
+**Status Colors:**
+| Status | Hex | Condition |
+|--------|-----|-----------|
+| Green | `#10B981` | ≤30 days since contact |
+| Yellow | `#F59E0B` | 31-90 days |
+| Red | `#EF4444` | >90 days |
+
+**Typography:** DM Sans (loaded via Google Fonts)
+
+**Border Radius:** `rounded-xl` to `rounded-2xl`
+
+**Component Patterns:**
 | Element | Tailwind Classes |
 |---------|-----------------|
 | Primary button | `bg-orange-500 text-white py-4 rounded-xl font-semibold` |
@@ -230,4 +293,12 @@ See GATHER_COMMUNITY_PLAN.md and ROADMAP.md for full specs.
 | GGF badge | `bg-orange-500 text-white px-2 py-1 rounded-full text-xs` |
 | ESP badge | `bg-orange-700 text-white px-2 py-1 rounded-full text-xs` |
 
-**Brand orange:** `#E87722`
+---
+
+## Deployment
+
+**Netlify:** Auto-deploys from `main` branch on GitHub
+- Site: gathertracker.netlify.app
+- Repo: github.com/GIHQ/gather-crm
+
+**To deploy:** `git push origin main` — Netlify builds automatically

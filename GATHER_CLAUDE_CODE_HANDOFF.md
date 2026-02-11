@@ -1,6 +1,14 @@
 # GATHER Project - Claude Code Handoff
 
-## Project Overview
+> **⚠️ ARCHIVED** — This was the original planning document from project start.
+>
+> **For current project state, see: [`docs/SESSION_HANDOFF.md`](docs/SESSION_HANDOFF.md)**
+>
+> The SESSION_HANDOFF.md file is kept up-to-date and should be the starting point for any new Claude session.
+
+---
+
+## Project Overview (Historical)
 GATHER is an alumni network CRM for the Goldin Institute managing 292 fellows. It serves as both an internal staff CRM and a public alumni directory.
 
 **Live Site**: https://gathertracker.netlify.app
