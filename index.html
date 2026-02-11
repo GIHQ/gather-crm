@@ -459,9 +459,24 @@ function AppProvider({ children }) {
           setUserRole(role);
           localStorage.setItem('gather_user_role', role);
         } else {
-          // Check for saved guest/viewer role
-          const savedRole = localStorage.getItem('gather_user_role');
-          if (savedRole) setUserRole(savedRole);
+          // No valid Supabase session - check if we have stale localStorage data
+          const savedUser = localStorage.getItem('gather_user');
+          if (savedUser) {
+            const parsedUser = JSON.parse(savedUser);
+            // Only keep guest user data, clear stale authenticated user data
+            if (parsedUser.email === 'guest@gathertracker.app') {
+              setUser(parsedUser);
+              setUserRole(ROLES.VIEWER);
+            } else {
+              // Stale authenticated session - clear everything and force re-login
+              localStorage.removeItem('gather_user');
+              localStorage.removeItem('gather_user_role');
+              localStorage.removeItem('gather_onboarded');
+              setUser(null);
+              setUserRole(ROLES.VIEWER);
+              setIsOnboarded(false);
+            }
+          }
         }
 
         // Check onboarding status
@@ -7365,15 +7380,26 @@ function MainApp() {
     touchStartY.current = 0;
   };
 
-  // Update onboarding step when user state changes (e.g., after OAuth return)
+  // Update onboarding step when user state changes (e.g., after OAuth return or session expiry)
   useEffect(() => {
     if (user && isOnboarded) {
       setOnboardingStep(3);
     } else if (user && !isOnboarded && onboardingStep < 2) {
       // After OAuth return, go to language/notification setup
       setOnboardingStep(2);
+    } else if (!user && !isOnboarded) {
+      // Session expired or logged out - reset to welcome
+      setOnboardingStep(0);
     }
   }, [user, isOnboarded]);
+
+  // Route protection - redirect guests from team-only pages
+  useEffect(() => {
+    const teamOnlyPages = ['dashboard', 'activity', 'cohort-comm', 'team-management'];
+    if (teamOnlyPages.includes(currentPage) && !canAccess(ROLES.TEAM)) {
+      setCurrentPage('directory');
+    }
+  }, [currentPage, userRole, canAccess]);
 
   const handleSelectFellow = (fellow) => {
     setSelectedFellow(fellow);
