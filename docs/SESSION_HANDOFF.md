@@ -165,6 +165,14 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   WHERE email = 'YOUR_EMAIL';
   ```
 
+### GetStream Activity Feed
+- App ID `1497007` is hardcoded in `index.html` (in `useStreamFeed` hook and `BroadcastPage`)
+- `stream-token` Edge Function returns `api_key` and `token` — used with `stream.connect(apiKey, token, appId)`
+- Feed structure: `flat:community` — flat feed group with "community" instance
+- Tokens cached 24hrs in `stream_tokens` table
+- Announcements publish to both Supabase (primary) and GetStream (best-effort)
+- Activity tab only visible to logged-in users; guests see only Announcements tab
+
 ### Database Schema vs Docs
 The `DATABASE_SCHEMA.md` has inaccurate column names. Actual fellows columns:
 - `status` (not `is_active`) — all 292 have status = 'Alumni'
@@ -179,6 +187,12 @@ The `DATABASE_SCHEMA.md` has inaccurate column names. Actual fellows columns:
 SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SERPAPI_KEY, GOOGLE_TRANSLATE_API_KEY, BUTTONDOWN_API_KEY, GETSTREAM_API_KEY, GETSTREAM_SECRET
 
 **Netlify:** GETSTREAM_API_KEY
+
+**GetStream Configuration:**
+- App ID: `1497007`
+- Feed Group: `flat` (type: Flat) — created in GetStream dashboard
+- Feed Instance: `community` — auto-created on first use
+- Dashboard: https://dashboard.getstream.io/
 
 ---
 
