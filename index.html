@@ -137,10 +137,11 @@ const { useState, useEffect, useMemo, useCallback, useRef, createContext, useCon
 //   DirectoryPage           - Fellow directory with search/filter
 //   ActivityPage            - Activity feed and history
 //   SearchPage              - Global search across fellows
-//   CohortCommunicationPage - Cohort messaging tools
+//   CommunityPage           - Community feed with announcements
+//   LibraryPage             - Shared resources/documents
+//   BroadcastPage           - In-app announcements & email newsletters
 //   SettingsPage            - User settings and preferences
 //   TeamManagementPage      - Admin page for managing staff accounts
-//   CommunityPage           - Community hub with announcements, resources, newsletter
 //
 // MODALS:
 //   FellowProfileModal      - Detailed fellow profile view
@@ -1972,17 +1973,12 @@ function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '🏠', minRole: ROLES.TEAM },
     { id: 'directory', label: 'Directory', icon: '👥' }, // Public
-    { id: 'community', label: 'Community', icon: '🌐' }, // Public
+    { id: 'community', label: 'Community', icon: '📢' }, // Public - Feed only
+    { id: 'library', label: 'Library', icon: '📚' }, // Public - Resources
     { id: 'search', label: 'Search', icon: '🔍' }, // Public
     { id: 'activity', label: 'Activity', icon: '📋', minRole: ROLES.TEAM },
-    { id: 'cohort-comm', label: 'Cohort Communication', icon: '📧', minRole: ROLES.TEAM },
+    { id: 'broadcast', label: 'Broadcast', icon: '📣', minRole: ROLES.TEAM },
   ].filter(item => !item.minRole || canAccess(item.minRole));
-  
-  // Desktop links - only show for staff
-  const desktopLinks = canAccess(ROLES.TEAM) ? [
-    { url: 'directory.html', label: 'Desktop Directory', icon: '🖥️' },
-    { url: 'dashboard.html', label: 'Desktop Dashboard', icon: '📊' },
-  ] : [];
 
   return (
     <>
@@ -2029,30 +2025,6 @@ function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
             </button>
           ))}
         </nav>
-        
-        {desktopLinks.length > 0 && (
-          <>
-            <div className="border-t border-gray-100 mx-3" />
-
-            {/* Desktop Views */}
-            <nav className="p-3">
-              <p className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Desktop Views</p>
-              {desktopLinks.map(item => (
-                <a
-                  key={item.url}
-                  href={item.url}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-100 transition"
-                >
-                  <span className="text-xl">{item.icon}</span>
-                  <span className="font-medium">{item.label}</span>
-                  <svg className="w-4 h-4 ml-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-              ))}
-            </nav>
-          </>
-        )}
         
         <div className="border-t border-gray-100 mx-3" />
         
@@ -4564,18 +4536,26 @@ function SearchPage({ onSelectFellow }) {
   );
 }
 
-// Cohort Communication Page - Bulk email to cohorts (Demo/Test Mode)
-function CohortCommunicationPage() {
-  const { fellows } = useContext(AppContext);
+// Broadcast Page - In-app Announcements (default) and Email Newsletter
+function BroadcastPage() {
+  const { user, fellows } = useContext(AppContext);
+  const [activeTab, setActiveTab] = useState('announcement'); // 'announcement' or 'newsletter'
+
+  // Announcement state
+  const [showNewAnnouncement, setShowNewAnnouncement] = useState(false);
+  const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', is_pinned: false });
+  const [savingAnnouncement, setSavingAnnouncement] = useState(false);
+
+  // Newsletter state
   const [selectedCohorts, setSelectedCohorts] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
-  const [isBold, setIsBold] = useState(false);
-  const [isItalic, setIsItalic] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [sending, setSending] = useState(false);
-  
+  const [newsletterHistory, setNewsletterHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
   const statusCounts = useMemo(() => {
     const counts = { green: 0, yellow: 0, red: 0 };
     fellows.forEach(f => {
@@ -4584,30 +4564,72 @@ function CohortCommunicationPage() {
     return counts;
   }, [fellows]);
 
-  // Get unique cohorts
   const cohorts = useMemo(() => {
     const set = new Set(fellows.map(f => f.cohort).filter(Boolean));
     return Array.from(set).sort();
   }, [fellows]);
 
-  // Get recipients based on selected cohorts and status filter
   const recipients = useMemo(() => {
     return fellows.filter(f => {
       if (selectedCohorts.length > 0 && !selectedCohorts.includes(f.cohort)) return false;
       if (statusFilter && getContactStatus(f.last_contact).color !== statusFilter) return false;
-      return f.email; // Only include fellows with email
+      return f.email;
     });
   }, [fellows, selectedCohorts, statusFilter]);
 
+  // Fetch newsletter history
+  useEffect(() => {
+    const fetchHistory = async () => {
+      setLoadingHistory(true);
+      const { data, error } = await supabase
+        .from('newsletter_sends')
+        .select('*')
+        .order('sent_at', { ascending: false })
+        .limit(10);
+
+      if (!error && data) {
+        setNewsletterHistory(data);
+      }
+      setLoadingHistory(false);
+    };
+    fetchHistory();
+  }, []);
+
   const toggleCohort = (cohort) => {
-    setSelectedCohorts(prev => 
-      prev.includes(cohort) 
+    setSelectedCohorts(prev =>
+      prev.includes(cohort)
         ? prev.filter(c => c !== cohort)
         : [...prev, cohort]
     );
   };
 
-  const handleSend = () => {
+  // Create in-app announcement
+  const handleCreateAnnouncement = async () => {
+    if (!newAnnouncement.title.trim() || !newAnnouncement.content.trim()) return;
+    setSavingAnnouncement(true);
+
+    const { error } = await supabase
+      .from('announcements')
+      .insert({
+        title: newAnnouncement.title,
+        content: newAnnouncement.content,
+        is_pinned: newAnnouncement.is_pinned,
+        author_id: user?.id,
+        published_at: new Date().toISOString(),
+      });
+
+    if (!error) {
+      setNewAnnouncement({ title: '', content: '', is_pinned: false });
+      setShowNewAnnouncement(false);
+      alert('Announcement posted! It will appear in the Community feed.');
+    } else {
+      alert('Error creating announcement: ' + (error?.message || 'Unknown error'));
+    }
+    setSavingAnnouncement(false);
+  };
+
+  // Send newsletter email
+  const handleSendNewsletter = async () => {
     if (!subject.trim() || !content.trim()) {
       alert('Please fill in subject and content');
       return;
@@ -4616,157 +4638,250 @@ function CohortCommunicationPage() {
       alert('No recipients selected');
       return;
     }
-    
+
     setSending(true);
-    
-    // Demo mode - just show success after delay
-    setTimeout(() => {
-      alert(`[DEMO MODE] Email would be sent to ${recipients.length} recipients:\n\nSubject: ${subject}\n\nThis is a demo. No actual emails were sent.`);
-      setSending(false);
-    }, 1500);
+
+    // Log to newsletter_sends table
+    const { data, error } = await supabase
+      .from('newsletter_sends')
+      .insert({
+        subject: subject,
+        body_preview: content.substring(0, 200),
+        sent_by: user?.id,
+        recipient_count: recipients.length,
+        target_programs: selectedCohorts,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setNewsletterHistory(prev => [data, ...prev]);
+      alert(`[DEMO MODE] Newsletter would be sent to ${recipients.length} recipients.\n\nSubject: ${subject}\n\nNote: Full email sending integration coming soon.`);
+      setSubject('');
+      setContent('');
+    } else {
+      alert('Error: ' + (error?.message || 'Unknown error'));
+    }
+    setSending(false);
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   return (
-    <div className="p-4 pb-24">
-      {/* Demo Banner */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-3 mb-4 flex items-center gap-2">
-        <span className="text-xl">🧪</span>
-        <div>
-          <p className="font-semibold text-yellow-800 text-sm">Demo Mode</p>
-          <p className="text-yellow-700 text-xs">No emails will actually be sent</p>
-        </div>
-      </div>
-      
-      {/* Status Filter Pills */}
-      <StatusFilterBar 
-        statusFilter={statusFilter} 
-        setStatusFilter={setStatusFilter} 
-        statusCounts={statusCounts} 
-      />
-      
-      {/* Cohort Selection */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-700">Select Cohorts</h3>
-          <button 
-            onClick={() => setSelectedCohorts(selectedCohorts.length === cohorts.length ? [] : [...cohorts])}
-            className="text-xs text-goldin-orange font-medium"
-          >
-            {selectedCohorts.length === cohorts.length ? 'Deselect All' : 'Select All'}
-          </button>
-        </div>
-        
-        <div className="flex flex-wrap gap-2 max-h-32 overflow-auto">
-          {cohorts.map(cohort => (
-            <button
-              key={cohort}
-              onClick={() => toggleCohort(cohort)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                selectedCohorts.includes(cohort)
-                  ? 'bg-goldin-orange text-white'
-                  : 'bg-gray-100 text-gray-700'
-              }`}
-            >
-              {cohort}
-            </button>
-          ))}
-        </div>
-        
-        <p className="mt-3 text-sm text-gray-500">
-          <span className="font-semibold text-goldin-orange">{recipients.length}</span> recipients with email addresses
-        </p>
-      </div>
-      
-      {/* Email Composition */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Compose Email</h3>
-        
-        {/* Subject */}
-        <div className="mb-4">
-          <label className="block text-xs text-gray-500 mb-1">Subject</label>
-          <input
-            type="text"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Enter email subject..."
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
-          />
-        </div>
-        
-        {/* Formatting Toolbar */}
-        <div className="flex items-center gap-2 mb-2">
+    <div className="min-h-screen bg-gray-50">
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-200 sticky top-16 z-10">
+        <div className="flex">
           <button
-            onClick={() => setIsBold(!isBold)}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition ${
-              isBold ? 'bg-goldin-orange text-white' : 'bg-gray-100 text-gray-700'
+            onClick={() => setActiveTab('announcement')}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
+              activeTab === 'announcement'
+                ? 'text-orange-600 border-orange-500'
+                : 'text-gray-500 border-transparent'
             }`}
           >
-            B
+            📢 Announcement
           </button>
           <button
-            onClick={() => setIsItalic(!isItalic)}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm italic transition ${
-              isItalic ? 'bg-goldin-orange text-white' : 'bg-gray-100 text-gray-700'
+            onClick={() => setActiveTab('newsletter')}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
+              activeTab === 'newsletter'
+                ? 'text-orange-600 border-orange-500'
+                : 'text-gray-500 border-transparent'
             }`}
           >
-            I
-          </button>
-          <div className="flex-1"></div>
-          <button
-            onClick={() => setShowPreview(!showPreview)}
-            className="text-xs text-goldin-orange font-medium"
-          >
-            {showPreview ? 'Edit' : 'Preview'}
+            ✉️ Newsletter
           </button>
         </div>
-        
-        {/* Content */}
-        {showPreview ? (
-          <div 
-            className="w-full border border-gray-200 rounded-xl p-4 min-h-[200px] bg-gray-50"
-            style={{ fontWeight: isBold ? 'bold' : 'normal', fontStyle: isItalic ? 'italic' : 'normal' }}
-          >
-            {content || <span className="text-gray-400">No content yet...</span>}
+      </div>
+
+      <div className="p-4">
+        {/* ANNOUNCEMENT TAB - In-app messages */}
+        {activeTab === 'announcement' && (
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
+              <span className="text-lg">ℹ️</span>
+              <p className="text-sm text-blue-800">
+                Announcements appear in the <strong>Community</strong> feed for all fellows using the app.
+              </p>
+            </div>
+
+            {!showNewAnnouncement ? (
+              <button
+                onClick={() => setShowNewAnnouncement(true)}
+                className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold"
+              >
+                + Create Announcement
+              </button>
+            ) : (
+              <div className="bg-white rounded-xl p-4 border border-gray-200 space-y-3">
+                <input
+                  type="text"
+                  placeholder="Announcement title..."
+                  value={newAnnouncement.title}
+                  onChange={(e) => setNewAnnouncement(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+                />
+                <textarea
+                  placeholder="What would you like to share?"
+                  value={newAnnouncement.content}
+                  onChange={(e) => setNewAnnouncement(prev => ({ ...prev, content: e.target.value }))}
+                  rows={5}
+                  className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 resize-none"
+                />
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={newAnnouncement.is_pinned}
+                    onChange={(e) => setNewAnnouncement(prev => ({ ...prev, is_pinned: e.target.checked }))}
+                    className="w-4 h-4 text-orange-500"
+                  />
+                  <span className="text-sm text-gray-600">Pin this announcement</span>
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowNewAnnouncement(false)}
+                    className="flex-1 py-3 border border-gray-200 rounded-lg text-gray-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateAnnouncement}
+                    disabled={savingAnnouncement || !newAnnouncement.title.trim() || !newAnnouncement.content.trim()}
+                    className="flex-1 py-3 bg-orange-500 text-white rounded-lg font-semibold disabled:opacity-50"
+                  >
+                    {savingAnnouncement ? 'Posting...' : 'Post Announcement'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        ) : (
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Write your message here..."
-            rows={8}
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30 resize-none"
-            style={{ fontWeight: isBold ? 'bold' : 'normal', fontStyle: isItalic ? 'italic' : 'normal' }}
-          />
         )}
-      </div>
-      
-      {/* Send Button */}
-      <button
-        onClick={handleSend}
-        disabled={sending || recipients.length === 0 || !subject.trim() || !content.trim()}
-        className="w-full bg-goldin-orange text-white font-bold py-4 rounded-2xl active:scale-98 transition disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {sending ? 'Sending...' : `Send to ${recipients.length} Recipients`}
-      </button>
-      
-      {/* Recipients Preview */}
-      {recipients.length > 0 && (
-        <div className="mt-4">
-          <h4 className="text-sm font-semibold text-gray-700 mb-2">Recipients ({recipients.length})</h4>
-          <div className="bg-gray-50 rounded-xl p-3 max-h-40 overflow-auto">
-            <div className="flex flex-wrap gap-1">
-              {recipients.slice(0, 20).map(r => (
-                <span key={r.id} className="text-xs bg-white px-2 py-1 rounded-full text-gray-600 border border-gray-200">
-                  {r.first_name} {r.last_name}
-                </span>
-              ))}
-              {recipients.length > 20 && (
-                <span className="text-xs text-gray-500 px-2 py-1">+{recipients.length - 20} more</span>
+
+        {/* NEWSLETTER TAB - Email to fellows */}
+        {activeTab === 'newsletter' && (
+          <div className="space-y-4">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 flex items-start gap-2">
+              <span className="text-lg">✉️</span>
+              <p className="text-sm text-yellow-800">
+                Newsletters are sent via <strong>email</strong> to fellows outside the app.
+              </p>
+            </div>
+
+            {/* Status Filter Pills */}
+            <StatusFilterBar
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              statusCounts={statusCounts}
+            />
+
+            {/* Cohort Selection */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">Select Recipients</h3>
+                <button
+                  onClick={() => setSelectedCohorts(selectedCohorts.length === cohorts.length ? [] : [...cohorts])}
+                  className="text-xs text-goldin-orange font-medium"
+                >
+                  {selectedCohorts.length === cohorts.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-auto">
+                {cohorts.map(cohort => (
+                  <button
+                    key={cohort}
+                    onClick={() => toggleCohort(cohort)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                      selectedCohorts.includes(cohort)
+                        ? 'bg-goldin-orange text-white'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {cohort}
+                  </button>
+                ))}
+              </div>
+
+              <p className="mt-3 text-sm text-gray-500">
+                <span className="font-semibold text-goldin-orange">{recipients.length}</span> recipients with email addresses
+              </p>
+            </div>
+
+            {/* Email Composition */}
+            <div className="bg-white rounded-xl p-4 border border-gray-200 space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Enter email subject..."
+                  className="w-full border border-gray-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-gray-500">Content</label>
+                  <button
+                    onClick={() => setShowPreview(!showPreview)}
+                    className="text-xs text-goldin-orange font-medium"
+                  >
+                    {showPreview ? 'Edit' : 'Preview'}
+                  </button>
+                </div>
+                {showPreview ? (
+                  <div className="w-full border border-gray-200 rounded-lg p-4 min-h-[200px] bg-gray-50">
+                    {content || <span className="text-gray-400">No content yet...</span>}
+                  </div>
+                ) : (
+                  <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Write your newsletter here..."
+                    rows={8}
+                    className="w-full border border-gray-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-goldin-orange/30 resize-none"
+                  />
+                )}
+              </div>
+
+              <button
+                onClick={handleSendNewsletter}
+                disabled={sending || recipients.length === 0 || !subject.trim() || !content.trim()}
+                className="w-full bg-goldin-orange text-white font-bold py-4 rounded-xl disabled:opacity-50"
+              >
+                {sending ? 'Sending...' : `Send to ${recipients.length} Recipients`}
+              </button>
+            </div>
+
+            {/* Newsletter History */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">Recent Sends</h3>
+              {loadingHistory ? (
+                <div className="text-center py-4 text-gray-500">Loading...</div>
+              ) : newsletterHistory.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">No newsletters sent yet</div>
+              ) : (
+                <div className="space-y-2">
+                  {newsletterHistory.map(send => (
+                    <div key={send.id} className="bg-white rounded-lg p-3 border border-gray-200">
+                      <p className="font-medium text-gray-900">{send.subject}</p>
+                      <p className="text-sm text-gray-500">
+                        {formatDate(send.sent_at)} · {send.recipient_count || 0} recipients
+                      </p>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -6560,29 +6675,13 @@ function TeamManagementPage({ onBack }) {
 function CommunityPage() {
   const { user, canAccess } = useContext(AppContext);
   const isStaff = canAccess(ROLES.TEAM);
-  const [activeTab, setActiveTab] = useState('feed');
 
-  // Announcements state
+  // Announcements state (Feed only)
   const [announcements, setAnnouncements] = useState([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
   const [showNewAnnouncement, setShowNewAnnouncement] = useState(false);
   const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', is_pinned: false });
   const [savingAnnouncement, setSavingAnnouncement] = useState(false);
-
-  // Resources state
-  const [resources, setResources] = useState([]);
-  const [loadingResources, setLoadingResources] = useState(true);
-  const [resourceFilter, setResourceFilter] = useState('all');
-  const [showNewResource, setShowNewResource] = useState(false);
-  const [newResource, setNewResource] = useState({ title: '', description: '', url: '', category: 'link' });
-  const [savingResource, setSavingResource] = useState(false);
-
-  // Newsletter state
-  const [newsletterSubject, setNewsletterSubject] = useState('');
-  const [newsletterBody, setNewsletterBody] = useState('');
-  const [sendingNewsletter, setSendingNewsletter] = useState(false);
-  const [newsletterHistory, setNewsletterHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(true);
 
   // Fetch announcements
   useEffect(() => {
@@ -6602,42 +6701,6 @@ function CommunityPage() {
     };
     fetchAnnouncements();
   }, []);
-
-  // Fetch resources
-  useEffect(() => {
-    const fetchResources = async () => {
-      setLoadingResources(true);
-      const { data, error } = await supabase
-        .from('resources')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        setResources(data);
-      }
-      setLoadingResources(false);
-    };
-    fetchResources();
-  }, []);
-
-  // Fetch newsletter history (staff only)
-  useEffect(() => {
-    if (!isStaff) return;
-    const fetchHistory = async () => {
-      setLoadingHistory(true);
-      const { data, error } = await supabase
-        .from('newsletter_sends')
-        .select('*')
-        .order('sent_at', { ascending: false })
-        .limit(10);
-
-      if (!error && data) {
-        setNewsletterHistory(data);
-      }
-      setLoadingHistory(false);
-    };
-    fetchHistory();
-  }, [isStaff]);
 
   // Create announcement
   const handleCreateAnnouncement = async () => {
@@ -6666,7 +6729,81 @@ function CommunityPage() {
     setSavingAnnouncement(false);
   };
 
-  // Create resource
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="p-4">
+        <div className="space-y-4">
+          {/* Announcements List */}
+          {loadingAnnouncements ? (
+            <div className="text-center py-8 text-gray-500">Loading announcements...</div>
+          ) : announcements.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p className="text-4xl mb-2">📢</p>
+              <p>No announcements yet</p>
+            </div>
+          ) : (
+            announcements.map(announcement => (
+              <div
+                key={announcement.id}
+                className={`bg-white rounded-xl p-4 border ${
+                  announcement.is_pinned ? 'border-orange-300 bg-orange-50' : 'border-gray-200'
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  {announcement.is_pinned && (
+                    <span className="text-orange-500">📌</span>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900">{announcement.title}</h3>
+                    <p className="text-gray-600 mt-1 whitespace-pre-wrap">{announcement.content}</p>
+                    <p className="text-xs text-gray-400 mt-2">{formatDate(announcement.published_at)}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// LIBRARY PAGE (Resources)
+// ============================================
+function LibraryPage() {
+  const { user, canAccess } = useContext(AppContext);
+  const isStaff = canAccess(ROLES.TEAM);
+
+  const [resources, setResources] = useState([]);
+  const [loadingResources, setLoadingResources] = useState(true);
+  const [resourceFilter, setResourceFilter] = useState('all');
+  const [showNewResource, setShowNewResource] = useState(false);
+  const [newResource, setNewResource] = useState({ title: '', description: '', url: '', category: 'link' });
+  const [savingResource, setSavingResource] = useState(false);
+
+  useEffect(() => {
+    const fetchResources = async () => {
+      setLoadingResources(true);
+      const { data, error } = await supabase
+        .from('resources')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setResources(data);
+      }
+      setLoadingResources(false);
+    };
+    fetchResources();
+  }, []);
+
   const handleCreateResource = async () => {
     if (!newResource.title.trim() || !newResource.url.trim()) return;
     setSavingResource(true);
@@ -6693,35 +6830,6 @@ function CommunityPage() {
     setSavingResource(false);
   };
 
-  // Send newsletter (placeholder - needs Buttondown Edge Function)
-  const handleSendNewsletter = async () => {
-    if (!newsletterSubject.trim() || !newsletterBody.trim()) return;
-    setSendingNewsletter(true);
-
-    // For now, just log it to newsletter_sends table
-    // Full Buttondown integration would call an Edge Function
-    const { data, error } = await supabase
-      .from('newsletter_sends')
-      .insert({
-        subject: newsletterSubject,
-        body_preview: newsletterBody.substring(0, 200),
-        sent_by: user?.id,
-        recipient_count: 292, // placeholder
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
-      setNewsletterHistory(prev => [data, ...prev]);
-      setNewsletterSubject('');
-      setNewsletterBody('');
-      alert('Newsletter logged! Note: Full Buttondown sending not yet implemented.');
-    } else {
-      alert('Error: ' + (error?.message || 'Unknown error'));
-    }
-    setSendingNewsletter(false);
-  };
-
   const filteredResources = resourceFilter === 'all'
     ? resources
     : resources.filter(r => r.category === resourceFilter);
@@ -6734,318 +6842,125 @@ function CommunityPage() {
     { id: 'template', label: 'Templates', icon: '📋' },
   ];
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Tabs */}
-      <div className="bg-white border-b border-gray-200 sticky top-16 z-10">
-        <div className="flex">
-          <button
-            onClick={() => setActiveTab('feed')}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
-              activeTab === 'feed'
-                ? 'text-orange-600 border-orange-500'
-                : 'text-gray-500 border-transparent'
-            }`}
-          >
-            📢 Feed
-          </button>
-          <button
-            onClick={() => setActiveTab('resources')}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
-              activeTab === 'resources'
-                ? 'text-orange-600 border-orange-500'
-                : 'text-gray-500 border-transparent'
-            }`}
-          >
-            📚 Resources
-          </button>
-          {isStaff && (
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="space-y-4">
+        {/* Category Filter */}
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {resourceCategories.map(cat => (
             <button
-              onClick={() => setActiveTab('newsletter')}
-              className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
-                activeTab === 'newsletter'
-                  ? 'text-orange-600 border-orange-500'
-                  : 'text-gray-500 border-transparent'
+              key={cat.id}
+              onClick={() => setResourceFilter(cat.id)}
+              className={`flex items-center gap-1 px-3 py-2 rounded-full text-sm whitespace-nowrap transition ${
+                resourceFilter === cat.id
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-white text-gray-600 border border-gray-200'
               }`}
             >
-              ✉️ Newsletter
+              <span>{cat.icon}</span>
+              <span>{cat.label}</span>
             </button>
-          )}
+          ))}
         </div>
-      </div>
 
-      <div className="p-4">
-        {/* FEED TAB */}
-        {activeTab === 'feed' && (
-          <div className="space-y-4">
-            {/* New Announcement Button (Staff only) */}
-            {isStaff && !showNewAnnouncement && (
+        {/* New Resource Button (Staff only) */}
+        {isStaff && !showNewResource && (
+          <button
+            onClick={() => setShowNewResource(true)}
+            className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold"
+          >
+            + Add Resource
+          </button>
+        )}
+
+        {/* New Resource Form */}
+        {isStaff && showNewResource && (
+          <div className="bg-white rounded-xl p-4 border border-gray-200 space-y-3">
+            <input
+              type="text"
+              placeholder="Resource title..."
+              value={newResource.title}
+              onChange={(e) => setNewResource(prev => ({ ...prev, title: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+            />
+            <input
+              type="url"
+              placeholder="URL (https://...)"
+              value={newResource.url}
+              onChange={(e) => setNewResource(prev => ({ ...prev, url: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+            />
+            <textarea
+              placeholder="Description (optional)"
+              value={newResource.description}
+              onChange={(e) => setNewResource(prev => ({ ...prev, description: e.target.value }))}
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 resize-none"
+            />
+            <select
+              value={newResource.category}
+              onChange={(e) => setNewResource(prev => ({ ...prev, category: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
+            >
+              <option value="link">🔗 Link</option>
+              <option value="document">📄 Document</option>
+              <option value="video">🎬 Video</option>
+              <option value="template">📋 Template</option>
+            </select>
+            <div className="flex gap-2">
               <button
-                onClick={() => setShowNewAnnouncement(true)}
-                className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold"
+                onClick={() => setShowNewResource(false)}
+                className="flex-1 py-2 border border-gray-200 rounded-lg text-gray-600"
               >
-                + New Announcement
+                Cancel
               </button>
-            )}
-
-            {/* New Announcement Form */}
-            {isStaff && showNewAnnouncement && (
-              <div className="bg-white rounded-xl p-4 border border-gray-200 space-y-3">
-                <input
-                  type="text"
-                  placeholder="Announcement title..."
-                  value={newAnnouncement.title}
-                  onChange={(e) => setNewAnnouncement(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
-                />
-                <textarea
-                  placeholder="What would you like to share?"
-                  value={newAnnouncement.content}
-                  onChange={(e) => setNewAnnouncement(prev => ({ ...prev, content: e.target.value }))}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 resize-none"
-                />
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={newAnnouncement.is_pinned}
-                    onChange={(e) => setNewAnnouncement(prev => ({ ...prev, is_pinned: e.target.checked }))}
-                    className="w-4 h-4 text-orange-500"
-                  />
-                  <span className="text-sm text-gray-600">Pin this announcement</span>
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowNewAnnouncement(false)}
-                    className="flex-1 py-2 border border-gray-200 rounded-lg text-gray-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCreateAnnouncement}
-                    disabled={savingAnnouncement || !newAnnouncement.title.trim() || !newAnnouncement.content.trim()}
-                    className="flex-1 py-2 bg-orange-500 text-white rounded-lg font-semibold disabled:opacity-50"
-                  >
-                    {savingAnnouncement ? 'Posting...' : 'Post'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Announcements List */}
-            {loadingAnnouncements ? (
-              <div className="text-center py-8 text-gray-500">Loading announcements...</div>
-            ) : announcements.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <p className="text-4xl mb-2">📢</p>
-                <p>No announcements yet</p>
-              </div>
-            ) : (
-              announcements.map(announcement => (
-                <div
-                  key={announcement.id}
-                  className={`bg-white rounded-xl p-4 border ${
-                    announcement.is_pinned ? 'border-orange-300 bg-orange-50' : 'border-gray-200'
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    {announcement.is_pinned && (
-                      <span className="text-orange-500">📌</span>
-                    )}
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">{announcement.title}</h3>
-                      <p className="text-gray-600 mt-1 whitespace-pre-wrap">{announcement.content}</p>
-                      <p className="text-xs text-gray-400 mt-2">{formatDate(announcement.published_at)}</p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
+              <button
+                onClick={handleCreateResource}
+                disabled={savingResource || !newResource.title.trim() || !newResource.url.trim()}
+                className="flex-1 py-2 bg-orange-500 text-white rounded-lg font-semibold disabled:opacity-50"
+              >
+                {savingResource ? 'Adding...' : 'Add'}
+              </button>
+            </div>
           </div>
         )}
 
-        {/* RESOURCES TAB */}
-        {activeTab === 'resources' && (
-          <div className="space-y-4">
-            {/* Category Filter */}
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {resourceCategories.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setResourceFilter(cat.id)}
-                  className={`flex items-center gap-1 px-3 py-2 rounded-full text-sm whitespace-nowrap transition ${
-                    resourceFilter === cat.id
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-white text-gray-600 border border-gray-200'
-                  }`}
-                >
-                  <span>{cat.icon}</span>
-                  <span>{cat.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* New Resource Button (Staff only) */}
-            {isStaff && !showNewResource && (
-              <button
-                onClick={() => setShowNewResource(true)}
-                className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold"
-              >
-                + Add Resource
-              </button>
-            )}
-
-            {/* New Resource Form */}
-            {isStaff && showNewResource && (
-              <div className="bg-white rounded-xl p-4 border border-gray-200 space-y-3">
-                <input
-                  type="text"
-                  placeholder="Resource title..."
-                  value={newResource.title}
-                  onChange={(e) => setNewResource(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
-                />
-                <input
-                  type="url"
-                  placeholder="URL (https://...)"
-                  value={newResource.url}
-                  onChange={(e) => setNewResource(prev => ({ ...prev, url: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
-                />
-                <textarea
-                  placeholder="Description (optional)"
-                  value={newResource.description}
-                  onChange={(e) => setNewResource(prev => ({ ...prev, description: e.target.value }))}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 resize-none"
-                />
-                <select
-                  value={newResource.category}
-                  onChange={(e) => setNewResource(prev => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
-                >
-                  <option value="link">🔗 Link</option>
-                  <option value="document">📄 Document</option>
-                  <option value="video">🎬 Video</option>
-                  <option value="template">📋 Template</option>
-                </select>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowNewResource(false)}
-                    className="flex-1 py-2 border border-gray-200 rounded-lg text-gray-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCreateResource}
-                    disabled={savingResource || !newResource.title.trim() || !newResource.url.trim()}
-                    className="flex-1 py-2 bg-orange-500 text-white rounded-lg font-semibold disabled:opacity-50"
-                  >
-                    {savingResource ? 'Adding...' : 'Add'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Resources List */}
-            {loadingResources ? (
-              <div className="text-center py-8 text-gray-500">Loading resources...</div>
-            ) : filteredResources.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <p className="text-4xl mb-2">📚</p>
-                <p>No resources yet</p>
-              </div>
-            ) : (
-              filteredResources.map(resource => (
-                <a
-                  key={resource.id}
-                  href={resource.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block bg-white rounded-xl p-4 border border-gray-200 hover:border-orange-300 transition"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">
-                      {resource.category === 'document' ? '📄' :
-                       resource.category === 'video' ? '🎬' :
-                       resource.category === 'template' ? '📋' : '🔗'}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900">{resource.title}</h3>
-                      {resource.description && (
-                        <p className="text-sm text-gray-600 mt-1">{resource.description}</p>
-                      )}
-                      <p className="text-xs text-gray-400 mt-2 truncate">{resource.url}</p>
-                    </div>
-                    <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </div>
-                </a>
-              ))
-            )}
+        {/* Resources List */}
+        {loadingResources ? (
+          <div className="text-center py-8 text-gray-500">Loading resources...</div>
+        ) : filteredResources.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <p className="text-4xl mb-2">📚</p>
+            <p>No resources yet</p>
           </div>
-        )}
-
-        {/* NEWSLETTER TAB (Staff only) */}
-        {activeTab === 'newsletter' && isStaff && (
-          <div className="space-y-4">
-            {/* Compose */}
-            <div className="bg-white rounded-xl p-4 border border-gray-200 space-y-3">
-              <h3 className="font-semibold text-gray-900">Compose Newsletter</h3>
-              <input
-                type="text"
-                placeholder="Subject line..."
-                value={newsletterSubject}
-                onChange={(e) => setNewsletterSubject(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500"
-              />
-              <textarea
-                placeholder="Newsletter content..."
-                value={newsletterBody}
-                onChange={(e) => setNewsletterBody(e.target.value)}
-                rows={6}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 resize-none"
-              />
-              <button
-                onClick={handleSendNewsletter}
-                disabled={sendingNewsletter || !newsletterSubject.trim() || !newsletterBody.trim()}
-                className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-50"
-              >
-                {sendingNewsletter ? 'Sending...' : '📧 Send to All Fellows (292)'}
-              </button>
-              <p className="text-xs text-gray-400 text-center">
-                Note: Full Buttondown integration coming soon
-              </p>
-            </div>
-
-            {/* History */}
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Recent Sends</h3>
-              {loadingHistory ? (
-                <div className="text-center py-4 text-gray-500">Loading...</div>
-              ) : newsletterHistory.length === 0 ? (
-                <div className="text-center py-4 text-gray-500">No newsletters sent yet</div>
-              ) : (
-                <div className="space-y-2">
-                  {newsletterHistory.map(send => (
-                    <div key={send.id} className="bg-white rounded-lg p-3 border border-gray-200">
-                      <p className="font-medium text-gray-900">{send.subject}</p>
-                      <p className="text-sm text-gray-500">
-                        {formatDate(send.sent_at)} · {send.recipient_count || 0} recipients
-                      </p>
-                    </div>
-                  ))}
+        ) : (
+          filteredResources.map(resource => (
+            <a
+              key={resource.id}
+              href={resource.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block bg-white rounded-xl p-4 border border-gray-200 hover:border-orange-300 transition"
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">
+                  {resource.category === 'document' ? '📄' :
+                   resource.category === 'video' ? '🎬' :
+                   resource.category === 'template' ? '📋' : '🔗'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900">{resource.title}</h3>
+                  {resource.description && (
+                    <p className="text-sm text-gray-600 mt-1">{resource.description}</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-2 truncate">{resource.url}</p>
                 </div>
-              )}
-            </div>
-          </div>
+                <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </div>
+            </a>
+          ))
         )}
       </div>
     </div>
@@ -7395,7 +7310,7 @@ function MainApp() {
 
   // Route protection - redirect guests from team-only pages
   useEffect(() => {
-    const teamOnlyPages = ['dashboard', 'activity', 'cohort-comm', 'team-management'];
+    const teamOnlyPages = ['dashboard', 'activity', 'broadcast', 'team-management'];
     if (teamOnlyPages.includes(currentPage) && !canAccess(ROLES.TEAM)) {
       setCurrentPage('directory');
     }
@@ -7465,9 +7380,10 @@ function MainApp() {
     dashboard: 'Dashboard',
     directory: 'Directory',
     community: 'Community',
+    library: 'Library',
     search: 'Search',
     activity: 'Activity',
-    'cohort-comm': 'Cohort Communication',
+    broadcast: 'Broadcast',
     settings: 'Settings',
     'team-management': 'Team Management'
   };
@@ -7526,9 +7442,10 @@ function MainApp() {
         {currentPage === 'dashboard' && <DashboardPage onLogInteraction={openLogModal} onSelectFellow={handleSelectFellow} />}
         {currentPage === 'directory' && <DirectoryPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'community' && <CommunityPage />}
+        {currentPage === 'library' && <LibraryPage />}
         {currentPage === 'search' && <SearchPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'activity' && <ActivityPage onSelectFellow={handleSelectFellow} />}
-        {currentPage === 'cohort-comm' && <CohortCommunicationPage />}
+        {currentPage === 'broadcast' && <BroadcastPage />}
         {currentPage === 'settings' && <SettingsPage onNavigate={setCurrentPage} />}
         {currentPage === 'team-management' && <TeamManagementPage onBack={() => setCurrentPage('settings')} />}
       </main>
