@@ -113,6 +113,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/getstream@8/dist/js_min/getstream.js"></script>
 
 <script type="text/babel">
 const { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } = React;
@@ -401,6 +402,111 @@ async function determineUserRole(email, userId = null) {
     }
     return ROLES.VIEWER;
   }
+}
+
+// ============================================
+// GETSTREAM FEED HOOK
+// ============================================
+function useStreamFeed() {
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const clientRef = useRef(null);
+  const feedRef = useRef(null);
+  const nextPageRef = useRef(null);
+
+  const fetchToken = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/stream-token`,
+      {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to get stream token');
+    }
+
+    const { token, appId } = await response.json();
+    return { token, appId, userId: session.user.id };
+  }, []);
+
+  const initialize = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const tokenData = await fetchToken();
+      if (!tokenData) {
+        setError('Not authenticated');
+        setLoading(false);
+        return;
+      }
+
+      const { token, appId, userId } = tokenData;
+
+      // Initialize GetStream client
+      const client = window.stream.connect(appId, token, appId);
+      clientRef.current = client;
+
+      // Get community feed
+      const feed = client.feed('flat', 'community');
+      feedRef.current = feed;
+
+      // Fetch initial activities
+      const result = await feed.get({ limit: 20 });
+      setActivities(result.results || []);
+      nextPageRef.current = result.next;
+      setHasMore(!!result.next);
+      setLoading(false);
+    } catch (err) {
+      console.error('Stream feed error:', err);
+      setError(err.message);
+      setLoading(false);
+    }
+  }, [fetchToken]);
+
+  const loadMore = useCallback(async () => {
+    if (!feedRef.current || !nextPageRef.current || !hasMore) return;
+
+    try {
+      const result = await feedRef.current.get({
+        limit: 20,
+        id_lt: activities[activities.length - 1]?.id
+      });
+      setActivities(prev => [...prev, ...(result.results || [])]);
+      nextPageRef.current = result.next;
+      setHasMore(!!result.next);
+    } catch (err) {
+      console.error('Load more error:', err);
+    }
+  }, [activities, hasMore]);
+
+  const refresh = useCallback(async () => {
+    if (!feedRef.current) {
+      await initialize();
+      return;
+    }
+
+    try {
+      const result = await feedRef.current.get({ limit: 20 });
+      setActivities(result.results || []);
+      nextPageRef.current = result.next;
+      setHasMore(!!result.next);
+    } catch (err) {
+      console.error('Refresh error:', err);
+      setError(err.message);
+    }
+  }, [initialize]);
+
+  return { activities, loading, error, hasMore, initialize, loadMore, refresh };
 }
 
 // ============================================
@@ -4608,7 +4714,7 @@ function BroadcastPage() {
     if (!newAnnouncement.title.trim() || !newAnnouncement.content.trim()) return;
     setSavingAnnouncement(true);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('announcements')
       .insert({
         title: newAnnouncement.title,
@@ -4616,9 +4722,44 @@ function BroadcastPage() {
         is_pinned: newAnnouncement.is_pinned,
         author_id: user?.id,
         published_at: new Date().toISOString(),
-      });
+      })
+      .select()
+      .single();
 
-    if (!error) {
+    if (!error && data) {
+      // Also publish to GetStream activity feed (best-effort)
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const tokenRes = await fetch(
+            `${SUPABASE_URL}/functions/v1/stream-token`,
+            {
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+          if (tokenRes.ok) {
+            const { token, appId } = await tokenRes.json();
+            const client = window.stream.connect(appId, token, appId);
+            const feed = client.feed('flat', 'community');
+            await feed.addActivity({
+              actor: `user:${session.user.id}`,
+              verb: 'announcement',
+              object: `announcement:${data.id}`,
+              message: data.title,
+              announcementId: data.id,
+              foreign_id: `announcement:${data.id}`,
+              time: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (streamErr) {
+        console.warn('Failed to publish to activity feed:', streamErr);
+        // Don't fail the announcement if GetStream fails
+      }
+
       setNewAnnouncement({ title: '', content: '', is_pinned: false });
       setShowNewAnnouncement(false);
       alert('Announcement posted! It will appear in the Community feed.');
@@ -6670,18 +6811,158 @@ function TeamManagementPage({ onBack }) {
 }
 
 // ============================================
+// STREAM ACTIVITY ITEM COMPONENT
+// ============================================
+function StreamActivityItem({ activity }) {
+  const formatTime = (time) => {
+    if (!time) return '';
+    const date = new Date(time);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const getActivityIcon = (verb) => {
+    switch (verb) {
+      case 'announcement': return '📢';
+      case 'resource': return '📄';
+      case 'post': return '💬';
+      case 'join': return '👋';
+      default: return '📌';
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl p-4 border border-gray-200 activity-item">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg">
+          {activity.actor?.data?.image ? (
+            <img
+              src={activity.actor.data.image}
+              alt=""
+              className="w-10 h-10 rounded-full object-cover"
+            />
+          ) : (
+            getActivityIcon(activity.verb)
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-gray-900">
+              {activity.actor?.data?.name || 'GATHER'}
+            </span>
+            <span className="text-xs text-gray-400">
+              {formatTime(activity.time)}
+            </span>
+          </div>
+          {activity.object?.data?.title && (
+            <h4 className="font-semibold text-gray-900 mt-1">
+              {activity.object.data.title}
+            </h4>
+          )}
+          <p className="text-gray-600 mt-1 line-clamp-3">
+            {activity.object?.data?.content || activity.message || ''}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// ACTIVITY FEED SECTION COMPONENT
+// ============================================
+function ActivityFeedSection() {
+  const { user } = useContext(AppContext);
+  const { activities, loading, error, hasMore, initialize, loadMore, refresh } = useStreamFeed();
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (user && user.email !== 'guest@gathertracker.app' && !initialized) {
+      initialize();
+      setInitialized(true);
+    }
+  }, [user, initialized, initialize]);
+
+  if (!user || user.email === 'guest@gathertracker.app') {
+    return (
+      <div className="text-center py-12">
+        <p className="text-4xl mb-3">🔐</p>
+        <p className="text-gray-600">Sign in to see network activity</p>
+      </div>
+    );
+  }
+
+  if (loading && activities.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        Loading activity feed...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500 mb-3">Could not load activity feed</p>
+        <button
+          onClick={refresh}
+          className="text-orange-500 font-medium"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (activities.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <p className="text-4xl mb-2">🌱</p>
+        <p>No activity yet</p>
+        <p className="text-sm mt-1">Check back soon for network updates</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {activities.map(activity => (
+        <StreamActivityItem key={activity.id} activity={activity} />
+      ))}
+      {hasMore && (
+        <button
+          onClick={loadMore}
+          className="w-full py-3 text-orange-500 font-medium"
+        >
+          Load more
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // COMMUNITY PAGE
 // ============================================
 function CommunityPage() {
   const { user, canAccess } = useContext(AppContext);
-  const isStaff = canAccess(ROLES.TEAM);
+  const isGuest = !user || user.email === 'guest@gathertracker.app';
 
-  // Announcements state (Feed only)
+  // Tab state
+  const [activeTab, setActiveTab] = useState('announcements');
+
+  // Announcements state
   const [announcements, setAnnouncements] = useState([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
-  const [showNewAnnouncement, setShowNewAnnouncement] = useState(false);
-  const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', is_pinned: false });
-  const [savingAnnouncement, setSavingAnnouncement] = useState(false);
 
   // Fetch announcements
   useEffect(() => {
@@ -6702,73 +6983,77 @@ function CommunityPage() {
     fetchAnnouncements();
   }, []);
 
-  // Create announcement
-  const handleCreateAnnouncement = async () => {
-    if (!newAnnouncement.title.trim() || !newAnnouncement.content.trim()) return;
-    setSavingAnnouncement(true);
-
-    const { data, error } = await supabase
-      .from('announcements')
-      .insert({
-        title: newAnnouncement.title,
-        content: newAnnouncement.content,
-        is_pinned: newAnnouncement.is_pinned,
-        author_id: user?.id,
-        published_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
-      setAnnouncements(prev => [data, ...prev]);
-      setNewAnnouncement({ title: '', content: '', is_pinned: false });
-      setShowNewAnnouncement(false);
-    } else {
-      alert('Error creating announcement: ' + (error?.message || 'Unknown error'));
-    }
-    setSavingAnnouncement(false);
-  };
-
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  const tabs = [
+    { id: 'announcements', label: 'Announcements' },
+    { id: 'activity', label: 'Activity', requiresAuth: true },
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="flex">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'text-orange-500 border-orange-500'
+                  : 'text-gray-500 border-transparent hover:text-gray-700'
+              } ${tab.requiresAuth && isGuest ? 'opacity-50' : ''}`}
+            >
+              {tab.label}
+              {tab.requiresAuth && isGuest && (
+                <span className="ml-1 text-xs">🔒</span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="p-4">
-        <div className="space-y-4">
-          {/* Announcements List */}
-          {loadingAnnouncements ? (
-            <div className="text-center py-8 text-gray-500">Loading announcements...</div>
-          ) : announcements.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p className="text-4xl mb-2">📢</p>
-              <p>No announcements yet</p>
-            </div>
-          ) : (
-            announcements.map(announcement => (
-              <div
-                key={announcement.id}
-                className={`bg-white rounded-xl p-4 border ${
-                  announcement.is_pinned ? 'border-orange-300 bg-orange-50' : 'border-gray-200'
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  {announcement.is_pinned && (
-                    <span className="text-orange-500">📌</span>
-                  )}
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{announcement.title}</h3>
-                    <p className="text-gray-600 mt-1 whitespace-pre-wrap">{announcement.content}</p>
-                    <p className="text-xs text-gray-400 mt-2">{formatDate(announcement.published_at)}</p>
+        {activeTab === 'announcements' ? (
+          <div className="space-y-4">
+            {/* Announcements List */}
+            {loadingAnnouncements ? (
+              <div className="text-center py-8 text-gray-500">Loading announcements...</div>
+            ) : announcements.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-4xl mb-2">📢</p>
+                <p>No announcements yet</p>
+              </div>
+            ) : (
+              announcements.map(announcement => (
+                <div
+                  key={announcement.id}
+                  className={`bg-white rounded-xl p-4 border ${
+                    announcement.is_pinned ? 'border-orange-300 bg-orange-50' : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    {announcement.is_pinned && (
+                      <span className="text-orange-500">📌</span>
+                    )}
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900">{announcement.title}</h3>
+                      <p className="text-gray-600 mt-1 whitespace-pre-wrap">{announcement.content}</p>
+                      <p className="text-xs text-gray-400 mt-2">{formatDate(announcement.published_at)}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <ActivityFeedSection />
+        )}
       </div>
     </div>
   );
