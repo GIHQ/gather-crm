@@ -55,11 +55,17 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ## Current State (Updated Feb 11, 2026)
 
 ### Recently Completed
+- **GetStream Activity Feed Integration:**
+  - Added GetStream SDK via CDN
+  - Community page now has two tabs: "Announcements" (Supabase) and "Activity" (GetStream feed)
+  - `useStreamFeed` hook handles token fetching, feed connection, and activity loading
+  - Guests see announcements only; logged-in users see both tabs
+  - Creating announcements in Broadcast page also publishes to GetStream feed (best-effort)
 - **Menu & Navigation Restructure:**
   - Removed desktop directory/dashboard links from menu
   - Renamed "Cohort Communication" → "Broadcast"
   - Added "Library" as separate menu item
-- **Community page simplified** — now shows only the Feed (announcements), no tabs
+- **Community page now has tabs** — Announcements tab (official) + Activity tab (network activity, requires login)
 - **Library page (new)** — standalone page for resources (docs, links, videos, templates)
 - **Broadcast page (redesigned)** — two tabs:
   - "Announcement" (default) — posts to in-app Community feed
@@ -92,7 +98,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Self-editing profiles + admin editing with staff notes
 
 ### In Progress
-- **Community Platform Phase 2b** — Discovery features (activity feed, enhanced search, fellow spotlight)
+- **Community Platform Phase 2b** — Discovery features (enhanced search, fellow spotlight, push notifications)
 
 ### Known Issues
 - News scanner Edge Function must be deployed via Supabase dashboard (user does not have CLI) — current version is live and working
@@ -115,7 +121,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - [ ] Test end-to-end newsletter sending
 
 ### 🟡 Short-Term (Next 2 Weeks)
-- [ ] GetStream activity feed integration
+- [x] GetStream activity feed integration ✅
 - [ ] Enhanced directory search & filters
 - [ ] Fellow spotlight feature
 - [ ] Push notification support (see ROADMAP.md for implementation notes)
@@ -233,7 +239,7 @@ Team members (Goldin Institute staff) are stored in the `team_members` table:
 ## Community Platform — Current Structure
 
 **Pages:**
-- **Community** — Feed of in-app announcements (public, read-only for non-staff)
+- **Community** — Two tabs: Announcements (Supabase, public) + Activity (GetStream feed, login required)
 - **Library** — Shared resources: documents, links, videos, templates (public)
 - **Broadcast** (staff only) — Two tabs:
   - *Announcement* — Post to Community feed (in-app, default)
@@ -246,8 +252,8 @@ Team members (Goldin Institute staff) are stored in the `team_members` table:
 - ✅ Auto-link trigger for team_members/fellows
 - ⏳ Buttondown API integration for newsletter sending (Edge Function needed)
 
-**Phase 2b (Discovery) — UP NEXT:**
-1. GetStream activity feed integration
+**Phase 2b (Discovery) — IN PROGRESS:**
+1. ✅ GetStream activity feed integration (Community page tabs + useStreamFeed hook)
 2. Enhanced directory search & filters
 3. Fellow spotlight / featured profiles
 4. Push notification support
