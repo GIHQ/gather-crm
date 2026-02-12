@@ -52,9 +52,24 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ---
 
-## Current State (Updated Feb 11, 2026)
+## Current State (Updated Feb 12, 2026)
 
 ### Recently Completed
+- **Auth Session Persistence Fix (Feb 12):**
+  - Fixed credentials being lost on page reload (reset to guest)
+  - Changed from `getSession()` to `onAuthStateChange` as primary auth mechanism
+  - Now handles `INITIAL_SESSION`, `SIGNED_IN`, and `TOKEN_REFRESHED` events
+  - Fixed race condition where `getSession()` returned null before session loaded from storage
+  - Guest users properly preserved from localStorage when no Supabase session
+- **Interaction Save Freeze Fix (Feb 12):**
+  - Added try/catch error handling to `handleSubmit` in LogInteractionModal
+  - Added try/catch to `saveQuickLog` in FellowProfileModal
+  - UI no longer freezes on "Saving..." if Supabase call fails
+  - Errors now logged to console and shown to user
+- **Community Page Error Handling (Feb 12):**
+  - Added try/catch to announcements fetch
+  - Added error state UI for failed announcements load
+  - Shows error message instead of stuck "Loading..." state
 - **Focus Areas Tab Fix (Feb 11):**
   - Fixed infinite spinning issue when clicking Focus Areas tab
   - Added 10-second timeout to prevent stuck loading state
@@ -113,6 +128,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - 18 fellows still missing focus area tags (sparse bios, no keyword matches) — can be assigned manually
 
 ### Recently Fixed Bugs
+- **Auth session lost on reload (Feb 12)** — `getSession()` was called before Supabase loaded session from storage, causing false "stale session" detection. Fixed by using `onAuthStateChange` with `INITIAL_SESSION` event.
+- **Interaction save freeze (Feb 12)** — Missing try/catch in `handleSubmit` and `saveQuickLog` caused UI to freeze on errors. Added proper error handling.
+- **Community page stuck loading (Feb 12)** — Missing error handling in announcements fetch. Added try/catch and error state UI.
 - **Focus Areas tab spinning (Feb 11)** — Was caused by missing timeout/error handling in FocusAreasEditor. Fixed with 10s timeout, proper cleanup, and team member detection.
 
 ---
@@ -165,8 +183,12 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Auto-link trigger (`014_auto_link_team_members.sql`) handles this automatically on signup/login
 
 ### Auth & Session Handling
-- Guest users use fake email `guest@gathertracker.app` — preserved across sessions
-- When Supabase session expires and user isn't a guest, localStorage is cleared and user sees login screen
+- **Primary auth mechanism:** `onAuthStateChange` listener (not `getSession()`)
+  - Handles `INITIAL_SESSION` (page load), `SIGNED_IN`, `TOKEN_REFRESHED`, and `SIGNED_OUT` events
+  - Avoids race condition where `getSession()` returns null before session loads from storage
+- Supabase client configured with `storageKey: 'gather-auth'` for session persistence
+- Guest users use fake email `guest@gathertracker.app` — preserved in localStorage across sessions
+- When `SIGNED_OUT` event fires, localStorage is cleared and user sees login screen
 - Route protection redirects guests from team-only pages: dashboard, activity, broadcast, team-management
 - Team members must run this SQL if their account isn't linked:
   ```sql
