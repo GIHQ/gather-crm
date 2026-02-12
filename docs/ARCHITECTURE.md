@@ -1,6 +1,6 @@
 # GATHER Architecture
 
-> **Last Updated:** February 6, 2026
+> **Last Updated:** February 11, 2026
 > **Maintainer:** Goldin Institute
 > **Live Site:** https://gathertracker.netlify.app
 
@@ -117,6 +117,35 @@ profile_claim_requests
 ├── status (pending/approved/rejected)
 ├── reviewed_by, reviewed_at, notes
 └── created_at
+
+announcements (Community Platform)
+├── id (UUID, PK)
+├── title, content
+├── author_id (FK → auth.users)
+├── target_programs[] (empty = all)
+├── is_pinned
+├── published_at
+└── created_at
+
+resources (Community Platform)
+├── id (UUID, PK)
+├── title, description, url
+├── category (document/link/video/template)
+├── target_programs[]
+├── uploaded_by (FK → auth.users)
+└── created_at
+
+newsletter_sends (Community Platform)
+├── id (UUID, PK)
+├── buttondown_id, subject, body_preview
+├── recipient_count, target_programs[]
+├── sent_by (FK → auth.users)
+└── sent_at
+
+stream_tokens (Community Platform)
+├── user_id (UUID, PK, FK → auth.users)
+├── token, expires_at
+└── created_at
 ```
 
 ### Storage Buckets
@@ -167,10 +196,15 @@ gather-crm/
 │   └── SETUP_GUIDE.md          # Development setup
 ├── supabase/
 │   └── functions/
-│       └── search-news/   # News scanner Edge Function
+│       ├── search-news/   # News scanner Edge Function
+│       ├── stream-token/  # GetStream token minting
+│       └── translate/     # Translation service
 └── migrations/
-    ├── 008_team_members.sql     # Team members + alternate_emails
-    └── 009_profile_claims.sql   # Profile claim requests table
+    ├── 008_team_members.sql              # Team members + alternate_emails
+    ├── 009_profile_claims.sql            # Profile claim requests table
+    ├── 010_community_tables.sql          # Announcements, resources, newsletters
+    ├── 012_app_settings.sql              # App settings key-value table
+    └── 014_auto_link_team_members.sql    # Auto-link users on signup
 ```
 
 ---

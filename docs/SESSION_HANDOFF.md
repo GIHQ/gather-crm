@@ -112,6 +112,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - News scanner processed ~75-90 of 292 fellows before Edge Function timeout; can be re-run to pick up remaining
 - 18 fellows still missing focus area tags (sparse bios, no keyword matches) — can be assigned manually
 
+### Recently Fixed Bugs
+- **Focus Areas tab spinning (Feb 11)** — Was caused by missing timeout/error handling in FocusAreasEditor. Fixed with 10s timeout, proper cleanup, and team member detection.
+
 ---
 
 ## TODO Tracker

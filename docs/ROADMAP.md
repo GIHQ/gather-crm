@@ -1,6 +1,6 @@
 # GATHER Roadmap
 
-**Last updated:** Feb 10, 2026
+**Last updated:** Feb 11, 2026
 
 This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO Tracker in SESSION_HANDOFF.md.
 
@@ -21,32 +21,38 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Self-editing profiles | ✅ Done |
 | Admin editing + staff notes | ✅ Done |
 | Interaction logging | ✅ Done |
-| News scanner (SerpAPI) | ⚠️ Returns 0 results — deferred |
+| News scanner (SerpAPI) | ✅ Done — scans all 292 fellows in batches |
+| Focus areas tab fix (timeout + team member handling) | ✅ Done (Feb 11) |
 
 ---
 
 ## Phase 2: Community Platform
 *GetStream + Buttondown integration — in progress*
 
-### Phase 2a: Broadcast (Weeks 1-2)
+### Phase 2a: Broadcast ✅
 | Feature | Status |
 |---------|--------|
-| Community tables (announcements, resources, newsletter_sends, stream_tokens) | 🔲 Not started |
-| Stream token-minting Edge Function | 🔲 Not started |
-| Announcements feed component | 🔲 Not started |
-| Resource library component | 🔲 Not started |
-| Newsletter composer (Buttondown) | 🔲 Not started |
-| "Community" tab in navigation | 🔲 Not started (wireframe complete) |
+| Community tables (announcements, resources, newsletter_sends, stream_tokens) | ✅ Done |
+| Stream token-minting Edge Function | ✅ Done |
+| Announcements feed component | ✅ Done |
+| Resource library component | ✅ Done |
+| Newsletter composer UI | ✅ Done |
+| "Community" tab in navigation | ✅ Done |
+| "Library" tab in navigation | ✅ Done |
+| "Broadcast" tab for staff | ✅ Done |
+| Menu restructure (removed desktop links) | ✅ Done |
+| Auth flow fixes (auto-link, route protection, stale sessions) | ✅ Done |
 | Import 292 fellow emails to Buttondown | 🔲 Not started |
+| Wire newsletter to Buttondown API (Edge Function) | 🔲 Not started |
 
-### Phase 2b: Discovery (Weeks 3-4)
+### Phase 2b: Discovery (In Progress)
 | Feature | Status |
 |---------|--------|
-| Enhanced directory search & filters | 🔲 |
-| "Currently working on" field for fellows | 🔲 |
-| Fellow spotlight / featured profiles | 🔲 |
-| Activity feed (GetStream) | 🔲 |
-| Push notification support | 🔲 | See implementation notes below |
+| Activity feed (GetStream) | ✅ Done — Community page has Activity tab |
+| Enhanced directory search & filters | 🔲 Not started |
+| "Currently working on" field for fellows | 🔲 Not started |
+| Fellow spotlight / featured profiles | 🔲 Not started |
+| Push notification support | 🔲 Not started — See implementation notes below |
 
 ### Phase 2c: Engagement (Weeks 5-6)
 | Feature | Status |
