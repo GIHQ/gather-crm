@@ -7044,20 +7044,30 @@ function CommunityPage() {
   // Announcements state
   const [announcements, setAnnouncements] = useState([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
+  const [announcementsError, setAnnouncementsError] = useState(null);
 
   // Fetch announcements
   useEffect(() => {
     const fetchAnnouncements = async () => {
       setLoadingAnnouncements(true);
-      const { data, error } = await supabase
-        .from('announcements')
-        .select('*')
-        .lte('published_at', new Date().toISOString())
-        .order('is_pinned', { ascending: false })
-        .order('published_at', { ascending: false });
+      setAnnouncementsError(null);
+      try {
+        const { data, error } = await supabase
+          .from('announcements')
+          .select('*')
+          .lte('published_at', new Date().toISOString())
+          .order('is_pinned', { ascending: false })
+          .order('published_at', { ascending: false });
 
-      if (!error && data) {
-        setAnnouncements(data);
+        if (error) {
+          console.error('Error fetching announcements:', error);
+          setAnnouncementsError(error.message);
+        } else {
+          setAnnouncements(data || []);
+        }
+      } catch (err) {
+        console.error('Exception fetching announcements:', err);
+        setAnnouncementsError(err.message);
       }
       setLoadingAnnouncements(false);
     };
@@ -7105,6 +7115,12 @@ function CommunityPage() {
             {/* Announcements List */}
             {loadingAnnouncements ? (
               <div className="text-center py-8 text-gray-500">Loading announcements...</div>
+            ) : announcementsError ? (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-4xl mb-2">⚠️</p>
+                <p>Could not load announcements</p>
+                <p className="text-sm text-gray-400 mt-1">{announcementsError}</p>
+              </div>
             ) : announcements.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <p className="text-4xl mb-2">📢</p>
