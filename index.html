@@ -3091,24 +3091,32 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
 
   const saveQuickLog = async () => {
     setQuickLogSaving(true);
-    const interaction = {
-      fellow_id: fellow.id,
-      interaction_type: quickLogType,
-      subject: quickLogSubject || `${quickLogType} with ${fellow.first_name}`,
-      notes: quickLogNotes || null,
-      staff_email: user?.email || 'unknown@goldininstitute.org',
-      created_at: new Date().toISOString(),
-    };
-    
-    const { error } = await supabase.from('interactions').insert(interaction);
-    
-    if (!error) {
-      await supabase.from('fellows')
-        .update({ last_contact: new Date().toISOString() })
-        .eq('id', fellow.id);
-      fetchData();
+    try {
+      const interaction = {
+        fellow_id: fellow.id,
+        interaction_type: quickLogType,
+        subject: quickLogSubject || `${quickLogType} with ${fellow.first_name}`,
+        notes: quickLogNotes || null,
+        staff_email: user?.email || 'unknown@goldininstitute.org',
+        created_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from('interactions').insert(interaction);
+
+      if (!error) {
+        await supabase.from('fellows')
+          .update({ last_contact: new Date().toISOString() })
+          .eq('id', fellow.id);
+        fetchData();
+      } else {
+        console.error('Error saving quick log:', error);
+        alert('Error saving interaction: ' + (error.message || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Exception saving quick log:', err);
+      alert('Error saving interaction: ' + (err.message || 'Unknown error'));
     }
-    
+
     setQuickLogSaving(false);
     setQuickLogType(null);
   };
@@ -7361,38 +7369,45 @@ function LogInteractionModal({ isOpen, onClose, preSelectedFellow }) {
   const handleSubmit = async () => {
     if (!selectedFellow) return;
     setIsSubmitting(true);
-    
-    const interaction = {
-      fellow_id: selectedFellow.id,
-      interaction_type: formData.interaction_type,
-      subject: formData.subject || null,
-      notes: formData.notes || null,
-      staff_email: user?.email || 'unknown@goldininstitute.org',
-      created_at: new Date().toISOString(),
-    };
-    
-    const { error } = await supabase.from('interactions').insert(interaction);
-    
-    if (!error) {
-      await supabase.from('fellows')
-        .update({ last_contact: new Date().toISOString() })
-        .eq('id', selectedFellow.id);
-      
-      setSuccess(true);
-      setTimeout(() => {
-        fetchData();
-        onClose();
-        // Reset state
-        setStep(1);
-        setSearchTerm('');
-        setSelectedFellow(null);
-        setFormData({ interaction_type: 'Call', subject: '', notes: '' });
-        setSuccess(false);
+
+    try {
+      const interaction = {
+        fellow_id: selectedFellow.id,
+        interaction_type: formData.interaction_type,
+        subject: formData.subject || null,
+        notes: formData.notes || null,
+        staff_email: user?.email || 'unknown@goldininstitute.org',
+        created_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from('interactions').insert(interaction);
+
+      if (!error) {
+        await supabase.from('fellows')
+          .update({ last_contact: new Date().toISOString() })
+          .eq('id', selectedFellow.id);
+
+        setSuccess(true);
+        setTimeout(() => {
+          fetchData();
+          onClose();
+          // Reset state
+          setStep(1);
+          setSearchTerm('');
+          setSelectedFellow(null);
+          setFormData({ interaction_type: 'Call', subject: '', notes: '' });
+          setSuccess(false);
+          setIsSubmitting(false);
+        }, 1500);
+      } else {
+        console.error('Error saving interaction:', error);
         setIsSubmitting(false);
-      }, 1500);
-    } else {
+        alert('Error saving interaction: ' + (error.message || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Exception saving interaction:', err);
       setIsSubmitting(false);
-      alert('Error saving interaction');
+      alert('Error saving interaction: ' + (err.message || 'Unknown error'));
     }
   };
 
