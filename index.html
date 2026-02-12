@@ -911,21 +911,50 @@ function FocusAreasEditor({ fellow, onUpdate }) {
   const [selectedTags, setSelectedTags] = useState({});
   const [primaryCommunityArea, setPrimaryCommunityArea] = useState(null);
   const [newTagInputs, setNewTagInputs] = useState({});
+  const [fetchError, setFetchError] = useState(null);
 
   const isStaff = canAccess(ROLES.TEAM);
   const isSelf = user?.email && fellow.email && user.email.toLowerCase() === fellow.email.toLowerCase();
   const canEditFocusAreas = isStaff || isSelf;
 
+  // Check if this is a team member (they don't have focus tags)
+  const isTeamMember = fellow?.record_type === 'team_member';
+
   // Fetch fellow's current tags
   useEffect(() => {
+    let isMounted = true;
+    let timeoutId;
+
     const fetchFellowTags = async () => {
-      console.log('FocusAreasEditor: fellow.id =', fellow?.id);
-      if (!fellow?.id) {
-        console.log('FocusAreasEditor: No fellow.id, returning');
-        setLoading(false);
+      console.log('FocusAreasEditor: fellow.id =', fellow?.id, 'record_type =', fellow?.record_type);
+
+      // Team members don't have focus tags - show empty state immediately
+      if (isTeamMember) {
+        console.log('FocusAreasEditor: Team member, skipping fetch');
+        if (isMounted) setLoading(false);
         return;
       }
-      setLoading(true);
+
+      if (!fellow?.id) {
+        console.log('FocusAreasEditor: No fellow.id, returning');
+        if (isMounted) setLoading(false);
+        return;
+      }
+
+      if (isMounted) {
+        setLoading(true);
+        setFetchError(null);
+      }
+
+      // Add timeout to prevent infinite loading
+      timeoutId = setTimeout(() => {
+        if (isMounted && loading) {
+          console.error('FocusAreasEditor: Fetch timeout');
+          setFetchError('Request timed out');
+          setLoading(false);
+        }
+      }, 10000); // 10 second timeout
+
       try {
         const { data, error } = await supabase
           .from('fellow_focus_tags')
@@ -934,7 +963,12 @@ function FocusAreasEditor({ fellow, onUpdate }) {
 
         console.log('FocusAreasEditor: fetched data =', data, 'error =', error);
 
-        if (data) {
+        if (!isMounted) return;
+
+        if (error) {
+          console.error('FocusAreasEditor: Query error:', error);
+          setFetchError(error.message);
+        } else if (data) {
           setFellowTags(data);
           // Initialize selected tags state
           const initial = {};
@@ -951,12 +985,20 @@ function FocusAreasEditor({ fellow, onUpdate }) {
         }
       } catch (err) {
         console.error('Error fetching fellow tags:', err);
+        if (isMounted) setFetchError(err.message || 'Unknown error');
       }
-      setLoading(false);
+
+      clearTimeout(timeoutId);
+      if (isMounted) setLoading(false);
     };
 
     fetchFellowTags();
-  }, [fellow?.id]);
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [fellow?.id, isTeamMember]);
 
   // Group tags by category
   const tagsByCategory = useMemo(() => {
@@ -1050,6 +1092,37 @@ function FocusAreasEditor({ fellow, onUpdate }) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="w-8 h-8 border-2 border-goldin-orange border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  // Show error if fetch failed
+  if (fetchError) {
+    return (
+      <div className="text-center py-8 bg-red-50 rounded-xl border border-red-200">
+        <p className="text-red-800 font-medium">Unable to load focus areas</p>
+        <p className="text-red-600 text-sm mt-1">{fetchError}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // Team members don't have focus areas
+  if (isTeamMember) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+        </div>
+        <p className="text-gray-600">Focus areas are available for fellows only</p>
+        <p className="text-gray-400 text-sm mt-1">Team members can view and edit focus areas for fellows</p>
       </div>
     );
   }
