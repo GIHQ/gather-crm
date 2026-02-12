@@ -546,83 +546,37 @@ function AppProvider({ children }) {
       setLoading(false);
     }, 5000);
 
-    const initAuth = async () => {
-      try {
-        // Check for existing session
-        const { data: { session } } = await supabase.auth.getSession();
+    // Load non-auth settings immediately
+    const loadSettings = () => {
+      const savedOnboarded = localStorage.getItem('gather_onboarded');
+      const savedNotifs = localStorage.getItem('gather_notifications');
 
-        if (session?.user) {
-          const userData = {
-            id: session.user.id,
-            email: session.user.email,
-            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
-            avatar: session.user.user_metadata?.avatar_url,
-          };
-          setUser(userData);
-          localStorage.setItem('gather_user', JSON.stringify(userData));
-
-          // Fetch user role and link user_id
-          const role = await determineUserRole(session.user.email, session.user.id);
-          setUserRole(role);
-          localStorage.setItem('gather_user_role', role);
-        } else {
-          // No valid Supabase session - check if we have stale localStorage data
-          const savedUser = localStorage.getItem('gather_user');
-          if (savedUser) {
-            const parsedUser = JSON.parse(savedUser);
-            // Only keep guest user data, clear stale authenticated user data
-            if (parsedUser.email === 'guest@gathertracker.app') {
-              setUser(parsedUser);
-              setUserRole(ROLES.VIEWER);
-            } else {
-              // Stale authenticated session - clear everything and force re-login
-              localStorage.removeItem('gather_user');
-              localStorage.removeItem('gather_user_role');
-              localStorage.removeItem('gather_onboarded');
-              setUser(null);
-              setUserRole(ROLES.VIEWER);
-              setIsOnboarded(false);
-            }
-          }
+      if (savedOnboarded) setIsOnboarded(true);
+      if (savedNotifs) {
+        try {
+          setNotificationSettings(JSON.parse(savedNotifs));
+        } catch (e) {
+          console.error('Error parsing notification settings:', e);
+          localStorage.removeItem('gather_notifications');
         }
-
-        // Check onboarding status
-        const savedOnboarded = localStorage.getItem('gather_onboarded');
-        const savedNotifs = localStorage.getItem('gather_notifications');
-
-        if (savedOnboarded) setIsOnboarded(true);
-        if (savedNotifs) {
-          try {
-            setNotificationSettings(JSON.parse(savedNotifs));
-          } catch (e) {
-            console.error('Error parsing notification settings:', e);
-            localStorage.removeItem('gather_notifications');
-          }
-        }
-
-        // Load saved language preference
-        const savedLang = localStorage.getItem('gather_language');
-        if (savedLang && SUPPORTED_LANGUAGES.some(l => l.code === savedLang)) {
-          setLanguage(savedLang);
-          // Set RTL for Arabic
-          document.documentElement.dir = savedLang === 'ar' ? 'rtl' : 'ltr';
-          document.documentElement.lang = savedLang;
-        }
-      } catch (err) {
-        console.error('Error initializing auth:', err);
       }
 
-      clearTimeout(loadingTimeout);
-      setLoading(false);
+      // Load saved language preference
+      const savedLang = localStorage.getItem('gather_language');
+      if (savedLang && SUPPORTED_LANGUAGES.some(l => l.code === savedLang)) {
+        setLanguage(savedLang);
+        document.documentElement.dir = savedLang === 'ar' ? 'rtl' : 'ltr';
+        document.documentElement.lang = savedLang;
+      }
     };
 
-    initAuth();
-    
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth event:', event);
+    loadSettings();
 
-      if (event === 'SIGNED_IN' && session?.user) {
+    // Handle auth session - use onAuthStateChange as primary mechanism
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth event:', event, session?.user?.email);
+
+      if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
         const userData = {
           id: session.user.id,
           email: session.user.email,
@@ -648,6 +602,24 @@ function AppProvider({ children }) {
             setNeedsProfileClaim(true);
           }
         }
+        clearTimeout(loadingTimeout);
+        setLoading(false);
+      } else if (event === 'INITIAL_SESSION' && !session) {
+        // No stored session - check for guest user in localStorage
+        const savedUser = localStorage.getItem('gather_user');
+        if (savedUser) {
+          try {
+            const parsedUser = JSON.parse(savedUser);
+            if (parsedUser.email === 'guest@gathertracker.app') {
+              setUser(parsedUser);
+              setUserRole(ROLES.VIEWER);
+            }
+          } catch (e) {
+            console.error('Error parsing saved user:', e);
+          }
+        }
+        clearTimeout(loadingTimeout);
+        setLoading(false);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setUserRole(ROLES.VIEWER);
@@ -659,7 +631,7 @@ function AppProvider({ children }) {
         localStorage.removeItem('gather_onboarded');
       }
     });
-    
+
     return () => subscription.unsubscribe();
   }, []);
 
