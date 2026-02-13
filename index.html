@@ -695,6 +695,7 @@ function AppProvider({ children }) {
   const [teamMembers, setTeamMembers] = useState([]);
   const [interactions, setInteractions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
   const [notificationSettings, setNotificationSettings] = useState({
     enabled: false,
     dailySummary: true,
@@ -725,6 +726,12 @@ function AppProvider({ children }) {
     // Failsafe: ensure loading never gets stuck (longer timeout for auth callbacks)
     const loadingTimeout = setTimeout(() => {
       console.warn('Loading timeout - forcing load complete');
+      if (isAuthCallback) {
+        // Auth callback timed out — the code exchange likely failed
+        setAuthError('login_failed');
+        // Clean the URL so they don't get stuck in a retry loop
+        window.history.replaceState({}, '', window.location.origin + window.location.pathname);
+      }
       setLoading(false);
     }, isAuthCallback ? 10000 : 5000);
 
@@ -1552,7 +1559,7 @@ function WelcomeScreen({ onNext }) {
   );
 }
 
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, authError }) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -1599,6 +1606,18 @@ function LoginScreen({ onLogin }) {
           
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome back</h1>
           <p className="text-gray-500 mb-8">Enter your email to receive a login link</p>
+
+          {authError === 'login_failed' && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+              <p className="font-semibold text-amber-800 mb-1">Login link didn't work</p>
+              <p className="text-sm text-amber-700">This usually happens when the link opens in a different browser or private/incognito mode. Try these steps:</p>
+              <ul className="text-sm text-amber-700 mt-2 space-y-1 list-disc list-inside">
+                <li>Copy the link from your email and paste it in your main browser (not private mode)</li>
+                <li>Make sure you open it in the same browser you requested the link from</li>
+                <li>Request a new link below if needed</li>
+              </ul>
+            </div>
+          )}
 
           <form onSubmit={handleEmailLogin}>
             <input
@@ -7977,7 +7996,8 @@ function MainApp() {
       return <WelcomeScreen onNext={() => setOnboardingStep(1)} />;
     }
     if (onboardingStep === 1 || !user) {
-      return <LoginScreen onLogin={(userData, skipRoleLookup = false) => {
+      return <LoginScreen authError={authError} onLogin={(userData, skipRoleLookup = false) => {
+        setAuthError(null);
         login(userData, skipRoleLookup);
         setOnboardingStep(2); // Go to language + notification setup
       }} />;
