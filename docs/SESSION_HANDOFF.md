@@ -6,7 +6,7 @@
 
 ## Quick Context
 
-GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 programs (CPF, GGF, ESP). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan — supports custom domain when ready to launch).
+GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 programs (CPF, GGF, ESP). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan). Auth is magic link only (Google OAuth removed Feb 13).
 
 | Resource | URL |
 |----------|-----|
@@ -52,15 +52,39 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ---
 
-## Current State (Updated Feb 13, 2026)
+## Current State (Updated Feb 13, 2026 — end of day)
 
 ### Recently Completed
+- **Deep Translation System (Feb 13):**
+  - All dynamic content (bios, announcements, job titles, orgs, etc.) now translatable via language selector
+  - `<T>` component wraps any dynamic text — fetches translations via Google Translate Edge Function
+  - `t()` helper function for translating strings in JS (e.g., menu items, status labels)
+  - `useTranslation` hook provides `language`, `setLanguage`, `t()` with `TranslationProvider` context
+  - Defensive null handling in `<T>` — safely handles null/undefined children
+  - Translation works for both logged-in and guest users (anon key fallback for auth)
+  - **`content_translations` table** (migration 015) — persistent DB cache for translated content
+    - Shared across all users — once translated, never re-translates
+    - Keyed by MD5 hash of source text + target language
+    - Run in Supabase SQL Editor: `migrations/015_content_translations.sql` ✅ DONE
+- **Auth Simplified to Magic Link Only (Feb 13):**
+  - Removed Google OAuth entirely — magic link is the only sign-in method
+  - Fixed login button visibility (was hidden behind loading state)
+  - Fixed magic link callback URL handling
+  - Added rate limit UX — shows countdown timer and clear error messaging when rate limited
+  - Fixed sign out from slide menu (function reference mismatch)
+- **Login Activity Tracking (Feb 13):**
+  - `login_events` table tracks all sign-ins (user, timestamp, method)
+  - Interactions tab visibility fixed for staff users
 - **Buttondown Newsletter Integration (Feb 13):**
   - Created `scripts/import-to-buttondown.js` — exports fellows to CSV for Buttondown bulk import (also supports `--api` flag for direct API import)
   - Created `supabase/functions/send-newsletter/index.ts` — Edge Function that sends newsletters via Buttondown API with staff auth checks
   - Updated `handleSendNewsletter` in index.html to call send-newsletter Edge Function (removed DEMO MODE)
   - Subscribers tagged by program (CPF/GGF/ESP) and cohort for segmentation
   - Requires: Set `BUTTONDOWN_API_KEY` in Supabase Edge Function secrets, run import script, deploy Edge Function
+- **Legacy Cleanup (Feb 13):**
+  - Removed Google OAuth code paths
+  - Removed legacy `user_roles` table fallback from `determineUserRole()` — all role checks now use `team_members`
+  - Fixed translation 401 errors with proper HTTP error handling and user feedback (reverts to English with alert)
 - **Auth Session Persistence Fix (Feb 12):**
   - Fixed credentials being lost on page reload (reset to guest)
   - Changed from `getSession()` to `onAuthStateChange` as primary auth mechanism
@@ -108,7 +132,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   - `stream-token` Edge Function deployed (mints GetStream JWTs, caches 24hr)
   - `working_on` field added to fellows table
 - Auth session persistence fixed (explicit Supabase auth options with `storageKey: 'gather-auth'`)
-- Translation system working (Edge Function proxies Google Translate API, JWT verification OFF)
+- **Translation system fully working** — Edge Function proxies Google Translate API (JWT verification OFF), `<T>` component + `t()` function for all dynamic content, `content_translations` DB cache table, language selector in header
 - Notification settings UI fixed: toggle contrast + overflow on mobile
 - **News scanner fully working** — scans all 292 fellows in batches of 5
 - Custom search terms for news scanner (stored in `app_settings` table)
@@ -131,11 +155,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment for `translate`, `search-news`, and `stream-token`
 - 18 fellows still missing focus area tags (sparse bios) — run `node scripts/assign-focus-areas.js` to assign via Claude AI
 - `user_roles` table is legacy/dead — code fallback removed Feb 13, table can be dropped from Supabase when convenient
+- Supabase magic link rate limit can block re-login after page reload — consider increasing rate limit in Supabase Dashboard > Authentication > Rate Limits
 
 ### Recently Fixed Bugs
+- **`<T>` component null crash (Feb 13)** — Dynamic content with null/undefined values passed to `<T>` caused React render errors. Added defensive null checks and safer context access.
+- **Missing `t()` in MainApp/SlideMenu (Feb 13)** — Some UI strings weren't wrapped in translation function, showing English regardless of language setting. Fixed.
 - **Language selector 401 error (Feb 13)** — Translate Edge Function had JWT verification ON, blocking all requests at the Supabase gateway. Fixed by disabling JWT verification and adding proper HTTP error handling with user feedback (reverts to English with alert on failure).
 - **Sign out button not working (Feb 13)** — Menu sign out called `handleLogout` but the function was named `handleSignOut`. Fixed function reference.
 - **Translation broken for guest users (Feb 13)** — Guest users had no auth token, causing 401. Fixed by ensuring anon key is used as Authorization fallback.
+- **Login button hidden (Feb 13)** — Login button was invisible due to loading state overlap. Fixed visibility.
+- **Magic link callback broken (Feb 13)** — After removing Google OAuth, magic link callback URL wasn't handled correctly. Fixed.
 - **Legacy user_roles fallback removed (Feb 13)** — Dead code was querying non-existent `user_roles` table on every login. Removed; all role checks now use `team_members` table.
 - **Auth session lost on reload (Feb 12)** — `getSession()` was called before Supabase loaded session from storage, causing false "stale session" detection. Fixed by using `onAuthStateChange` with `INITIAL_SESSION` event.
 - **Interaction save freeze (Feb 12)** — Missing try/catch in `handleSubmit` and `saveQuickLog` caused UI to freeze on errors. Added proper error handling.
@@ -182,6 +211,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   - `search-news`: OFF (uses anon key)
   - `stream-token`: OFF (uses anon key, validates auth internally)
   - `translate`: OFF (proxies Google Translate API, no user data)
+  - `send-newsletter`: needs deploying (Buttondown API proxy, checks staff auth internally)
 - News scanner processes fellows in **batches of 5** from the frontend to avoid compute/timeout limits
 
 ### RLS Patterns
@@ -212,6 +242,17 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Tokens cached 24hrs in `stream_tokens` table
 - Announcements publish to both Supabase (primary) and GetStream (best-effort)
 - Activity tab only visible to logged-in users; guests see only Announcements tab
+
+### Translation System
+- **Language selector** in header — dropdown with 10+ languages (Spanish, French, Arabic, Chinese, etc.)
+- **`<T>` component** — wraps dynamic text (bios, announcements, job titles). Fetches translation via Edge Function on language change.
+- **`t()` function** — for translating strings in JS code (menu items, labels, buttons). Available via `useTranslation()` hook.
+- **`TranslationProvider`** — React context providing `language`, `setLanguage`, `t()` to all components
+- **Edge Function:** `translate` — proxies Google Translate API, JWT verification OFF, uses `GOOGLE_TRANSLATE_API_KEY` secret
+- **DB cache:** `content_translations` table — stores translations keyed by `(source_hash, target_lang)`. Shared across all users.
+- **In-memory cache:** `translationCache` Map in frontend — avoids redundant API calls within a session
+- **Error handling:** On translation failure, reverts to English with user alert. Guest users use anon key for auth.
+- Auth: magic link only (Google OAuth removed Feb 13). Rate limit can be adjusted in Supabase Dashboard > Authentication > Rate Limits.
 
 ### Database Schema vs Docs
 `DATABASE_SCHEMA.md` is now accurate as of Feb 13, 2026. Key fellows columns:
@@ -254,6 +295,8 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `migrations/011_team_import.sql` | 11 staff members imported |
 | `migrations/012_app_settings.sql` | App settings key-value table |
 | `migrations/014_auto_link_team_members.sql` | Auto-link team_members/fellows to auth.users on signup |
+| `migrations/015_content_translations.sql` | Translation cache table (run in SQL Editor ✅) |
+| `migrations/015_login_events.sql` | Login activity tracking table |
 | `scripts/assign-focus-areas.js` | AI-powered focus area assignment (Node.js, needs API keys) |
 | `scripts/assign-focus-areas.sql` | SQL keyword-based focus area assignment (paste into Supabase SQL editor) |
 

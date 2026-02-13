@@ -1,6 +1,6 @@
 # GATHER Roadmap
 
-**Last updated:** Feb 13, 2026
+**Last updated:** Feb 13, 2026 (end of day)
 
 This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO Tracker in SESSION_HANDOFF.md.
 
@@ -14,7 +14,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Fellow database (292 fellows, 3 programs) | ✅ Done |
 | Photo management (all 292 uploaded) | ✅ Done |
 | Focus areas system (Skills, Populations, Focus, Community) | ✅ Done |
-| Google OAuth + magic link auth | ✅ Done |
+| Magic link auth (Google OAuth removed Feb 13) | ✅ Done |
 | 6-tier permission system | ✅ Done |
 | Staff directory (team_members table, 11 staff imported) | ✅ Done |
 | Profile claiming flow | ✅ Done |
@@ -23,6 +23,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Interaction logging | ✅ Done |
 | News scanner (SerpAPI) | ✅ Done — scans all 292 fellows in batches |
 | Focus areas tab fix (timeout + team member handling) | ✅ Done (Feb 11) |
+| Login activity tracking (login_events table) | ✅ Done (Feb 13) |
 
 ---
 
@@ -91,7 +92,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Feature | Status |
 |---------|--------|
 | Social media scanning (FB, IG, Twitter, LinkedIn) | 🔲 |
-| Multi-language support (Spanish for ESP fellows) | 🔲 |
+| Multi-language support (translation system) | ✅ Done (Feb 13) — `<T>` component, `t()` function, Google Translate API, DB cache |
 | Offline/PWA caching improvements | 🔲 |
 | Performance optimization | 🔲 |
 | Split index.html into modules (at 10K+ lines) | 🔲 |
@@ -136,6 +137,9 @@ Service worker (sw.js) already has push/notification handlers. To complete:
 | Feb 2026 | GetStream for community | Real-time feeds without building from scratch; free Maker tier covers 292 MAU |
 | Feb 2026 | Buttondown for email | Simple API, good for newsletters at this volume |
 | Feb 2026 | Lurker-first architecture | 30-50% active engagement realistic; design for passive consumption first |
+| Feb 2026 | Google Translate for i18n | Real-time translation of all dynamic content; DB cache avoids repeated API calls; supports 100+ languages for global fellows |
+| Feb 2026 | Magic link only (drop OAuth) | Simpler auth flow; fellows have diverse email providers; avoids Google consent screen issues |
+| Feb 2026 | Supabase Pro upgrade | Higher rate limits, custom domain support, better for production |
 
 ---
 
@@ -145,6 +149,6 @@ Service worker (sw.js) already has push/notification handlers. To complete:
 |---------|------|-------------|-------|
 | GetStream | Maker (free) | $0 | <5 team members, <$10K revenue |
 | Buttondown | Basic | $9/mo | 292 subscribers (free tier caps at 100) |
-| Supabase | Free | $0 | Already using |
+| Supabase | Pro | $25/mo | Upgraded for custom domain + higher limits |
 | Netlify | Free | $0 | Already using |
-| **Total** | | **$9/mo** | Check if nonprofit discount applies |
+| **Total** | | **$34/mo** | Check if nonprofit discount applies for Supabase |

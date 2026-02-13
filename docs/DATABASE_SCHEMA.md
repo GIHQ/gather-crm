@@ -67,8 +67,8 @@ Logs all touchpoints between staff and fellows.
 | logged_by | text | Staff member who logged it |
 | created_at | timestamptz | |
 
-### user_roles *(LEGACY — superseded by team_members)*
-Original permission table, now only used as a fallback override in `determineUserRole()`. The `team_members` table is the primary source for staff roles. This table can be safely removed once the fallback code path is deleted.
+### user_roles *(LEGACY — DROP WHEN CONVENIENT)*
+Original permission table. All code references removed (Feb 13). The `team_members` table is the sole source for staff roles. This table can be safely dropped from Supabase.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -211,6 +211,40 @@ Caches GetStream JWT tokens to avoid re-minting on every request.
 | token | text | GetStream JWT token |
 | expires_at | timestamptz | Token expiration (24h from creation) |
 | created_at | timestamptz | |
+
+### content_translations
+Persistent cache for translated dynamic content (bios, announcements, etc.). Shared across all users. Avoids repeated Google Translate API calls.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| source_hash | text | MD5 hash of source text (for fast lookup) |
+| source_text | text | Original English text |
+| target_lang | text | Language code (es, fr, ar, etc.) |
+| translated_text | text | Translated text |
+| created_at | timestamptz | When cached |
+
+**Unique constraint:** `(source_hash, target_lang)` — one translation per text per language.
+
+**Indexes:**
+- `idx_content_translations_lookup` — `(source_hash, target_lang)` for fast lookups
+- `idx_content_translations_created` — `created_at` for cleanup of old entries
+
+**RLS:**
+- **SELECT:** Anyone can read (`USING (true)`)
+- **INSERT:** Anyone can insert (`WITH CHECK (true)`)
+- **No UPDATE/DELETE** — cache is append-only. Admin can clean up old entries via SQL if needed.
+
+### login_events
+Tracks user login activity for analytics and audit.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| user_id | uuid | FK → auth.users.id |
+| email | text | Email used to sign in |
+| method | text | Login method (magic_link, etc.) |
+| created_at | timestamptz | When the login occurred |
 
 ---
 
