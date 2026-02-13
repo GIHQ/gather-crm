@@ -724,16 +724,40 @@ function AppProvider({ children }) {
     }
 
     // Failsafe: ensure loading never gets stuck (longer timeout for auth callbacks)
-    const loadingTimeout = setTimeout(() => {
+    const loadingTimeout = setTimeout(async () => {
       console.warn('Loading timeout - forcing load complete');
       if (isAuthCallback) {
-        // Auth callback timed out — the code exchange likely failed
+        // PKCE exchange may have silently failed — try getSession() as last resort
+        try {
+          console.log('Auth callback timeout — trying explicit getSession() recovery');
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            console.log('Session recovered via getSession():', session.user.email);
+            const userData = {
+              id: session.user.id,
+              email: session.user.email,
+              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+              avatar: session.user.user_metadata?.avatar_url,
+            };
+            setUser(userData);
+            localStorage.setItem('gather_user', JSON.stringify(userData));
+            const role = await determineUserRole(session.user.email, session.user.id);
+            setUserRole(role);
+            localStorage.setItem('gather_user_role', role);
+            window.history.replaceState({}, '', window.location.origin + window.location.pathname);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error('getSession() recovery failed:', e);
+        }
+        // Auth callback truly failed
         setAuthError('login_failed');
         // Clean the URL so they don't get stuck in a retry loop
         window.history.replaceState({}, '', window.location.origin + window.location.pathname);
       }
       setLoading(false);
-    }, isAuthCallback ? 10000 : 5000);
+    }, isAuthCallback ? 12000 : 5000);
 
     // Load non-auth settings immediately
     const loadSettings = () => {
@@ -822,7 +846,31 @@ function AppProvider({ children }) {
           console.log('Auth callback in progress — waiting for SIGNED_IN event');
           return; // Let the loading timeout be the only fallback
         }
-        // No stored session and not an auth callback — check for guest user in localStorage
+        // No stored session and not an auth callback — try explicit session recovery first
+        // This handles cases where Safari/PWA lost the onAuthStateChange event
+        try {
+          const { data: { session: recoveredSession } } = await supabase.auth.getSession();
+          if (recoveredSession?.user) {
+            console.log('Recovered session via getSession():', recoveredSession.user.email);
+            const userData = {
+              id: recoveredSession.user.id,
+              email: recoveredSession.user.email,
+              name: recoveredSession.user.user_metadata?.full_name || recoveredSession.user.email?.split('@')[0],
+              avatar: recoveredSession.user.user_metadata?.avatar_url,
+            };
+            setUser(userData);
+            localStorage.setItem('gather_user', JSON.stringify(userData));
+            const role = await determineUserRole(recoveredSession.user.email, recoveredSession.user.id);
+            setUserRole(role);
+            localStorage.setItem('gather_user_role', role);
+            clearTimeout(loadingTimeout);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error('getSession() recovery check failed:', e);
+        }
+        // Truly no session — check for guest user in localStorage
         const savedUser = localStorage.getItem('gather_user');
         if (savedUser) {
           try {
@@ -1563,6 +1611,29 @@ function WelcomeScreen({ onNext }) {
 function LoginScreen({ onLogin, authError }) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(false);
+
+  // Manual session recovery — for when magic link opened in a different browser/context
+  const handleCheckSession = async () => {
+    setCheckingSession(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        onLogin({
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+          avatar: session.user.user_metadata?.avatar_url,
+        });
+        return;
+      }
+      alert('No active session found. Please request a new login link and open it in this browser.');
+    } catch (e) {
+      alert('Could not check session. Please try again.');
+    }
+    setCheckingSession(false);
+  };
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
@@ -1572,11 +1643,26 @@ function LoginScreen({ onLogin, authError }) {
     }
     setLoading(true);
 
+    // Clear any guest state so user doesn't get stuck as guest if callback fails
+    const savedUser = localStorage.getItem('gather_user');
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser);
+        if (parsed.email === 'guest@gathertracker.app') {
+          localStorage.removeItem('gather_user');
+          localStorage.removeItem('gather_user_role');
+          localStorage.removeItem('gather_onboarded');
+        }
+      } catch (e) {}
+    }
+
     // Send magic link email (works for staff and fellows with any email)
+    // Use full origin + pathname (not just origin) so redirect works if app is at a subpath
+    const redirectUrl = window.location.origin + window.location.pathname;
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: redirectUrl,
       }
     });
 
@@ -1589,6 +1675,7 @@ function LoginScreen({ onLogin, authError }) {
       setLoading(false);
     } else {
       alert('Check your email for a login link! (Check spam if you don\'t see it.)');
+      setLinkSent(true);
       setLoading(false);
     }
   };
@@ -1611,12 +1698,19 @@ function LoginScreen({ onLogin, authError }) {
           {authError === 'login_failed' && (
             <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
               <p className="font-semibold text-amber-800 mb-1">Login link didn't work</p>
-              <p className="text-sm text-amber-700">This usually happens when the link opens in a different browser or private/incognito mode. Try these steps:</p>
+              <p className="text-sm text-amber-700">This can happen on iPhone when the link opens in a different app. Try these steps:</p>
               <ul className="text-sm text-amber-700 mt-2 space-y-1 list-disc list-inside">
-                <li>Copy the link from your email and paste it in your main browser (not private mode)</li>
-                <li>Make sure you open it in the same browser you requested the link from</li>
+                <li>Long-press the link in your email and choose "Open in Safari"</li>
+                <li>If using the app from your home screen, try opening it in Safari instead</li>
                 <li>Request a new link below if needed</li>
               </ul>
+              <button
+                onClick={handleCheckSession}
+                disabled={checkingSession}
+                className="mt-3 w-full text-sm font-medium text-amber-800 bg-amber-100 py-2 px-4 rounded-xl active:scale-98 transition disabled:opacity-50"
+              >
+                {checkingSession ? 'Checking...' : 'I already clicked the link — check my session'}
+              </button>
             </div>
           )}
 
@@ -1638,7 +1732,20 @@ function LoginScreen({ onLogin, authError }) {
               {loading ? 'Sending link...' : 'Send Login Link'}
             </button>
           </form>
-          
+
+          {linkSent && !authError && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-2xl">
+              <p className="text-sm text-green-700 mb-2">Login link sent! After clicking it, come back here.</p>
+              <button
+                onClick={handleCheckSession}
+                disabled={checkingSession}
+                className="w-full text-sm font-medium text-green-800 bg-green-100 py-2 px-4 rounded-xl active:scale-98 transition disabled:opacity-50"
+              >
+                {checkingSession ? 'Checking...' : 'I clicked the link — sign me in'}
+              </button>
+            </div>
+          )}
+
           <div className="mt-8 pt-6 border-t border-gray-200">
             <button
               onClick={() => onLogin({ email: 'guest@gathertracker.app', name: 'Guest' }, true)}
