@@ -809,51 +809,13 @@ function AppProvider({ children }) {
         setLoading(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
         if (isAuthCallback) {
-          // Magic link callback — PKCE code exchange may still be in progress
-          // Don't restore guest yet; wait for SIGNED_IN event
-          // The code exchange will fire SIGNED_IN when it completes
-          console.log('Auth callback: waiting for code exchange (not restoring guest)');
-          // Try explicit code exchange as fallback
-          try {
-            const code = urlParams.get('code');
-            if (code) {
-              console.log('Attempting explicit code exchange...');
-              const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-              if (data?.session?.user) {
-                console.log('Code exchange successful:', data.session.user.email);
-                const userData = {
-                  id: data.session.user.id,
-                  email: data.session.user.email,
-                  name: data.session.user.user_metadata?.full_name || data.session.user.email?.split('@')[0],
-                  avatar: data.session.user.user_metadata?.avatar_url,
-                };
-                setUser(userData);
-                localStorage.setItem('gather_user', JSON.stringify(userData));
-                const role = await determineUserRole(data.session.user.email, data.session.user.id);
-                setUserRole(role);
-                localStorage.setItem('gather_user_role', role);
-                // Log sign-in event
-                supabase.from('login_events').insert({
-                  user_id: data.session.user.id,
-                  email: data.session.user.email,
-                  name: userData.name,
-                }).then(() => {}).catch(() => {});
-                // Clean URL
-                window.history.replaceState({}, '', window.location.origin + window.location.pathname);
-                clearTimeout(loadingTimeout);
-                setLoading(false);
-                return;
-              } else if (error) {
-                console.error('Code exchange failed:', error.message);
-              }
-            }
-          } catch (e) {
-            console.error('Explicit code exchange error:', e);
-          }
-          // If code exchange failed, fall through to guest restore
-          console.log('Code exchange did not produce session, restoring guest if available');
+          // Magic link callback — PKCE code exchange is in progress
+          // Do NOT restore guest or set loading=false here
+          // The SIGNED_IN event will fire when the exchange completes
+          console.log('Auth callback in progress — waiting for SIGNED_IN event');
+          return; // Let the loading timeout be the only fallback
         }
-        // No stored session - check for guest user in localStorage
+        // No stored session and not an auth callback — check for guest user in localStorage
         const savedUser = localStorage.getItem('gather_user');
         if (savedUser) {
           try {
