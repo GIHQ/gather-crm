@@ -111,7 +111,7 @@ CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time);
 CREATE TABLE IF NOT EXISTS event_attendance (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  fellow_id uuid NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
+  fellow_id text NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
   status text NOT NULL DEFAULT 'absent',  -- present, absent, excused, late
   notes text,
   recorded_by uuid REFERENCES auth.users(id),
@@ -234,7 +234,7 @@ CREATE INDEX IF NOT EXISTS idx_curriculum_items_chapter ON curriculum_items(chap
 
 CREATE TABLE IF NOT EXISTS fellow_curriculum_progress (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  fellow_id uuid NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
+  fellow_id text NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
   item_id uuid NOT NULL REFERENCES curriculum_items(id) ON DELETE CASCADE,
   completed boolean NOT NULL DEFAULT false,
   completed_at timestamptz,
@@ -275,7 +275,7 @@ CREATE INDEX IF NOT EXISTS idx_progress_item ON fellow_curriculum_progress(item_
 
 CREATE TABLE IF NOT EXISTS fellow_platform_activity (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  fellow_id uuid NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
+  fellow_id text NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
   activity_date date NOT NULL DEFAULT CURRENT_DATE,
   login_count integer NOT NULL DEFAULT 1,
   created_at timestamptz DEFAULT now(),
@@ -359,7 +359,7 @@ CREATE INDEX IF NOT EXISTS idx_adhoc_lists_site ON adhoc_lists(site_id);
 CREATE TABLE IF NOT EXISTS adhoc_list_entries (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   list_id uuid NOT NULL REFERENCES adhoc_lists(id) ON DELETE CASCADE,
-  fellow_id uuid NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
+  fellow_id text NOT NULL REFERENCES fellows(id) ON DELETE CASCADE,
   data jsonb NOT NULL DEFAULT '{}'::jsonb,
   updated_by uuid REFERENCES auth.users(id),
   updated_at timestamptz DEFAULT now(),
