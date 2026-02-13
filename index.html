@@ -228,7 +228,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'zh', name: 'Chinese', native: '中文' },
 ];
 
-// UI strings to translate (add all translatable text here)
+// UI strings to translate (menu labels, buttons, etc.)
 const UI_STRINGS = [
   'Dashboard', 'Directory', 'Search', 'Activity', 'Settings', 'Cohort Communication',
   'Network Health', 'fellows', 'Last contact', 'Add Interaction', 'Log Interaction',
@@ -246,66 +246,230 @@ const UI_STRINGS = [
   'Continue to GATHER', 'Choose your language', 'Select your preferred language',
   'News Scanner', 'Scan All Fellows', 'Quick Scan', 'Scanning...', 'Language',
   'Change your display language', 'No fellow profile found', 'Edit your fellow profile',
-  'Manage your alerts'
+  'Manage your alerts', 'About', 'Location', 'Contact Info', 'Focus Areas',
+  'No contact recorded', 'Last contact', 'days ago', 'Community', 'Library',
+  'Broadcast', 'Announcements', 'Resources', 'Newsletter', 'Team Management',
+  'Call', 'Email', 'Meeting', 'News Mention', 'Event', 'Site Visit', 'Note',
+  'No organization', 'View Profile', 'Log Interaction', 'Pinned',
+  'Overview', 'Notes', 'AI-powered suggestions', 'Recent Interactions',
+  'View all', 'No recent activity', 'fellows', 'Overdue follow-ups',
+  'staff member', 'Team', 'Search fellows...'
 ];
 
-// Translation cache to avoid repeated API calls
+// ============================================
+// DEEP TRANSLATION ENGINE
+// Memory cache + Supabase DB cache + Google Translate API
+// ============================================
+
+// In-memory translation cache (persists for session)
 const translationCache = new Map();
 
-// Batch translate multiple strings (via Edge Function)
-async function batchTranslate(texts, targetLang) {
-  if (targetLang === 'en') return {};
+// Simple MD5-like hash for cache keys (fast, not cryptographic)
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return 'h' + Math.abs(hash).toString(36);
+}
 
-  // Filter texts not in cache
-  const uncached = texts.filter(t => !translationCache.has(`${targetLang}:${t}`));
+// Translation queue for batching dynamic content
+let translationQueue = [];
+let translationFlushTimer = null;
+let translationFlushCallbacks = [];
+
+// Call Google Translate API via Edge Function
+async function callTranslateAPI(texts, targetLang) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers = {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': session?.access_token ? `Bearer ${session.access_token}` : `Bearer ${SUPABASE_ANON_KEY}`,
+    };
+
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/translate`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ texts, targetLang, sourceLang: 'en' })
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`Translation API failed (${response.status})`);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.data?.translations?.map(t => t.translatedText) || null;
+  } catch (err) {
+    console.error('Translation API error:', err);
+    return null;
+  }
+}
+
+// Load cached translations from Supabase DB for a language
+async function loadDBTranslations(targetLang) {
+  try {
+    const { data, error } = await supabase
+      .from('content_translations')
+      .select('source_hash, source_text, translated_text')
+      .eq('target_lang', targetLang);
+
+    if (error) {
+      console.warn('Could not load cached translations:', error.message);
+      return;
+    }
+
+    if (data) {
+      data.forEach(row => {
+        translationCache.set(`${targetLang}:${row.source_text}`, row.translated_text);
+      });
+      console.log(`Loaded ${data.length} cached translations for ${targetLang}`);
+    }
+  } catch (err) {
+    console.warn('DB translation cache unavailable:', err.message);
+  }
+}
+
+// Save translations to Supabase DB cache
+async function saveDBTranslations(entries) {
+  if (entries.length === 0) return;
+  try {
+    const rows = entries.map(({ text, targetLang, translated }) => ({
+      source_hash: simpleHash(text),
+      source_text: text,
+      target_lang: targetLang,
+      translated_text: translated,
+    }));
+
+    // Upsert to handle duplicates gracefully
+    await supabase
+      .from('content_translations')
+      .upsert(rows, { onConflict: 'source_hash,target_lang', ignoreDuplicates: true });
+  } catch (err) {
+    console.warn('Could not save translations to DB:', err.message);
+  }
+}
+
+// Batch translate texts — checks memory cache, then DB cache (preloaded), then API
+async function batchTranslate(texts, targetLang) {
+  if (targetLang === 'en' || !texts || texts.length === 0) return {};
+
+  // Filter to unique, non-empty, uncached texts
+  const seen = new Set();
+  const uncached = texts.filter(t => {
+    if (!t || typeof t !== 'string' || t.trim().length === 0) return false;
+    if (seen.has(t)) return false;
+    seen.add(t);
+    return !translationCache.has(`${targetLang}:${t}`);
+  });
 
   if (uncached.length > 0) {
-    try {
-      // Get auth token - use anon key as fallback for guest users
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers = {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': session?.access_token ? `Bearer ${session.access_token}` : `Bearer ${SUPABASE_ANON_KEY}`,
-      };
+    // Translate in batches of 50 to avoid payload limits
+    const BATCH_SIZE = 50;
+    const dbEntries = [];
 
-      const response = await fetch(
-        `${SUPABASE_URL}/functions/v1/translate`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ texts: uncached, targetLang: targetLang, sourceLang: 'en' })
-        }
-      );
+    for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
+      const batch = uncached.slice(i, i + BATCH_SIZE);
+      const results = await callTranslateAPI(batch, targetLang);
 
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error(`Translation failed (${response.status}):`, errText);
-        if (response.status === 401) {
-          console.error('Translation 401: JWT verification may be enabled on the translate Edge Function. Disable it in Supabase Dashboard > Edge Functions > translate.');
-        }
-        return {};
-      }
-
-      const data = await response.json();
-
-      if (data.data?.translations) {
-        data.data.translations.forEach((t, i) => {
-          translationCache.set(`${targetLang}:${uncached[i]}`, t.translatedText);
+      if (results) {
+        results.forEach((translated, idx) => {
+          translationCache.set(`${targetLang}:${batch[idx]}`, translated);
+          dbEntries.push({ text: batch[idx], targetLang, translated });
         });
       }
-    } catch (err) {
-      console.error('Translation error:', err);
+    }
+
+    // Save to DB cache in background (don't await)
+    if (dbEntries.length > 0) {
+      saveDBTranslations(dbEntries);
     }
   }
 
   // Build result from cache
   const result = {};
   texts.forEach(text => {
+    if (!text) return;
     const cached = translationCache.get(`${targetLang}:${text}`);
     if (cached) result[text] = cached;
   });
   return result;
+}
+
+// Flush the translation queue — called on a debounced timer
+async function flushTranslationQueue(targetLang) {
+  if (translationQueue.length === 0) return;
+
+  const textsToTranslate = [...new Set(translationQueue.filter(t => t && !translationCache.has(`${targetLang}:${t}`)))];
+  translationQueue = [];
+  const callbacks = [...translationFlushCallbacks];
+  translationFlushCallbacks = [];
+
+  if (textsToTranslate.length === 0) {
+    callbacks.forEach(cb => cb());
+    return;
+  }
+
+  await batchTranslate(textsToTranslate, targetLang);
+  callbacks.forEach(cb => cb());
+}
+
+// Queue a text for translation and trigger a batched flush
+function queueTranslation(text, targetLang, onComplete) {
+  if (!text || targetLang === 'en') return;
+  if (translationCache.has(`${targetLang}:${text}`)) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  translationQueue.push(text);
+  if (onComplete) translationFlushCallbacks.push(onComplete);
+
+  // Debounce: flush after 150ms of no new requests
+  if (translationFlushTimer) clearTimeout(translationFlushTimer);
+  translationFlushTimer = setTimeout(() => flushTranslationQueue(targetLang), 150);
+}
+
+// Translation context - allows <T> component to access current language
+const TranslationContext = createContext({ language: 'en', version: 0 });
+
+// <T> component for translating dynamic content (bios, announcements, etc.)
+// Usage: <T>{fellow.biography}</T>
+// Renders original text immediately, then swaps in translation when ready
+function T({ children }) {
+  const { language, version } = useContext(TranslationContext);
+  const text = typeof children === 'string' ? children : '';
+  const [translated, setTranslated] = useState(
+    language !== 'en' && text ? (translationCache.get(`${language}:${text}`) || text) : text
+  );
+
+  useEffect(() => {
+    if (!text || language === 'en') {
+      setTranslated(text);
+      return;
+    }
+
+    // Check memory cache first
+    const cached = translationCache.get(`${language}:${text}`);
+    if (cached) {
+      setTranslated(cached);
+      return;
+    }
+
+    // Queue for batch translation
+    queueTranslation(text, language, () => {
+      const result = translationCache.get(`${language}:${text}`);
+      if (result) setTranslated(result);
+    });
+  }, [text, language, version]);
+
+  return translated;
 }
 
 // ============================================
@@ -542,6 +706,7 @@ function AppProvider({ children }) {
   const [fellowFocusTags, setFellowFocusTags] = useState([]);
   const [language, setLanguage] = useState('en');
   const [translations, setTranslations] = useState({});
+  const [translationVersion, setTranslationVersion] = useState(0);
 
   // Check Supabase auth state on load
   useEffect(() => {
@@ -572,6 +737,14 @@ function AppProvider({ children }) {
         setLanguage(savedLang);
         document.documentElement.dir = savedLang === 'ar' ? 'rtl' : 'ltr';
         document.documentElement.lang = savedLang;
+        // Preload cached translations from DB, then translate UI strings
+        if (savedLang !== 'en') {
+          loadDBTranslations(savedLang).then(() => {
+            batchTranslate(UI_STRINGS, savedLang).then(trans => {
+              if (Object.keys(trans).length > 0) setTranslations(trans);
+            });
+          });
+        }
       }
     };
 
@@ -701,6 +874,10 @@ function AppProvider({ children }) {
 
     // Load translations
     if (langCode !== 'en') {
+      // Step 1: Load DB-cached translations first (instant for returning users)
+      await loadDBTranslations(langCode);
+
+      // Step 2: Translate UI strings (menus, buttons, labels)
       const trans = await batchTranslate(UI_STRINGS, langCode);
       if (Object.keys(trans).length === 0) {
         // Translation failed - revert to English
@@ -713,16 +890,23 @@ function AppProvider({ children }) {
         return;
       }
       setTranslations(trans);
+
+      // Step 3: Signal dynamic content to re-translate (triggers <T> components)
+      setTranslationVersion(v => v + 1);
     } else {
       setTranslations({});
+      setTranslationVersion(v => v + 1);
     }
   };
 
-  // Translation helper function
+  // Translation helper for static UI strings (synchronous)
   const t = useCallback((text) => {
     if (language === 'en') return text;
-    return translations[text] || text;
+    return translations[text] || translationCache.get(`${language}:${text}`) || text;
   }, [language, translations]);
+
+  // Translation context value for <T> component
+  const translationCtx = useMemo(() => ({ language, version: translationVersion }), [language, translationVersion]);
 
   // Permission check helper
   const canAccess = (requiredRole) => hasPermission(userRole, requiredRole);
@@ -788,18 +972,20 @@ function AppProvider({ children }) {
   }, [user, isOnboarded, fetchData]);
 
   return (
-    <AppContext.Provider value={{
-      user, userRole, login, logout, canAccess,
-      isOnboarded, completeOnboarding,
-      needsProfileClaim, setNeedsProfileClaim, potentialMatches, setPotentialMatches,
-      fellows, teamMembers, interactions, activities, loginEvents, fellowFocusTags, fetchData,
-      focusCategories, focusTags,
-      notificationSettings, setNotificationSettings,
-      language, changeLanguage, t,
-      loading
-    }}>
-      {children}
-    </AppContext.Provider>
+    <TranslationContext.Provider value={translationCtx}>
+      <AppContext.Provider value={{
+        user, userRole, login, logout, canAccess,
+        isOnboarded, completeOnboarding,
+        needsProfileClaim, setNeedsProfileClaim, potentialMatches, setPotentialMatches,
+        fellows, teamMembers, interactions, activities, loginEvents, fellowFocusTags, fetchData,
+        focusCategories, focusTags,
+        notificationSettings, setNotificationSettings,
+        language, changeLanguage, t,
+        loading
+      }}>
+        {children}
+      </AppContext.Provider>
+    </TranslationContext.Provider>
   );
 }
 
@@ -2158,7 +2344,7 @@ function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
               }`}
             >
               <span className="text-xl">{item.icon}</span>
-              <span className="font-medium">{item.label}</span>
+              <span className="font-medium">{t(item.label)}</span>
             </button>
           ))}
         </nav>
@@ -2271,17 +2457,17 @@ function ActivityItem({ activity, fellow, onClick }) {
               </span>
             </p>
             <p className="text-sm text-gray-500">
-              {icon} {activity.interaction_type} • {staffName}
+              {icon} <T>{activity.interaction_type}</T> • {staffName}
             </p>
           </div>
           <span className="text-xs text-gray-400 whitespace-nowrap">{time}</span>
         </div>
-        
+
         {activity.subject && (
-          <p className="text-sm text-gray-700 mt-1 font-medium">{activity.subject}</p>
+          <p className="text-sm text-gray-700 mt-1 font-medium"><T>{activity.subject}</T></p>
         )}
         {activity.notes && (
-          <p className="text-sm text-gray-500 mt-1 line-clamp-2">{activity.notes}</p>
+          <p className="text-sm text-gray-500 mt-1 line-clamp-2"><T>{activity.notes}</T></p>
         )}
       </div>
       
@@ -2299,7 +2485,7 @@ function ActivityItem({ activity, fellow, onClick }) {
 // PAGES
 // ============================================
 function DashboardPage({ onLogInteraction, onSelectFellow }) {
-  const { fellows, interactions, activities, fellowFocusTags, focusCategories, focusTags, fetchData } = useContext(AppContext);
+  const { fellows, interactions, activities, fellowFocusTags, focusCategories, focusTags, fetchData, t } = useContext(AppContext);
   const [timeRange, setTimeRange] = useState('month');
   const [helpMeConnectOpen, setHelpMeConnectOpen] = useState(false);
 
@@ -2815,7 +3001,7 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-sm text-gray-500">Network Health</p>
+            <p className="text-sm text-gray-500">{t('Network Health')}</p>
             <p className="text-4xl font-bold text-gray-900">{networkHealth}%</p>
           </div>
           <div className="flex items-center gap-4 text-sm">
@@ -2931,7 +3117,7 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
         style={{ background: 'linear-gradient(to right, #E87722, #F97316)', border: '3px solid #EA580C' }}
       >
         <span className="text-4xl">✨</span>
-        <span className="font-bold text-2xl tracking-wide" style={{ color: '#FFFFFF' }}>Help Me Connect</span>
+        <span className="font-bold text-2xl tracking-wide" style={{ color: '#FFFFFF' }}>{t('Help Me Connect')}</span>
       </button>
 
       {/* Help Me Connect Modal */}
@@ -2944,8 +3130,8 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
           <div className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl z-50 max-h-[80vh] overflow-auto">
             <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-4 flex items-center justify-between rounded-t-3xl">
               <div>
-                <h2 className="font-bold text-gray-900 text-lg">Help Me Connect</h2>
-                <p className="text-sm text-gray-500">AI-powered suggestions</p>
+                <h2 className="font-bold text-gray-900 text-lg">{t('Help Me Connect')}</h2>
+                <p className="text-sm text-gray-500"><T>AI-powered suggestions</T></p>
               </div>
               <button
                 onClick={() => setHelpMeConnectOpen(false)}
@@ -2980,10 +3166,10 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
                         {suggestion.icon}
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-900">{suggestion.title}</p>
-                        <p className="text-sm text-gray-500">{suggestion.description}</p>
+                        <p className="font-semibold text-gray-900"><T>{suggestion.title}</T></p>
+                        <p className="text-sm text-gray-500"><T>{suggestion.description}</T></p>
                         <span className="inline-block mt-2 text-xs px-3 py-1 bg-goldin-orange/10 text-goldin-orange rounded-full font-medium">
-                          {suggestion.action}
+                          <T>{suggestion.action}</T>
                         </span>
                       </div>
                     </div>
@@ -2999,7 +3185,7 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
 }
 
 function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
-  const { user, userRole, canAccess, fetchData, interactions } = useContext(AppContext);
+  const { user, userRole, canAccess, fetchData, interactions, t } = useContext(AppContext);
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({});
@@ -3174,8 +3360,8 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
               </div>
               <div className="flex-1 min-w-0 pt-1">
                 <h2 className="text-2xl font-bold text-gray-900">{fellow.first_name} {fellow.last_name}</h2>
-                {fellow.job_title && <p style={{ color: '#E87722' }} className="font-semibold">{fellow.job_title}</p>}
-                <p className="text-gray-600">{fellow.organization || 'No organization'}</p>
+                {fellow.job_title && <p style={{ color: '#E87722' }} className="font-semibold"><T>{fellow.job_title}</T></p>}
+                <p className="text-gray-600"><T>{fellow.organization || 'No organization'}</T></p>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   {/* Multiple badges for staff with fellowships */}
                   {badges.map((badge, idx) => {
@@ -3218,7 +3404,7 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                     status.color === 'green' ? 'text-green-800' :
                     status.color === 'yellow' ? 'text-yellow-800' : 'text-red-800'
                   }`}>
-                    {status.days !== null ? `Last contact ${status.days} days ago` : 'No contact recorded'}
+                    {status.days !== null ? <><T>Last contact</T> {status.days} <T>days ago</T></> : <T>No contact recorded</T>}
                   </span>
                 </div>
                 {canLogInteractions && (
@@ -3335,7 +3521,7 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                 activeTab === 'overview' ? 'text-goldin-orange border-goldin-orange' : 'text-gray-500 border-transparent'
               }`}
             >
-              Overview
+              {t('Overview')}
             </button>
             <button
               onClick={() => setActiveTab('focus')}
@@ -3343,7 +3529,7 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                 activeTab === 'focus' ? 'text-goldin-orange border-goldin-orange' : 'text-gray-500 border-transparent'
               }`}
             >
-              Focus Areas
+              {t('Focus Areas')}
             </button>
             {isStaff && (
               <>
@@ -3353,7 +3539,7 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                     activeTab === 'activity' ? 'text-goldin-orange border-goldin-orange' : 'text-gray-500 border-transparent'
                   }`}
                 >
-                  Activity
+                  {t('Activity')}
                   {fellowInteractions.length > 0 && (
                     <span className="absolute top-2 right-1/4 w-5 h-5 bg-gray-200 text-gray-600 text-xs rounded-full flex items-center justify-center">
                       {fellowInteractions.length}
@@ -3487,8 +3673,8 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                     {/* Bio - shown first if exists */}
                     {fellow.biography && (
                       <div className="mb-6">
-                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">About</h3>
-                        <p className="text-gray-700 leading-relaxed whitespace-pre-line">{fellow.biography}</p>
+                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">{t('About')}</h3>
+                        <p className="text-gray-700 leading-relaxed whitespace-pre-line"><T>{fellow.biography}</T></p>
                       </div>
                     )}
 
@@ -3555,8 +3741,8 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                             </svg>
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs text-gray-500">Location</p>
-                            <p className="text-gray-900 font-medium">{[fellow.city, fellow.country].filter(Boolean).join(', ')}</p>
+                            <p className="text-xs text-gray-500">{t('Location')}</p>
+                            <p className="text-gray-900 font-medium"><T>{[fellow.city, fellow.country].filter(Boolean).join(', ')}</T></p>
                           </div>
                         </div>
                       )}
@@ -3672,15 +3858,15 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2">
-                                  <p className="font-semibold text-gray-900">{activity.interaction_type}</p>
+                                  <p className="font-semibold text-gray-900"><T>{activity.interaction_type}</T></p>
                                   <span className="text-xs text-gray-400">{time}</span>
                                 </div>
                                 <p className="text-sm text-gray-500">{staffName}</p>
                                 {activity.subject && (
-                                  <p className="text-sm text-gray-700 mt-1 font-medium">{activity.subject}</p>
+                                  <p className="text-sm text-gray-700 mt-1 font-medium"><T>{activity.subject}</T></p>
                                 )}
                                 {activity.notes && (
-                                  <p className="text-sm text-gray-600 mt-1">{activity.notes}</p>
+                                  <p className="text-sm text-gray-600 mt-1"><T>{activity.notes}</T></p>
                                 )}
                               </div>
                             </div>
@@ -4055,7 +4241,7 @@ function FilterSortPanel({ isOpen, onClose, filters, setFilters, sort, setSort }
 }
 
 function DirectoryPage({ onSelectFellow }) {
-  const { fellows, teamMembers, userRole, canAccess } = useContext(AppContext);
+  const { fellows, teamMembers, userRole, canAccess, t } = useContext(AppContext);
   const [search, setSearch] = useState('');
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [sort, setSort] = useState('name_asc'); // Default: alphabetical for combined directory
@@ -4238,7 +4424,7 @@ function DirectoryPage({ onSelectFellow }) {
               s === 'green' ? 'bg-green-100 text-green-700' :
               s === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
               'bg-red-100 text-red-700'
-            }`}>{s === 'green' ? 'Recent' : s === 'yellow' ? 'Follow-up' : 'Overdue'}</span>
+            }`}>{s === 'green' ? t('Recent') : s === 'yellow' ? t('Follow-up') : t('Overdue')}</span>
           ))}
           <button
             onClick={() => setFilters({ programs: [], regions: [], years: [], statuses: [] })}
@@ -4284,7 +4470,7 @@ function DirectoryPage({ onSelectFellow }) {
                 <p className="font-semibold text-gray-900 truncate">
                   {fellow.first_name} {fellow.last_name}
                 </p>
-                <p className="text-sm text-gray-500 truncate">{fellow.organization || 'No organization'}</p>
+                <p className="text-sm text-gray-500 truncate"><T>{fellow.organization || 'No organization'}</T></p>
               </div>
               {/* Program Badges - supports multiple for staff with fellowships */}
               <div className="flex flex-wrap gap-1 items-end justify-end flex-shrink-0 max-w-[120px]">
@@ -4468,8 +4654,8 @@ function ActivityPage({ onSelectFellow }) {
                           {getTimeAgo(activity.discovered_at)}
                         </span>
                       </div>
-                      <p className="text-sm font-medium text-blue-600 mt-1 line-clamp-2">{activity.title}</p>
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{activity.snippet}</p>
+                      <p className="text-sm font-medium text-blue-600 mt-1 line-clamp-2"><T>{activity.title}</T></p>
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2"><T>{activity.snippet}</T></p>
                       <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
                         <span>📰</span> {activity.source_name}
                       </p>
@@ -4715,8 +4901,8 @@ function SearchPage({ onSelectFellow }) {
                 <p className="font-semibold text-gray-900 truncate">
                   {fellow.first_name} {fellow.last_name}
                 </p>
-                <p className="text-sm text-gray-500 truncate">{fellow.organization || 'No organization'}</p>
-                {fellow.country && <p className="text-xs text-gray-400">{fellow.city ? `${fellow.city}, ` : ''}{fellow.country}</p>}
+                <p className="text-sm text-gray-500 truncate"><T>{fellow.organization || 'No organization'}</T></p>
+                {fellow.country && <p className="text-xs text-gray-400"><T>{fellow.city ? `${fellow.city}, ${fellow.country}` : fellow.country}</T></p>}
               </div>
               <span className={`text-xs px-2 py-1 rounded-full ${badge.bg} text-white`}>
                 {badge.label}
@@ -7078,7 +7264,7 @@ function ActivityFeedSection() {
 // COMMUNITY PAGE
 // ============================================
 function CommunityPage() {
-  const { user, canAccess } = useContext(AppContext);
+  const { user, canAccess, t } = useContext(AppContext);
   const isGuest = !user || user.email === 'guest@gathertracker.app';
 
   // Tab state
@@ -7143,7 +7329,7 @@ function CommunityPage() {
                   : 'text-gray-500 border-transparent hover:text-gray-700'
               } ${tab.requiresAuth && isGuest ? 'opacity-50' : ''}`}
             >
-              {tab.label}
+              {t(tab.label)}
               {tab.requiresAuth && isGuest && (
                 <span className="ml-1 text-xs">🔒</span>
               )}
@@ -7182,8 +7368,8 @@ function CommunityPage() {
                       <span className="text-orange-500">📌</span>
                     )}
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">{announcement.title}</h3>
-                      <p className="text-gray-600 mt-1 whitespace-pre-wrap">{announcement.content}</p>
+                      <h3 className="font-semibold text-gray-900"><T>{announcement.title}</T></h3>
+                      <p className="text-gray-600 mt-1 whitespace-pre-wrap"><T>{announcement.content}</T></p>
                       <p className="text-xs text-gray-400 mt-2">{formatDate(announcement.published_at)}</p>
                     </div>
                   </div>
@@ -7553,7 +7739,7 @@ function LogInteractionModal({ isOpen, onClose, preSelectedFellow }) {
                     </div>
                     <div className="flex-1 text-left">
                       <p className="font-semibold text-gray-900">{fellow.first_name} {fellow.last_name}</p>
-                      <p className="text-sm text-gray-500">{fellow.organization || 'No organization'}</p>
+                      <p className="text-sm text-gray-500"><T>{fellow.organization || 'No organization'}</T></p>
                     </div>
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -7858,7 +8044,7 @@ function MainApp() {
 
       <Header
         onMenuOpen={() => setMenuOpen(true)}
-        pageTitle={pageTitles[currentPage] || 'GATHER'}
+        pageTitle={t(pageTitles[currentPage] || 'GATHER')}
         onAddInteraction={openLogModal}
       />
 
