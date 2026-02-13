@@ -248,6 +248,153 @@ Tracks user login activity for analytics and audit.
 
 ---
 
+## Current Cohort Tables
+
+### sites
+Program sites where current cohorts operate. Seeded with Chicago (CPF), Dar es Salaam (GGF), Mosquera (ESP).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| name | text | Site display name |
+| city | text | City |
+| country | text | Country |
+| program | text | CPF, GGF, or ESP |
+| cohort_year | integer | Current active year (default 2026) |
+| created_at | timestamptz | |
+
+### fellows (modified)
+Added column for current cohort support:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| site_id | uuid | FK → sites.id (null for alumni) |
+
+The `status` column now uses: `'Alumni'` (292 existing) or `'Current'` (new current fellows).
+
+### events
+Cohort meetings, workshops, and sessions.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| site_id | uuid | FK → sites.id |
+| title | text | Event name |
+| description | text | Details/notes |
+| location | text | Physical location |
+| meeting_link | text | Virtual/hybrid link |
+| start_time | timestamptz | Start date/time |
+| end_time | timestamptz | End date/time |
+| notes | text | Internal notes |
+| created_by | uuid | FK → auth.users.id |
+| created_at | timestamptz | |
+
+### event_attendance
+Per-fellow attendance records for each event.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| event_id | uuid | FK → events.id |
+| fellow_id | uuid | FK → fellows.id |
+| status | text | present, absent, excused, late |
+| notes | text | Optional notes |
+| recorded_by | uuid | FK → auth.users.id |
+| created_at | timestamptz | |
+
+**Unique constraint:** `(event_id, fellow_id)`
+
+### curricula
+Curriculum definitions per site/year.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| site_id | uuid | FK → sites.id |
+| name | text | Curriculum name |
+| year | integer | Program year |
+| created_at | timestamptz | |
+
+### curriculum_chapters
+Chapters within a curriculum.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| curriculum_id | uuid | FK → curricula.id |
+| title | text | Chapter title |
+| description | text | |
+| order_num | integer | Display order |
+
+### curriculum_items
+Pages, assignments, and discussion prompts within chapters.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| chapter_id | uuid | FK → curriculum_chapters.id |
+| item_type | text | page, assignment, discussion |
+| title | text | Item title |
+| description | text | |
+| due_date | date | Due date (assignments) |
+| order_num | integer | Display order |
+
+### fellow_curriculum_progress
+Individual fellow completion of curriculum items.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| fellow_id | uuid | FK → fellows.id |
+| item_id | uuid | FK → curriculum_items.id |
+| completed | boolean | |
+| completed_at | timestamptz | |
+| recorded_by | uuid | FK → auth.users.id |
+
+**Unique constraint:** `(fellow_id, item_id)`
+
+### fellow_platform_activity
+GATHER platform login tracking for engagement metrics.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| fellow_id | uuid | FK → fellows.id |
+| activity_date | date | Date of activity |
+| login_count | integer | Logins that day |
+| created_at | timestamptz | |
+
+**Unique constraint:** `(fellow_id, activity_date)`
+
+### adhoc_lists
+Custom data collection lists attached to a site/cohort (e.g., T-shirt sizes, stipend tracking).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| site_id | uuid | FK → sites.id |
+| name | text | List name |
+| description | text | |
+| fields | jsonb | Array of field definitions |
+| created_by | uuid | FK → auth.users.id |
+| created_at | timestamptz | |
+
+### adhoc_list_entries
+Fellow data entries for each ad hoc list.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| list_id | uuid | FK → adhoc_lists.id |
+| fellow_id | uuid | FK → fellows.id |
+| data | jsonb | Field values |
+| updated_by | uuid | FK → auth.users.id |
+| updated_at | timestamptz | |
+
+**Unique constraint:** `(list_id, fellow_id)`
+
+---
+
 ## Focus Areas System
 
 ### focus_categories

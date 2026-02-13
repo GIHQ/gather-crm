@@ -52,9 +52,23 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ---
 
-## Current State (Updated Feb 13, 2026 — end of day)
+## Current State (Updated Feb 13, 2026)
 
 ### Recently Completed
+- **Current Cohort Management System (Feb 13):**
+  - New feature: manage current fellows across three program sites (Chicago, Dar es Salaam, Mosquera)
+  - **Database migration** (`016_current_cohort_tables.sql`): 11 new tables — sites, events, event_attendance, curricula, curriculum_chapters, curriculum_items, fellow_curriculum_progress, fellow_platform_activity, adhoc_lists, adhoc_list_entries + `site_id` column on fellows
+  - **Cohort Dashboard page** — overview of all three sites with fellow counts, event counts, attendance rates
+  - **Site Detail page** with three tabs:
+    - *Directory* — fellow cards with attendance rate and health status indicator
+    - *Events* — create events, view upcoming/past events, take attendance with P/L/E/A buttons + bulk actions
+    - *Health* — per-fellow health score (0-100) combining attendance rate + staff interaction recency
+  - **Attendance Modal** — full-screen attendance sheet with per-fellow status buttons
+  - **Create Event Modal** — title, description, location, meeting link, start/end time, notes
+  - Navigation: "Cohorts" menu item (team+ access) between Dashboard and Directory
+  - Spec document: `docs/CURRENT_COHORT_SPEC.md`
+  - **Not yet implemented** (Phase 2): Curriculum tracking UI, Ad hoc lists UI, GATHER platform login tracking
+  - **To activate**: Run `migrations/016_current_cohort_tables.sql` in Supabase SQL Editor, then add fellows with `status = 'Current'` and appropriate `site_id`
 - **iPhone Safari Magic Link Auth Fix (Feb 13):**
   - PKCE code exchange was silently failing on mobile Safari, leaving users stuck as guest
   - Added `getSession()` fallback in `INITIAL_SESSION` handler — recovers sessions that `onAuthStateChange` missed
