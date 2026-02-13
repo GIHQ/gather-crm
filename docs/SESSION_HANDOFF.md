@@ -55,6 +55,21 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ## Current State (Updated Feb 13, 2026 — end of day)
 
 ### Recently Completed
+- **iPhone Safari Magic Link Auth Fix (Feb 13):**
+  - PKCE code exchange was silently failing on mobile Safari, leaving users stuck as guest
+  - Added `getSession()` fallback in `INITIAL_SESSION` handler — recovers sessions that `onAuthStateChange` missed
+  - Added `getSession()` retry in auth callback timeout — last-resort recovery before declaring failure
+  - Extended auth callback timeout from 10s to 12s for slower mobile connections
+  - Clear guest localStorage state when user initiates login (prevents stuck-as-guest loop)
+  - Fixed `emailRedirectTo` to include pathname (not just origin) for subpath deployments
+  - Added "I clicked the link — sign me in" manual session recovery button on login screen
+  - Improved error messaging with iPhone-specific tips (long-press → Open in Safari)
+- **Auth Error Context Fix (Feb 13):**
+  - `authError` state was missing from AppContext, so LoginScreen always received `undefined`
+  - Added `authError` to context provider — error banner now displays correctly
+- **AI Search Column Fix (Feb 13):**
+  - AI search queries referencing `cohort_year` failed — column is actually `cohort` in fellows table
+  - Fixed column name in the search-news Edge Function system prompt
 - **Deep Translation System (Feb 13):**
   - All dynamic content (bios, announcements, job titles, orgs, etc.) now translatable via language selector
   - `<T>` component wraps any dynamic text — fetches translations via Google Translate Edge Function
@@ -152,12 +167,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - **Community Platform Phase 2b** — Discovery features (enhanced search, fellow spotlight, push notifications)
 
 ### Known Issues
+- **iPhone Safari PWA localStorage isolation** — If user installs GATHER as a PWA (home screen), the PWA and Safari have separate localStorage. Magic link clicked in email opens in Safari, but session doesn't transfer to PWA. Workaround: user can tap "I clicked the link — sign me in" button on login screen, or use Safari instead of PWA.
 - Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment for `translate`, `search-news`, and `stream-token`
 - 18 fellows still missing focus area tags (sparse bios) — run `node scripts/assign-focus-areas.js` to assign via Claude AI
 - `user_roles` table is legacy/dead — code fallback removed Feb 13, table can be dropped from Supabase when convenient
 - Supabase magic link rate limit can block re-login after page reload — consider increasing rate limit in Supabase Dashboard > Authentication > Rate Limits
 
 ### Recently Fixed Bugs
+- **iPhone Safari magic link → guest mode (Feb 13)** — PKCE exchange silently failing on mobile Safari. User got stuck as guest with no recovery path. Fixed with multi-layer `getSession()` fallbacks, guest state cleanup on login, and manual session recovery button.
+- **authError not reaching LoginScreen (Feb 13)** — `authError` was omitted from AppContext value, so the "Login link didn't work" error banner never showed. Added to context provider.
+- **AI search `cohort_year` column error (Feb 13)** — Edge Function system prompt referenced non-existent `cohort_year` column. Fixed to `cohort`.
 - **`<T>` component null crash (Feb 13)** — Dynamic content with null/undefined values passed to `<T>` caused React render errors. Added defensive null checks and safer context access.
 - **Missing `t()` in MainApp/SlideMenu (Feb 13)** — Some UI strings weren't wrapped in translation function, showing English regardless of language setting. Fixed.
 - **Language selector 401 error (Feb 13)** — Translate Edge Function had JWT verification ON, blocking all requests at the Supabase gateway. Fixed by disabling JWT verification and adding proper HTTP error handling with user feedback (reverts to English with alert on failure).
@@ -222,11 +241,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Auto-link trigger (`014_auto_link_team_members.sql`) handles this automatically on signup/login
 
 ### Auth & Session Handling
-- **Primary auth mechanism:** `onAuthStateChange` listener (not `getSession()`)
+- **Primary auth mechanism:** `onAuthStateChange` listener with `getSession()` fallbacks
   - Handles `INITIAL_SESSION` (page load), `SIGNED_IN`, `TOKEN_REFRESHED`, and `SIGNED_OUT` events
   - Avoids race condition where `getSession()` returns null before session loads from storage
-- Supabase client configured with `storageKey: 'gather-auth'` for session persistence
+  - **Fallback 1:** When `INITIAL_SESSION` fires with null (non-callback), explicitly calls `getSession()` to catch missed sessions (Safari/PWA edge case)
+  - **Fallback 2:** On auth callback timeout (12s), tries `getSession()` before declaring failure
+  - **Fallback 3:** "I clicked the link — sign me in" button on login screen calls `getSession()` manually
+- Supabase client configured with `storageKey: 'gather-auth'`, `flowType: 'pkce'`, `detectSessionInUrl: true`
+- `emailRedirectTo` uses `origin + pathname` (not just origin) for subpath compatibility
 - Guest users use fake email `guest@gathertracker.app` — preserved in localStorage across sessions
+- Guest state is cleared from localStorage when user initiates a new login (prevents stuck-as-guest)
 - When `SIGNED_OUT` event fires, localStorage is cleared and user sees login screen
 - Route protection redirects guests from team-only pages: dashboard, activity, broadcast, team-management
 - Team members must run this SQL if their account isn't linked:

@@ -1,6 +1,6 @@
 # GATHER Roadmap
 
-**Last updated:** Feb 13, 2026 (end of day)
+**Last updated:** Feb 13, 2026 (late evening)
 
 This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO Tracker in SESSION_HANDOFF.md.
 
@@ -24,6 +24,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | News scanner (SerpAPI) | ✅ Done — scans all 292 fellows in batches |
 | Focus areas tab fix (timeout + team member handling) | ✅ Done (Feb 11) |
 | Login activity tracking (login_events table) | ✅ Done (Feb 13) |
+| iPhone Safari auth hardening (getSession fallbacks, session recovery UX) | ✅ Done (Feb 13) |
 
 ---
 
@@ -139,6 +140,7 @@ Service worker (sw.js) already has push/notification handlers. To complete:
 | Feb 2026 | Lurker-first architecture | 30-50% active engagement realistic; design for passive consumption first |
 | Feb 2026 | Google Translate for i18n | Real-time translation of all dynamic content; DB cache avoids repeated API calls; supports 100+ languages for global fellows |
 | Feb 2026 | Magic link only (drop OAuth) | Simpler auth flow; fellows have diverse email providers; avoids Google consent screen issues |
+| Feb 2026 | Multi-layer auth recovery | PKCE exchange unreliable on mobile Safari; added getSession() fallbacks at 3 points + manual recovery UX |
 | Feb 2026 | Supabase Pro upgrade | Higher rate limits, custom domain support, better for production |
 
 ---
