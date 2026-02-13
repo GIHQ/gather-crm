@@ -52,9 +52,15 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ---
 
-## Current State (Updated Feb 12, 2026)
+## Current State (Updated Feb 13, 2026)
 
 ### Recently Completed
+- **Buttondown Newsletter Integration (Feb 13):**
+  - Created `scripts/import-to-buttondown.js` — exports fellows to CSV for Buttondown bulk import (also supports `--api` flag for direct API import)
+  - Created `supabase/functions/send-newsletter/index.ts` — Edge Function that sends newsletters via Buttondown API with staff auth checks
+  - Updated `handleSendNewsletter` in index.html to call send-newsletter Edge Function (removed DEMO MODE)
+  - Subscribers tagged by program (CPF/GGF/ESP) and cohort for segmentation
+  - Requires: Set `BUTTONDOWN_API_KEY` in Supabase Edge Function secrets, run import script, deploy Edge Function
 - **Auth Session Persistence Fix (Feb 12):**
   - Fixed credentials being lost on page reload (reset to guest)
   - Changed from `getSession()` to `onAuthStateChange` as primary auth mechanism
@@ -143,9 +149,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - [x] Build Community tab components ✅
 - [x] Restructure menu: Community (feed), Library (resources), Broadcast (messaging) ✅
 - [x] Fix auth flow: auto-link team_members, route protection, stale session handling ✅
-- [ ] Import 292 fellow emails to Buttondown
-- [ ] Wire newsletter composer to Buttondown API (create Edge Function)
-- [ ] Test end-to-end newsletter sending
+- [x] Import 292 fellow emails to Buttondown ✅ (script + CSV export ready)
+- [x] Wire newsletter composer to Buttondown API (create Edge Function) ✅
+- [ ] Test end-to-end newsletter sending (requires: deploy Edge Function, set API key, run import)
 
 ### 🟡 Short-Term (Next 2 Weeks)
 - [x] GetStream activity feed integration ✅

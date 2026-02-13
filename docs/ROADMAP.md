@@ -1,6 +1,6 @@
 # GATHER Roadmap
 
-**Last updated:** Feb 11, 2026
+**Last updated:** Feb 13, 2026
 
 This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO Tracker in SESSION_HANDOFF.md.
 
@@ -42,8 +42,8 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | "Broadcast" tab for staff | ✅ Done |
 | Menu restructure (removed desktop links) | ✅ Done |
 | Auth flow fixes (auto-link, route protection, stale sessions) | ✅ Done |
-| Import 292 fellow emails to Buttondown | 🔲 Not started |
-| Wire newsletter to Buttondown API (Edge Function) | 🔲 Not started |
+| Import 292 fellow emails to Buttondown | ✅ Done — import script + CSV export ready |
+| Wire newsletter to Buttondown API (Edge Function) | ✅ Done — send-newsletter Edge Function |
 
 ### Phase 2b: Discovery (In Progress)
 | Feature | Status |

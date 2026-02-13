@@ -4822,7 +4822,7 @@ function BroadcastPage() {
     setSavingAnnouncement(false);
   };
 
-  // Send newsletter email
+  // Send newsletter email via Buttondown
   const handleSendNewsletter = async () => {
     if (!subject.trim() || !content.trim()) {
       alert('Please fill in subject and content');
@@ -4833,29 +4833,66 @@ function BroadcastPage() {
       return;
     }
 
+    if (!confirm(`Send newsletter to ${recipients.length} recipients?\n\nSubject: ${subject}`)) {
+      return;
+    }
+
     setSending(true);
 
-    // Log to newsletter_sends table
-    const { data, error } = await supabase
-      .from('newsletter_sends')
-      .insert({
-        subject: subject,
-        body_preview: content.substring(0, 200),
-        sent_by: user?.id,
-        recipient_count: recipients.length,
-        target_programs: selectedCohorts,
-      })
-      .select()
-      .single();
+    try {
+      // Log to newsletter_sends table first
+      const { data, error } = await supabase
+        .from('newsletter_sends')
+        .insert({
+          subject: subject,
+          body_preview: content.substring(0, 200),
+          sent_by: user?.id,
+          recipient_count: recipients.length,
+          target_programs: selectedCohorts,
+        })
+        .select()
+        .single();
 
-    if (!error && data) {
-      setNewsletterHistory(prev => [data, ...prev]);
-      alert(`[DEMO MODE] Newsletter would be sent to ${recipients.length} recipients.\n\nSubject: ${subject}\n\nNote: Full email sending integration coming soon.`);
-      setSubject('');
-      setContent('');
-    } else {
-      alert('Error: ' + (error?.message || 'Unknown error'));
+      if (error) {
+        alert('Error logging newsletter: ' + error.message);
+        setSending(false);
+        return;
+      }
+
+      // Send via Buttondown Edge Function
+      const session = await supabase.auth.getSession();
+      const token = session?.data?.session?.access_token;
+
+      const sendRes = await fetch(`${SUPABASE_URL}/functions/v1/send-newsletter`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subject: subject,
+          body: content,
+          target_programs: selectedCohorts.length > 0 ? selectedCohorts : null,
+          newsletter_send_id: data.id,
+        }),
+      });
+
+      const result = await sendRes.json();
+
+      if (sendRes.ok && result.success) {
+        setNewsletterHistory(prev => [data, ...prev]);
+        alert(`Newsletter sent to ${recipients.length} recipients!`);
+        setSubject('');
+        setContent('');
+      } else {
+        // Remove the log entry if send failed
+        await supabase.from('newsletter_sends').delete().eq('id', data.id);
+        alert('Failed to send newsletter: ' + (result.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Error sending newsletter: ' + err.message);
     }
+
     setSending(false);
   };
 
