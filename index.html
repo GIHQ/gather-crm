@@ -1143,6 +1143,14 @@ function getProgramBadge(program) {
     return { label: 'GGF', bg: 'bg-orange-500' };
   }
 
+  // Current cohort site programs
+  if (p === 'dar' || p.includes('dar es salaam') || p.includes('tanzania')) {
+    return { label: 'DAR', bg: 'bg-emerald-600' };
+  }
+  if (p === 'mos' || p.includes('mosquera') || p.includes('colombia')) {
+    return { label: 'MOS', bg: 'bg-violet-600' };
+  }
+
   // Fallback - show first 3 characters
   return { label: program.substring(0, 3).toUpperCase(), bg: 'bg-gray-500' };
 }
@@ -8008,7 +8016,7 @@ function getSiteIcon(program) {
 }
 
 function getSiteProgramColor(program) {
-  const colors = { CPF: 'blue', GGF: 'orange', ESP: 'purple' };
+  const colors = { CPF: 'blue', GGF: 'orange', ESP: 'purple', DAR: 'emerald', MOS: 'violet' };
   return colors[program] || 'gray';
 }
 
