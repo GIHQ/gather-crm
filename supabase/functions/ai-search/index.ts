@@ -35,13 +35,13 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
     const [fellowsRes, tagsRes, categoriesRes, focusTagsRes] = await Promise.all([
-      supabase.from("fellows").select("id, first_name, last_name, program, cohort_year, city, country, region, organization, job_title, biography, community_area, languages, focus_area_1, focus_area_2, focus_area_3").eq("status", "Alumni"),
+      supabase.from("fellows").select("id, first_name, last_name, program, cohort, city, country, region, organization, job_title, biography, community_area, languages, focus_area_1, focus_area_2, focus_area_3").eq("status", "Alumni"),
       supabase.from("fellow_focus_tags").select("fellow_id, tag_id"),
       supabase.from("focus_categories").select("id, name, slug"),
       supabase.from("focus_tags").select("id, name, category_id"),
     ]);
 
-    if (fellowsRes.error) console.error("Fellows query error:", fellowsRes.error);
+    if (fellowsRes.error) throw new Error(`Fellows query failed: ${fellowsRes.error.message}`);
     if (tagsRes.error) console.error("Tags query error:", tagsRes.error);
     if (categoriesRes.error) console.error("Categories query error:", categoriesRes.error);
     if (focusTagsRes.error) console.error("Focus tags query error:", focusTagsRes.error);
@@ -50,6 +50,8 @@ serve(async (req) => {
     const fellowTags = Array.isArray(tagsRes.data) ? tagsRes.data : [];
     const categories = Array.isArray(categoriesRes.data) ? categoriesRes.data : [];
     const focusTags = Array.isArray(focusTagsRes.data) ? focusTagsRes.data : [];
+
+    console.log(`Loaded ${fellows.length} fellows, ${fellowTags.length} tags, ${categories.length} categories, ${focusTags.length} focus tags`);
 
     // Build tag lookup
     const tagMap: Record<string, { name: string; category: string }> = {};
@@ -74,7 +76,7 @@ serve(async (req) => {
         `ID:${f.id}`,
         `${f.first_name} ${f.last_name}`,
         f.program,
-        f.cohort_year ? `'${String(f.cohort_year).slice(-2)}` : "",
+        f.cohort ? `'${String(f.cohort).slice(-2)}` : "",
         f.city && f.country ? `${f.city}, ${f.country}` : (f.city || f.country || ""),
         f.organization ? `Org: ${f.organization}` : "",
         f.job_title ? `Title: ${f.job_title}` : "",
@@ -86,7 +88,7 @@ serve(async (req) => {
     }).join("\n");
 
     // Build the system prompt
-    const systemPrompt = `You are an AI assistant for GATHER, an alumni network CRM for the Goldin Institute. You help staff find and connect with fellows in their network of 292 alumni across 3 programs:
+    const systemPrompt = `You are an AI assistant for GATHER, an alumni network CRM for the Goldin Institute. You help staff find and connect with fellows in their network of ${fellows.length} alumni across 3 programs:
 - CPF (Chicago Peace Fellows) — Chicago-based community leaders
 - GGF (Goldin Global Fellows) — International peacebuilders
 - ESP (Español/Global Spanish) — Spanish-speaking fellows

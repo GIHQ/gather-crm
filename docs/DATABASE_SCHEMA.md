@@ -22,7 +22,7 @@ The main table storing all 292 Goldin Institute fellows.
 | alternate_emails | text[] | Additional email addresses for identity matching |
 | phone | text | Phone number |
 | program | text | CPF, GGF, or ESP |
-| cohort_year | text | Cohort identifier (e.g., "2019", "2024") |
+| cohort | text | Cohort identifier (e.g., "2019", "2024") |
 | city | text | Current city |
 | country | text | Country of residence |
 | region | text | Geographic region |

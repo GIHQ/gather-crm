@@ -257,7 +257,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ### Database Schema vs Docs
 `DATABASE_SCHEMA.md` is now accurate as of Feb 13, 2026. Key fellows columns:
 - `status` (not `is_active`) — all 292 have status = 'Alumni'
-- `biography` (not `bio`), `job_title` (not `title`), `cohort_year` (not `cohort`)
+- `biography` (not `bio`), `job_title` (not `title`), `cohort` (not `cohort_year`)
 - No `fellow_id` column exists
 - `user_roles` table is marked LEGACY — superseded by `team_members` for all role checks
 

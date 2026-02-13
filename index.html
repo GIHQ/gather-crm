@@ -1678,7 +1678,7 @@ async function findPotentialMatches(loginEmail) {
   // Search unclaimed fellows
   const { data: fellows } = await supabase
     .from('fellows')
-    .select('id, first_name, last_name, email, program, cohort_year, photo_url')
+    .select('id, first_name, last_name, email, program, cohort, photo_url')
     .is('user_id', null)
     .or(nameQuery)
     .limit(5);
@@ -1714,7 +1714,7 @@ function IsThisYouScreen({ email, userId, potentialMatches, onClaim, onSkip, onS
     const query = searchQuery.toLowerCase();
     const { data: fellows } = await supabase
       .from('fellows')
-      .select('id, first_name, last_name, email, program, cohort_year, photo_url')
+      .select('id, first_name, last_name, email, program, cohort, photo_url')
       .is('user_id', null)
       .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
       .limit(10);
