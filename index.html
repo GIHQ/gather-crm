@@ -176,6 +176,8 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     autoRefreshToken: true,
     storageKey: 'gather-auth',
     storage: window.localStorage,
+    flowType: 'pkce',
+    detectSessionInUrl: true,
   }
 });
 
@@ -669,13 +671,21 @@ function AppProvider({ children }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (e) {
+      console.error('Sign out error:', e);
+    }
+    // Always clear local state even if signOut request fails
     setUser(null);
     setUserRole(ROLES.VIEWER);
     setIsOnboarded(false);
+    setNeedsProfileClaim(false);
+    setPotentialMatches({ fellows: [], teamMembers: [] });
     localStorage.removeItem('gather_user');
     localStorage.removeItem('gather_user_role');
     localStorage.removeItem('gather_onboarded');
+    localStorage.removeItem('gather-auth');
   };
 
   // Change language and load translations
@@ -1342,10 +1352,14 @@ function LoginScreen({ onLogin }) {
     });
 
     if (error) {
-      alert('Error: ' + error.message);
+      if (error.message?.toLowerCase().includes('rate') || error.status === 429) {
+        alert('Too many login attempts. Please wait a minute before trying again.');
+      } else {
+        alert('Error: ' + error.message);
+      }
       setLoading(false);
     } else {
-      alert('Check your email for a login link!');
+      alert('Check your email for a login link! (Check spam if you don\'t see it.)');
       setLoading(false);
     }
   };
@@ -1375,10 +1389,10 @@ function LoginScreen({ onLogin }) {
               required
             />
             <p className="text-xs text-gray-400 mb-4 -mt-2">We'll send a login link to your inbox — no password needed</p>
-            <button 
+            <button
               type="submit"
               disabled={loading}
-              className="w-full bg-goldin-orange text-white font-semibold py-4 px-6 rounded-2xl active:scale-98 transition disabled:opacity-50"
+              className="w-full bg-orange-600 text-white font-semibold py-4 px-6 rounded-2xl active:scale-98 transition disabled:opacity-50 shadow-sm"
             >
               {loading ? 'Sending link...' : 'Send Login Link'}
             </button>
@@ -2154,7 +2168,10 @@ function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
           </button>
           
           <button
-            onClick={logout}
+            onClick={async () => {
+              onClose();
+              await logout();
+            }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition"
           >
             <span className="text-xl">🚪</span>
