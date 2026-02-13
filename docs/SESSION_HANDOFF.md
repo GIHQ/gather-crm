@@ -6,7 +6,7 @@
 
 ## Quick Context
 
-GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 programs (CPF, GGF, ESP). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan). Auth is magic link only (Google OAuth removed Feb 13).
+GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 programs (CPF, GGF, ESP). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan). Auth is magic link only with implicit flow (Google OAuth removed Feb 13, PKCE replaced with implicit Feb 13).
 
 | Resource | URL |
 |----------|-----|
@@ -55,15 +55,12 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ## Current State (Updated Feb 13, 2026 — end of day)
 
 ### Recently Completed
-- **iPhone Safari Magic Link Auth Fix (Feb 13):**
-  - PKCE code exchange was silently failing on mobile Safari, leaving users stuck as guest
-  - Added `getSession()` fallback in `INITIAL_SESSION` handler — recovers sessions that `onAuthStateChange` missed
-  - Added `getSession()` retry in auth callback timeout — last-resort recovery before declaring failure
-  - Extended auth callback timeout from 10s to 12s for slower mobile connections
-  - Clear guest localStorage state when user initiates login (prevents stuck-as-guest loop)
-  - Fixed `emailRedirectTo` to include pathname (not just origin) for subpath deployments
-  - Added "I clicked the link — sign me in" manual session recovery button on login screen
-  - Improved error messaging with iPhone-specific tips (long-press → Open in Safari)
+- **iPhone Safari Magic Link — FIXED via Implicit Flow (Feb 13):**
+  - PKCE code exchange was silently failing on mobile Safari — user got stuck on loading screen, then broken guest state with no data on reload
+  - **Root fix:** Switched `flowType` from `'pkce'` to `'implicit'` in Supabase client config. Implicit flow puts the access token directly in the URL hash — no server-side code exchange needed
+  - Added 1-second URL cleanup after auth callback detection to prevent stale tokens on reload
+  - Also kept: `getSession()` fallbacks, manual "I clicked the link" recovery button, guest state cleanup, iPhone-specific error tips
+  - Confirmed working on iPhone Safari (Feb 13)
 - **Auth Error Context Fix (Feb 13):**
   - `authError` state was missing from AppContext, so LoginScreen always received `undefined`
   - Added `authError` to context provider — error banner now displays correctly
@@ -166,20 +163,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ### In Progress
 - **Community Platform Phase 2b** — Discovery features (enhanced search, fellow spotlight, push notifications)
 
-### AWAITING TEST — iPhone Safari Magic Link (Feb 13 late)
-**Status:** PKCE flow confirmed broken on iPhone Safari. **Switched to implicit flow** — needs re-test.
-
-**What was done (attempt 1 — FAILED):** Added multi-layer `getSession()` fallbacks + manual session recovery UX. PKCE exchange still failed silently on iPhone. User got stuck on loading screen, then guest mode with no data on reload.
-
-**What was done (attempt 2 — CURRENT):** Switched `flowType` from `'pkce'` to `'implicit'` in Supabase client config (line ~179). Implicit flow puts the access token directly in the URL hash — no server-side code exchange, which is what was failing on iPhone Safari. Also added 1-second URL cleanup to prevent stale tokens on reload.
-
-**To test:** On iPhone Safari: Get Started → enter email → send magic link → click link in email → app should log you in (not guest mode). If it still fails, see Known Issues below.
-
-**IMPORTANT Supabase Dashboard check:** If implicit flow doesn't work, verify that the Supabase project allows implicit grants. Go to: **Supabase Dashboard → Authentication → URL Configuration** and ensure the redirect URL (https://gathertracker.app or whatever the prod URL is) is in the allowed list.
-
-**Supabase rate limit:** User hit the magic link rate limit during testing. To fix: Supabase Dashboard → Authentication → Rate Limits → increase "Email" limit (e.g., to 5 per 60s). Current default is very low.
-
-**If implicit flow ALSO fails:** Add password-based login as fallback (Supabase supports `signInWithPassword` alongside magic links).
 
 ### Known Issues
 - **iPhone Safari PWA localStorage isolation** — If user installs GATHER as a PWA (home screen), the PWA and Safari have separate localStorage. Magic link clicked in email opens in Safari, but session doesn't transfer to PWA. Workaround: user can tap "I clicked the link — sign me in" button on login screen, or use Safari instead of PWA.
@@ -189,7 +172,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Supabase magic link rate limit can block re-login after page reload — consider increasing rate limit in Supabase Dashboard > Authentication > Rate Limits
 
 ### Recently Fixed Bugs
-- **iPhone Safari magic link → guest mode (Feb 13)** — PKCE exchange silently failing on mobile Safari. User got stuck as guest with no recovery path. Fixed with multi-layer `getSession()` fallbacks, guest state cleanup on login, and manual session recovery button.
+- **iPhone Safari magic link → loading screen / broken guest mode (Feb 13)** — PKCE code exchange silently failing on mobile Safari. User got stuck on loading screen; reload gave guest state with no data. **Fixed by switching from PKCE to implicit flow** — token arrives directly in URL hash, no code exchange needed. Also added getSession() fallbacks, guest state cleanup, and manual session recovery button.
 - **authError not reaching LoginScreen (Feb 13)** — `authError` was omitted from AppContext value, so the "Login link didn't work" error banner never showed. Added to context provider.
 - **AI search `cohort_year` column error (Feb 13)** — Edge Function system prompt referenced non-existent `cohort_year` column. Fixed to `cohort`.
 - **`<T>` component null crash (Feb 13)** — Dynamic content with null/undefined values passed to `<T>` caused React render errors. Added defensive null checks and safer context access.
@@ -260,9 +243,10 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   - Handles `INITIAL_SESSION` (page load), `SIGNED_IN`, `TOKEN_REFRESHED`, and `SIGNED_OUT` events
   - Avoids race condition where `getSession()` returns null before session loads from storage
   - **Fallback 1:** When `INITIAL_SESSION` fires with null (non-callback), explicitly calls `getSession()` to catch missed sessions (Safari/PWA edge case)
-  - **Fallback 2:** On auth callback timeout (12s), tries `getSession()` before declaring failure
+  - **Fallback 2:** On auth callback timeout (8s), tries `getSession()` before declaring failure
   - **Fallback 3:** "I clicked the link — sign me in" button on login screen calls `getSession()` manually
-- Supabase client configured with `storageKey: 'gather-auth'`, `flowType: 'pkce'`, `detectSessionInUrl: true`
+- Supabase client configured with `storageKey: 'gather-auth'`, `flowType: 'implicit'`, `detectSessionInUrl: true`
+  - **Why implicit, not PKCE:** PKCE requires a server-side code exchange that silently fails on iPhone Safari. Implicit puts the token directly in the URL hash — more reliable on mobile.
 - `emailRedirectTo` uses `origin + pathname` (not just origin) for subpath compatibility
 - Guest users use fake email `guest@gathertracker.app` — preserved in localStorage across sessions
 - Guest state is cleared from localStorage when user initiates a new login (prevents stuck-as-guest)
