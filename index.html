@@ -534,6 +534,7 @@ function AppProvider({ children }) {
   const [focusCategories, setFocusCategories] = useState([]);
   const [focusTags, setFocusTags] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [loginEvents, setLoginEvents] = useState([]);
   const [fellowFocusTags, setFellowFocusTags] = useState([]);
   const [language, setLanguage] = useState('en');
   const [translations, setTranslations] = useState({});
@@ -602,6 +603,15 @@ function AppProvider({ children }) {
             setNeedsProfileClaim(true);
           }
         }
+        // Log sign-in event (not token refreshes or session restores)
+        if (event === 'SIGNED_IN') {
+          supabase.from('login_events').insert({
+            user_id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+          }).then(() => {}).catch(() => {});
+        }
+
         clearTimeout(loadingTimeout);
         setLoading(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
@@ -713,6 +723,14 @@ function AppProvider({ children }) {
       if (tagsRes.data) setFocusTags(tagsRes.data);
       if (activitiesRes.data) setActivities(activitiesRes.data);
 
+      // Fetch login events separately (non-blocking if table doesn't exist)
+      try {
+        const loginRes = await supabase.from('login_events').select('*').order('logged_in_at', { ascending: false }).limit(50);
+        if (loginRes.data) setLoginEvents(loginRes.data);
+      } catch (e) {
+        console.log('login_events not available yet');
+      }
+
       // Fetch fellow_focus_tags separately (non-blocking if table doesn't exist)
       try {
         const fellowTagsRes = await supabase.from('fellow_focus_tags').select('fellow_id, tag_id, is_primary');
@@ -752,7 +770,7 @@ function AppProvider({ children }) {
       user, userRole, login, logout, canAccess,
       isOnboarded, completeOnboarding,
       needsProfileClaim, setNeedsProfileClaim, potentialMatches, setPotentialMatches,
-      fellows, teamMembers, interactions, activities, fellowFocusTags, fetchData,
+      fellows, teamMembers, interactions, activities, loginEvents, fellowFocusTags, fetchData,
       focusCategories, focusTags,
       notificationSettings, setNotificationSettings,
       language, changeLanguage, t,
@@ -4275,9 +4293,9 @@ function DirectoryPage({ onSelectFellow }) {
 
 // Activity Page - shows recent interactions and news mentions
 function ActivityPage({ onSelectFellow }) {
-  const { fellows, interactions, activities } = useContext(AppContext);
+  const { fellows, interactions, activities, loginEvents } = useContext(AppContext);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState('interactions'); // 'interactions' or 'news'
+  const [activeTab, setActiveTab] = useState('interactions');
 
   // Filter interactions based on search
   const filteredInteractions = useMemo(() => {
@@ -4324,7 +4342,7 @@ function ActivityPage({ onSelectFellow }) {
           onClick={() => setActiveTab('interactions')}
           className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
             activeTab === 'interactions'
-              ? 'bg-goldin-orange text-white'
+              ? 'bg-orange-600 text-white shadow-sm'
               : 'bg-gray-100 text-gray-600'
           }`}
         >
@@ -4334,11 +4352,21 @@ function ActivityPage({ onSelectFellow }) {
           onClick={() => setActiveTab('news')}
           className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
             activeTab === 'news'
-              ? 'bg-blue-500 text-white'
+              ? 'bg-blue-500 text-white shadow-sm'
               : 'bg-gray-100 text-gray-600'
           }`}
         >
           News ({filteredNews.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('logins')}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
+            activeTab === 'logins'
+              ? 'bg-green-600 text-white shadow-sm'
+              : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          Logins ({loginEvents.length})
         </button>
       </div>
 
@@ -4419,6 +4447,39 @@ function ActivityPage({ onSelectFellow }) {
                 </a>
               );
             })
+          )}
+        </>
+      )}
+
+      {/* Logins Tab */}
+      {activeTab === 'logins' && (
+        <>
+          {loginEvents.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 text-center border border-gray-100">
+              <span className="text-4xl mb-3 block">🔑</span>
+              <p className="text-gray-500">No login activity yet</p>
+            </div>
+          ) : (
+            loginEvents.map((evt, i) => (
+              <div
+                key={evt.id}
+                className="activity-item p-4 bg-white rounded-2xl shadow-sm border border-gray-100 mb-3"
+                style={{ animationDelay: `${i * 0.05}s` }}
+              >
+                <div className="flex gap-3 items-center">
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold text-sm flex-shrink-0">
+                    {evt.name?.[0]?.toUpperCase() || evt.email?.[0]?.toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm">{evt.name || evt.email}</p>
+                    <p className="text-xs text-gray-400">{evt.email}</p>
+                  </div>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">
+                    {getTimeAgo(evt.logged_in_at)}
+                  </span>
+                </div>
+              </div>
+            ))
           )}
         </>
       )}
