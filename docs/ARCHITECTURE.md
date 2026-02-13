@@ -1,6 +1,6 @@
 # GATHER Architecture
 
-> **Last Updated:** February 11, 2026
+> **Last Updated:** February 13, 2026
 > **Maintainer:** Goldin Institute
 > **Live Site:** https://gathertracker.netlify.app
 
@@ -23,7 +23,7 @@ The system serves dual purposes:
 
 | Service | Purpose | Dashboard |
 |---------|---------|-----------|
-| **Supabase** | Database, Auth, Storage, Edge Functions | https://supabase.com/dashboard/project/pwazurumpzydxyppbvee |
+| **Supabase (Pro)** | Database, Auth, Storage, Edge Functions | https://supabase.com/dashboard/project/pwazurumpzydxyppbvee |
 | **Netlify** | Hosting, Auto-deploy from GitHub | https://app.netlify.com (gathertracker.netlify.app) |
 | **GitHub** | Source code repository | https://github.com/GIHQ/gather-crm |
 
@@ -35,9 +35,9 @@ The system serves dual purposes:
 
 ### Authentication
 
-- **Staff:** Google OAuth (restricted to @goldininstitute.org domain)
-- **Fellows:** Magic links (email-based, any domain)
-- **Guests:** Limited read-only access
+- **Staff & Fellows:** Magic links (email-based, any domain)
+- **Guests:** "Skip for now" — read-only directory access, no login required
+- Google OAuth removed — magic link is the sole auth method
 
 ---
 
@@ -48,16 +48,17 @@ The system serves dual purposes:
 ```
 fellows
 ├── id (UUID, PK)
-├── fellow_id (text, e.g., "P001")
 ├── first_name, last_name
-├── email, phone
+├── email, phone, alternate_emails[]
 ├── program (CPF/GGF/ESP)
 ├── cohort_year
 ├── city, country
-├── organization
-├── bio
+├── organization, job_title
+├── biography
 ├── photo_url
-├── is_active
+├── status ('Alumni')
+├── user_id (FK → auth.users, nullable)
+├── working_on (text)
 └── created_at, updated_at
 
 interactions
@@ -87,12 +88,6 @@ fellow_focus_tags
 ├── fellow_id (FK → fellows)
 ├── tag_id (FK → focus_tags)
 ├── is_primary (boolean, for Community Areas)
-└── created_at
-
-user_roles
-├── id (UUID, PK)
-├── user_id (FK → auth.users)
-├── role (super_admin, admin, staff, fellow, viewer, guest)
 └── created_at
 
 team_members
@@ -169,10 +164,10 @@ Six-tier role hierarchy:
 | guest | 1 | Minimal access, public directory only |
 
 **Role lookup flow (determineUserRole):**
-1. Check `team_members` table (email OR alternate_emails)
-2. Check `fellows` table (email OR alternate_emails)
-3. Auto-create team record for new @goldininstitute.org logins
-4. Fall back to guest for unrecognized emails
+1. Check `team_members` table (email OR alternate_emails) → returns staff role
+2. Check `fellows` table (email OR alternate_emails) → returns `fellow` role
+3. Fall back to `viewer` for unrecognized emails
+4. Guest users (skip login) get `viewer` role with no auth session
 
 ---
 
@@ -196,9 +191,10 @@ gather-crm/
 │   └── SETUP_GUIDE.md          # Development setup
 ├── supabase/
 │   └── functions/
-│       ├── search-news/   # News scanner Edge Function
-│       ├── stream-token/  # GetStream token minting
-│       └── translate/     # Translation service
+│       ├── search-news/     # News scanner Edge Function
+│       ├── send-newsletter/ # Buttondown newsletter sending
+│       ├── stream-token/    # GetStream token minting
+│       └── translate/       # Translation proxy (Google Translate API)
 └── migrations/
     ├── 008_team_members.sql              # Team members + alternate_emails
     ├── 009_profile_claims.sql            # Profile claim requests table
@@ -237,6 +233,8 @@ No build step - Netlify serves files directly.
 - `GETSTREAM_SECRET` - GetStream secret (for token minting)
 - `BUTTONDOWN_API_KEY` - Newsletter service
 - `GOOGLE_TRANSLATE_API_KEY` - Translation service
+
+**Important:** All Edge Functions must have **JWT Verification OFF** in the Supabase dashboard. Functions that need auth validate tokens internally. Supabase re-enables JWT verification on every redeployment — always toggle it off after deploying.
 
 ---
 

@@ -6,7 +6,7 @@
 
 ## Quick Context
 
-GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 programs (CPF, GGF, ESP). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase.
+GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 programs (CPF, GGF, ESP). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan — supports custom domain when ready to launch).
 
 | Resource | URL |
 |----------|-----|
@@ -108,7 +108,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   - `stream-token` Edge Function deployed (mints GetStream JWTs, caches 24hr)
   - `working_on` field added to fellows table
 - Auth session persistence fixed (explicit Supabase auth options with `storageKey: 'gather-auth'`)
-- Translation system secured (requires auth token, JWT verification ON for translate Edge Function)
+- Translation system working (Edge Function proxies Google Translate API, JWT verification OFF)
 - Notification settings UI fixed: toggle contrast + overflow on mobile
 - **News scanner fully working** — scans all 292 fellows in batches of 5
 - Custom search terms for news scanner (stored in `app_settings` table)
@@ -133,6 +133,10 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - `user_roles` table is legacy/dead — code fallback removed Feb 13, table can be dropped from Supabase when convenient
 
 ### Recently Fixed Bugs
+- **Language selector 401 error (Feb 13)** — Translate Edge Function had JWT verification ON, blocking all requests at the Supabase gateway. Fixed by disabling JWT verification and adding proper HTTP error handling with user feedback (reverts to English with alert on failure).
+- **Sign out button not working (Feb 13)** — Menu sign out called `handleLogout` but the function was named `handleSignOut`. Fixed function reference.
+- **Translation broken for guest users (Feb 13)** — Guest users had no auth token, causing 401. Fixed by ensuring anon key is used as Authorization fallback.
+- **Legacy user_roles fallback removed (Feb 13)** — Dead code was querying non-existent `user_roles` table on every login. Removed; all role checks now use `team_members` table.
 - **Auth session lost on reload (Feb 12)** — `getSession()` was called before Supabase loaded session from storage, causing false "stale session" detection. Fixed by using `onAuthStateChange` with `INITIAL_SESSION` event.
 - **Interaction save freeze (Feb 12)** — Missing try/catch in `handleSubmit` and `saveQuickLog` caused UI to freeze on errors. Added proper error handling.
 - **Community page stuck loading (Feb 12)** — Missing error handling in announcements fetch. Added try/catch and error state UI.
@@ -177,7 +181,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - JWT Verification settings per function:
   - `search-news`: OFF (uses anon key)
   - `stream-token`: OFF (uses anon key, validates auth internally)
-  - `translate`: **ON** (requires user auth token for security)
+  - `translate`: OFF (proxies Google Translate API, no user data)
 - News scanner processes fellows in **batches of 5** from the frontend to avoid compute/timeout limits
 
 ### RLS Patterns
