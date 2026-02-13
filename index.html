@@ -360,16 +360,7 @@ async function determineUserRole(email, userId = null) {
       return teamMember.role;
     }
 
-    // 2. Check user_roles table (legacy, for any explicit overrides)
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('email', lowerEmail)
-      .single();
-
-    if (roleData?.role) return roleData.role;
-
-    // 3. Check if user is a fellow - check email OR alternate_emails
+    // 2. Check if user is a fellow - check email OR alternate_emails
     const { data: fellows } = await supabase
       .from('fellows')
       .select('id, user_id')

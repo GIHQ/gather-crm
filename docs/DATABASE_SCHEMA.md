@@ -22,7 +22,7 @@ The main table storing all 292 Goldin Institute fellows.
 | alternate_emails | text[] | Additional email addresses for identity matching |
 | phone | text | Phone number |
 | program | text | CPF, GGF, or ESP |
-| cohort | text | Cohort identifier (e.g., "2019", "2024") |
+| cohort_year | text | Cohort identifier (e.g., "2019", "2024") |
 | city | text | Current city |
 | country | text | Country of residence |
 | region | text | Geographic region |
@@ -51,7 +51,7 @@ The main table storing all 292 Goldin Institute fellows.
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
-> **Note:** Earlier versions of this doc listed incorrect column names (`is_active`, `bio`, `title`, `cohort_year`, `fellow_id`). The columns above reflect the actual database schema as of Feb 2026.
+> **Note:** Earlier versions of this doc listed incorrect column names (`is_active`, `bio`, `title` — which are `team_members` columns, not `fellows` columns) and used `fellow_id` instead of `id`. The columns above reflect the actual database schema as of Feb 2026.
 
 ### interactions
 Logs all touchpoints between staff and fellows.
@@ -67,8 +67,8 @@ Logs all touchpoints between staff and fellows.
 | logged_by | text | Staff member who logged it |
 | created_at | timestamptz | |
 
-### user_roles
-Maps authenticated users to permission tiers.
+### user_roles *(LEGACY — superseded by team_members)*
+Original permission table, now only used as a fallback override in `determineUserRole()`. The `team_members` table is the primary source for staff roles. This table can be safely removed once the fallback code path is deleted.
 
 | Column | Type | Description |
 |--------|------|-------------|

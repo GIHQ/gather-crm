@@ -128,10 +128,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - **Community Platform Phase 2b** — Discovery features (enhanced search, fellow spotlight, push notifications)
 
 ### Known Issues
-- News scanner Edge Function must be deployed via Supabase dashboard (user does not have CLI) — current version is live and working
-- Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment
-- News scanner processed ~75-90 of 292 fellows before Edge Function timeout; can be re-run to pick up remaining
-- 18 fellows still missing focus area tags (sparse bios, no keyword matches) — can be assigned manually
+- Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment for `search-news` and `stream-token`
+- 18 fellows still missing focus area tags (sparse bios) — run `node scripts/assign-focus-areas.js` to assign via Claude AI
+- `user_roles` table is legacy/dead — code fallback removed Feb 13, table can be dropped from Supabase when convenient
 
 ### Recently Fixed Bugs
 - **Auth session lost on reload (Feb 12)** — `getSession()` was called before Supabase loaded session from storage, causing false "stale session" detection. Fixed by using `onAuthStateChange` with `INITIAL_SESSION` event.
@@ -211,10 +210,11 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Activity tab only visible to logged-in users; guests see only Announcements tab
 
 ### Database Schema vs Docs
-The `DATABASE_SCHEMA.md` has inaccurate column names. Actual fellows columns:
+`DATABASE_SCHEMA.md` is now accurate as of Feb 13, 2026. Key fellows columns:
 - `status` (not `is_active`) — all 292 have status = 'Alumni'
-- `biography` (not `bio`), `job_title` (not `title`), `cohort` (not `cohort_year`)
+- `biography` (not `bio`), `job_title` (not `title`), `cohort_year` (not `cohort`)
 - No `fellow_id` column exists
+- `user_roles` table is marked LEGACY — superseded by `team_members` for all role checks
 
 ---
 
