@@ -443,33 +443,36 @@ const TranslationContext = createContext({ language: 'en', version: 0 });
 // Usage: <T>{fellow.biography}</T>
 // Renders original text immediately, then swaps in translation when ready
 function T({ children }) {
-  const { language, version } = useContext(TranslationContext);
-  const text = typeof children === 'string' ? children : '';
-  const [translated, setTranslated] = useState(
-    language !== 'en' && text ? (translationCache.get(`${language}:${text}`) || text) : text
-  );
+  const ctx = useContext(TranslationContext);
+  const lang = ctx ? ctx.language : 'en';
+  const ver = ctx ? ctx.version : 0;
+  const text = (children != null && typeof children === 'string') ? children : (children != null ? String(children) : '');
+  const [translated, setTranslated] = useState(text);
 
   useEffect(() => {
-    if (!text || language === 'en') {
+    if (!text || lang === 'en') {
       setTranslated(text);
       return;
     }
 
     // Check memory cache first
-    const cached = translationCache.get(`${language}:${text}`);
+    const cached = translationCache.get(`${lang}:${text}`);
     if (cached) {
       setTranslated(cached);
       return;
     }
 
+    // Show original text while waiting
+    setTranslated(text);
+
     // Queue for batch translation
-    queueTranslation(text, language, () => {
-      const result = translationCache.get(`${language}:${text}`);
+    queueTranslation(text, lang, () => {
+      const result = translationCache.get(`${lang}:${text}`);
       if (result) setTranslated(result);
     });
-  }, [text, language, version]);
+  }, [text, lang, ver]);
 
-  return translated;
+  return translated || '';
 }
 
 // ============================================
@@ -3404,7 +3407,7 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                     status.color === 'green' ? 'text-green-800' :
                     status.color === 'yellow' ? 'text-yellow-800' : 'text-red-800'
                   }`}>
-                    {status.days !== null ? <><T>Last contact</T> {status.days} <T>days ago</T></> : <T>No contact recorded</T>}
+                    {status.days !== null ? `${t('Last contact')} ${status.days} ${t('days ago')}` : t('No contact recorded')}
                   </span>
                 </div>
                 {canLogInteractions && (
