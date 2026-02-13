@@ -713,11 +713,20 @@ function AppProvider({ children }) {
 
   // Check Supabase auth state on load
   useEffect(() => {
-    // Failsafe: ensure loading never gets stuck
+    // Detect if this is a magic link callback (PKCE code in URL)
+    const urlParams = new URLSearchParams(window.location.search);
+    const isAuthCallback = urlParams.has('code') || window.location.hash.includes('access_token');
+
+    // Clean up auth params from URL (prevents issues on reload)
+    if (isAuthCallback) {
+      console.log('Auth callback detected - waiting for session exchange');
+    }
+
+    // Failsafe: ensure loading never gets stuck (longer timeout for auth callbacks)
     const loadingTimeout = setTimeout(() => {
       console.warn('Loading timeout - forcing load complete');
       setLoading(false);
-    }, 5000);
+    }, isAuthCallback ? 10000 : 5000);
 
     // Load non-auth settings immediately
     const loadSettings = () => {
@@ -790,11 +799,60 @@ function AppProvider({ children }) {
             email: session.user.email,
             name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
           }).then(() => {}).catch(() => {});
+          // Clean auth params from URL after successful sign-in
+          if (isAuthCallback) {
+            window.history.replaceState({}, '', window.location.origin + window.location.pathname);
+          }
         }
 
         clearTimeout(loadingTimeout);
         setLoading(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
+        if (isAuthCallback) {
+          // Magic link callback — PKCE code exchange may still be in progress
+          // Don't restore guest yet; wait for SIGNED_IN event
+          // The code exchange will fire SIGNED_IN when it completes
+          console.log('Auth callback: waiting for code exchange (not restoring guest)');
+          // Try explicit code exchange as fallback
+          try {
+            const code = urlParams.get('code');
+            if (code) {
+              console.log('Attempting explicit code exchange...');
+              const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+              if (data?.session?.user) {
+                console.log('Code exchange successful:', data.session.user.email);
+                const userData = {
+                  id: data.session.user.id,
+                  email: data.session.user.email,
+                  name: data.session.user.user_metadata?.full_name || data.session.user.email?.split('@')[0],
+                  avatar: data.session.user.user_metadata?.avatar_url,
+                };
+                setUser(userData);
+                localStorage.setItem('gather_user', JSON.stringify(userData));
+                const role = await determineUserRole(data.session.user.email, data.session.user.id);
+                setUserRole(role);
+                localStorage.setItem('gather_user_role', role);
+                // Log sign-in event
+                supabase.from('login_events').insert({
+                  user_id: data.session.user.id,
+                  email: data.session.user.email,
+                  name: userData.name,
+                }).then(() => {}).catch(() => {});
+                // Clean URL
+                window.history.replaceState({}, '', window.location.origin + window.location.pathname);
+                clearTimeout(loadingTimeout);
+                setLoading(false);
+                return;
+              } else if (error) {
+                console.error('Code exchange failed:', error.message);
+              }
+            }
+          } catch (e) {
+            console.error('Explicit code exchange error:', e);
+          }
+          // If code exchange failed, fall through to guest restore
+          console.log('Code exchange did not produce session, restoring guest if available');
+        }
         // No stored session - check for guest user in localStorage
         const savedUser = localStorage.getItem('gather_user');
         if (savedUser) {
