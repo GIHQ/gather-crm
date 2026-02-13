@@ -166,6 +166,28 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ### In Progress
 - **Community Platform Phase 2b** — Discovery features (enhanced search, fellow spotlight, push notifications)
 
+### AWAITING TEST — iPhone Safari Magic Link (Feb 13 late)
+**Status:** Code deployed, NOT YET TESTED on iPhone. Rate limited by Supabase during testing.
+
+**What was done:** Added multi-layer `getSession()` fallbacks + manual session recovery UX to fix PKCE code exchange failing silently on mobile Safari. See "iPhone Safari Magic Link Auth Fix" in Recently Completed above for full details.
+
+**To test:** On iPhone Safari, go through: Get Started → enter email → send magic link → click link in email → app should log you in (not guest mode).
+
+**If it STILL fails (user lands as guest or sees login screen):**
+1. Check if the "I clicked the link — sign me in" button appears and works
+2. Check if the "Login link didn't work" error banner appears (with iPhone tips)
+3. If neither shows, the `authError` context or `getSession()` fallbacks may need debugging
+4. Key code locations in `index.html`:
+   - Auth callback detection: ~line 717-724
+   - Timeout with getSession() retry: ~line 727-760
+   - INITIAL_SESSION handler with getSession() fallback: ~line 841-887
+   - LoginScreen with manual recovery button: ~line 1611-1636
+   - Guest state cleanup on login: ~line 1646-1657
+5. **Nuclear option if PKCE keeps failing:** Consider switching from `flowType: 'pkce'` to `flowType: 'implicit'` in Supabase client config (line ~179). Implicit flow puts the token directly in the URL hash instead of requiring a server-side code exchange, which avoids the PKCE failure entirely. Trade-off: slightly less secure but much more reliable on mobile Safari.
+6. **Another option:** Add password-based login as fallback (Supabase supports `signInWithPassword` alongside magic links)
+
+**Supabase rate limit:** User hit the magic link rate limit during testing. To fix: Supabase Dashboard → Authentication → Rate Limits → increase "Email" limit (e.g., to 5 per 60s). Current default is very low.
+
 ### Known Issues
 - **iPhone Safari PWA localStorage isolation** — If user installs GATHER as a PWA (home screen), the PWA and Safari have separate localStorage. Magic link clicked in email opens in Safari, but session doesn't transfer to PWA. Workaround: user can tap "I clicked the link — sign me in" button on login screen, or use Safari instead of PWA.
 - Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment for `translate`, `search-news`, and `stream-token`
