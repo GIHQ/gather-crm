@@ -1011,7 +1011,8 @@ function AppProvider({ children }) {
         focusCategories, focusTags,
         notificationSettings, setNotificationSettings,
         language, changeLanguage, t,
-        loading
+        loading,
+        authError, setAuthError
       }}>
         {children}
       </AppContext.Provider>
@@ -7868,7 +7869,7 @@ function LogInteractionModal({ isOpen, onClose, preSelectedFellow }) {
 // MAIN APP
 // ============================================
 function MainApp() {
-  const { user, userRole, isOnboarded, loading, login, completeOnboarding, canAccess, changeLanguage, fetchData, needsProfileClaim, setNeedsProfileClaim, potentialMatches, t } = useContext(AppContext);
+  const { user, userRole, isOnboarded, loading, login, completeOnboarding, canAccess, changeLanguage, fetchData, needsProfileClaim, setNeedsProfileClaim, potentialMatches, t, authError, setAuthError } = useContext(AppContext);
   const [onboardingStep, setOnboardingStep] = useState(() => {
     // Initialize based on existing state
     const savedUser = localStorage.getItem('gather_user');
