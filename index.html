@@ -2292,7 +2292,7 @@ function Header({ onMenuOpen, pageTitle, onAddInteraction }) {
 }
 
 function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
-  const { user, userRole, logout, notificationSettings, canAccess } = useContext(AppContext);
+  const { user, userRole, logout, notificationSettings, canAccess, t } = useContext(AppContext);
   const roleConfig = ROLE_CONFIG[userRole] || ROLE_CONFIG[ROLES.VIEWER];
   
   // Menu items with optional role requirements
@@ -7855,7 +7855,7 @@ function LogInteractionModal({ isOpen, onClose, preSelectedFellow }) {
 // MAIN APP
 // ============================================
 function MainApp() {
-  const { user, userRole, isOnboarded, loading, login, completeOnboarding, canAccess, changeLanguage, fetchData, needsProfileClaim, setNeedsProfileClaim, potentialMatches } = useContext(AppContext);
+  const { user, userRole, isOnboarded, loading, login, completeOnboarding, canAccess, changeLanguage, fetchData, needsProfileClaim, setNeedsProfileClaim, potentialMatches, t } = useContext(AppContext);
   const [onboardingStep, setOnboardingStep] = useState(() => {
     // Initialize based on existing state
     const savedUser = localStorage.getItem('gather_user');
