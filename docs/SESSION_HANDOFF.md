@@ -6,7 +6,7 @@
 
 ## Quick Context
 
-GATHER is an alumni CRM for the Goldin Institute managing 292 fellows across 3 programs (CPF, GGF, ESP). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan). Auth is magic link only (Google OAuth removed Feb 13).
+GATHER is a fellowship management platform for the Goldin Institute managing **292 alumni** across 3 programs (CPF, GGF, ESP) and **current fellows** at 3 sites (Chicago/CPF, Dar es Salaam/DAR, Mosquera/MOS). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan). Auth is magic link only (Google OAuth removed Feb 13).
 
 | Resource | URL |
 |----------|-----|
@@ -34,7 +34,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ```
 /
-├── index.html              # Main mobile PWA (~7500 lines) - PRIMARY FILE
+├── index.html              # Main mobile PWA (~8700 lines) - PRIMARY FILE
 ├── directory.html          # Desktop public directory (legacy)
 ├── dashboard.html          # Desktop staff CRM (legacy)
 ├── manifest.json           # PWA manifest
@@ -316,9 +316,11 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ### Database Schema vs Docs
 `DATABASE_SCHEMA.md` is now accurate as of Feb 13, 2026. Key fellows columns:
-- `status` (not `is_active`) — all 292 have status = 'Alumni'
+- `id` is **text** type (not uuid) — e.g., 'P001', 'CF-CHI-001'
+- `status` uses `'Alumni'` or `'Current'` — CHECK constraint enforces this
+- `site_id` (uuid, nullable) — FK to `sites` table, set for current fellows only
 - `biography` (not `bio`), `job_title` (not `title`), `cohort` (not `cohort_year`)
-- No `fellow_id` column exists
+- All `fellow_id` foreign keys in cohort tables are `text` type to match `fellows.id`
 - `user_roles` table is marked LEGACY — superseded by `team_members` for all role checks
 
 ---
@@ -357,6 +359,8 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `migrations/014_auto_link_team_members.sql` | Auto-link team_members/fellows to auth.users on signup |
 | `migrations/015_content_translations.sql` | Translation cache table (run in SQL Editor ✅) |
 | `migrations/015_login_events.sql` | Login activity tracking table |
+| `migrations/016_current_cohort_tables.sql` | Current cohort: sites, events, attendance, curricula, ad hoc lists |
+| `docs/CURRENT_COHORT_SPEC.md` | Current cohort management specification |
 | `scripts/assign-focus-areas.js` | AI-powered focus area assignment (Node.js, needs API keys) |
 | `scripts/assign-focus-areas.sql` | SQL keyword-based focus area assignment (paste into Supabase SQL editor) |
 
@@ -436,6 +440,8 @@ See GATHER_COMMUNITY_PLAN.md and ROADMAP.md for full specs.
 | CPF (Chicago) | Blue | `bg-blue-500` / `bg-blue-700` |
 | GGF (Global) | Orange | `bg-orange-500` |
 | ESP (Spanish) | Purple | `bg-purple-500` / `bg-orange-700` |
+| DAR (Dar es Salaam) | Emerald | `bg-emerald-600` |
+| MOS (Mosquera) | Violet | `bg-violet-600` |
 
 **Status Colors:**
 | Status | Hex | Condition |

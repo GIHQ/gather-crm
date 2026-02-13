@@ -12,11 +12,11 @@ Extend GATHER from an Alumni CRM into a platform that also manages **Current Fel
 
 ### Three Sites (2026)
 
-| Site | City | Country | Program | Est. Fellows |
-|------|------|---------|---------|-------------|
-| Chicago | Chicago | USA | CPF | 10-20 |
-| Dar es Salaam | Dar es Salaam | Tanzania | GGF | 10-20 |
-| Mosquera | Mosquera | Colombia | ESP | 10-20 |
+| Site | City | Country | Program Code | Badge Color | Est. Fellows |
+|------|------|---------|-------------|-------------|-------------|
+| Chicago | Chicago | USA | CPF | Blue (`bg-blue-700`) | 10-20 |
+| Dar es Salaam | Dar es Salaam | Tanzania | DAR | Emerald (`bg-emerald-600`) | 10-20 |
+| Mosquera | Mosquera | Colombia | MOS | Violet (`bg-violet-600`) | 10-20 |
 
 Each site has 1-5 team members managing its cohort.
 
@@ -36,6 +36,9 @@ Rather than a separate table, current fellows use the same `fellows` table with:
 - `status = 'Current'` (vs `'Alumni'` for graduates)
 - `site_id` FK to new `sites` table
 - Same fields: name, email, photo, program, cohort, etc.
+
+> **Important:** `fellows.id` is `text` type (not uuid). All foreign keys referencing fellows use `text`. IDs follow format: `CF-CHI-001` (Chicago), `CF-DAR-001` (Dar es Salaam), `CF-MOS-001` (Mosquera).
+> The `status` column has a CHECK constraint: `CHECK (status IN ('Alumni', 'Current'))`.
 
 ### 3. Navigation
 Add "Cohorts" to the slide menu (team+ access). Leads to:
@@ -60,7 +63,7 @@ Program sites where current cohorts operate.
 | name | text | Site display name (e.g., "Chicago") |
 | city | text | City |
 | country | text | Country |
-| program | text | Associated program: CPF, GGF, ESP |
+| program | text | Associated program: CPF, DAR, MOS |
 | cohort_year | integer | Current active year (e.g., 2026) |
 | created_at | timestamptz | |
 
@@ -97,7 +100,7 @@ Per-fellow attendance records for each event.
 |--------|------|-------------|
 | id | uuid | Primary key |
 | event_id | uuid | FK → events.id |
-| fellow_id | uuid | FK → fellows.id |
+| fellow_id | text | FK → fellows.id |
 | status | text | present, absent, excused, late |
 | notes | text | Optional notes |
 | recorded_by | uuid | FK → auth.users.id |
@@ -146,7 +149,7 @@ Tracks individual fellow completion of curriculum items.
 | Column | Type | Description |
 |--------|------|-------------|
 | id | uuid | Primary key |
-| fellow_id | uuid | FK → fellows.id |
+| fellow_id | text | FK → fellows.id |
 | item_id | uuid | FK → curriculum_items.id |
 | completed | boolean | Whether completed |
 | completed_at | timestamptz | When completed |
@@ -160,7 +163,7 @@ Tracks fellow logins to the GATHER platform (proxy for engagement).
 | Column | Type | Description |
 |--------|------|-------------|
 | id | uuid | Primary key |
-| fellow_id | uuid | FK → fellows.id |
+| fellow_id | text | FK → fellows.id |
 | activity_date | date | Date of activity |
 | login_count | integer | Number of logins that day |
 | created_at | timestamptz | |
@@ -198,7 +201,7 @@ Fellow data for each ad hoc list.
 |--------|------|-------------|
 | id | uuid | Primary key |
 | list_id | uuid | FK → adhoc_lists.id |
-| fellow_id | uuid | FK → fellows.id |
+| fellow_id | text | FK → fellows.id |
 | data | jsonb | Field values keyed by field key |
 | updated_by | uuid | FK → auth.users.id |
 | updated_at | timestamptz | |
@@ -257,14 +260,16 @@ Health score is computed client-side from the underlying data (no stored score c
 
 ## Implementation Phases
 
-### Phase 1: Foundation (This PR)
+### Phase 1: Foundation (This PR) ✅
 - [x] Spec document
-- [ ] Database migration (all tables)
-- [ ] Sites seed data (Chicago, Dar es Salaam, Mosquera)
-- [ ] Navigation: "Cohorts" menu item
-- [ ] Cohort Dashboard page (3 site cards)
-- [ ] Site Detail page with Directory tab
-- [ ] Events tab with attendance taking
+- [x] Database migration (all tables) — `016_current_cohort_tables.sql`
+- [x] Sites seed data (Chicago/CPF, Dar es Salaam/DAR, Mosquera/MOS)
+- [x] Navigation: "Cohorts" menu item (team+ access)
+- [x] Cohort Dashboard page (3 site cards with metrics)
+- [x] Site Detail page with Directory tab
+- [x] Events tab with attendance taking
+- [x] Health tab with per-fellow health scores (0-100)
+- [x] Attendance modal (P/L/E/A buttons + bulk actions)
 
 ### Phase 2: Curriculum & Scores
 - [ ] Curriculum management UI

@@ -16,6 +16,8 @@
 | CPF (Chicago) | Blue | `bg-blue-700` |
 | GGF (Global English) | Orange | `bg-orange-500` |
 | ESP (Español) | Dark Orange | `bg-orange-700` |
+| DAR (Dar es Salaam) | Emerald | `bg-emerald-600` |
+| MOS (Mosquera) | Violet | `bg-violet-600` |
 
 ### Status Colors
 | Status | Color | Usage |
@@ -101,6 +103,12 @@ Loaded from Google Fonts:
 
 <!-- ESP - Dark Orange -->
 <span class="px-2 py-1 text-xs font-medium rounded-full bg-orange-700 text-white">ESP</span>
+
+<!-- DAR - Emerald (Current Cohort) -->
+<span class="px-2 py-1 text-xs font-medium rounded-full bg-emerald-600 text-white">DAR</span>
+
+<!-- MOS - Violet (Current Cohort) -->
+<span class="px-2 py-1 text-xs font-medium rounded-full bg-violet-600 text-white">MOS</span>
 
 <!-- With Year -->
 <span class="px-2 py-1 text-xs font-medium rounded-full bg-blue-700 text-white">CPF '22</span>

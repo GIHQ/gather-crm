@@ -14,15 +14,15 @@ The main table storing all 292 Goldin Institute fellows.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| id | uuid | Primary key |
+| id | text | Primary key (e.g., 'P001', 'CF-CHI-001') |
 | first_name | text | |
 | last_name | text | |
 | email | text | Primary contact email |
 | work_email | text | Work email address |
 | alternate_emails | text[] | Additional email addresses for identity matching |
 | phone | text | Phone number |
-| program | text | CPF, GGF, or ESP |
-| cohort | text | Cohort identifier (e.g., "2019", "2024") |
+| program | text | CPF, GGF, ESP (alumni) or CPF, DAR, MOS (current) |
+| cohort | text | Cohort identifier (e.g., "2019", "2026") |
 | city | text | Current city |
 | country | text | Country of residence |
 | region | text | Geographic region |
@@ -42,7 +42,8 @@ The main table storing all 292 Goldin Institute fellows.
 | focus_area_1 | text | Primary focus area (free text) |
 | focus_area_2 | text | Secondary focus area (free text) |
 | focus_area_3 | text | Tertiary focus area (free text) |
-| status | text | Fellow status — all 292 have status = 'Alumni' |
+| status | text | 'Alumni' (292 graduates) or 'Current' (active fellows) |
+| site_id | uuid | FK → sites.id (set for current fellows, null for alumni) |
 | user_id | uuid | FK → auth.users.id (linked on first login) |
 | staff_notes | text | Internal notes visible only to admins |
 | working_on | text | Fellow's current project/focus (community feature) |
@@ -50,6 +51,8 @@ The main table storing all 292 Goldin Institute fellows.
 | last_news_search | timestamptz | When fellow was last included in news scan |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
+
+> **Note:** `fellows.id` is `text` type (not uuid). All foreign keys referencing `fellows.id` must use `text`. The `status` column has a CHECK constraint: `fellows_status_check CHECK (status IN ('Alumni', 'Current'))`.
 
 > **Note:** Earlier versions of this doc listed incorrect column names (`is_active`, `bio`, `title` — which are `team_members` columns, not `fellows` columns) and used `fellow_id` instead of `id`. The columns above reflect the actual database schema as of Feb 2026.
 
@@ -251,7 +254,7 @@ Tracks user login activity for analytics and audit.
 ## Current Cohort Tables
 
 ### sites
-Program sites where current cohorts operate. Seeded with Chicago (CPF), Dar es Salaam (GGF), Mosquera (ESP).
+Program sites where current cohorts operate. Seeded with Chicago (CPF), Dar es Salaam (DAR), Mosquera (MOS).
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -259,18 +262,12 @@ Program sites where current cohorts operate. Seeded with Chicago (CPF), Dar es S
 | name | text | Site display name |
 | city | text | City |
 | country | text | Country |
-| program | text | CPF, GGF, or ESP |
+| program | text | CPF, DAR, or MOS |
 | cohort_year | integer | Current active year (default 2026) |
 | created_at | timestamptz | |
 
 ### fellows (modified)
-Added column for current cohort support:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| site_id | uuid | FK → sites.id (null for alumni) |
-
-The `status` column now uses: `'Alumni'` (292 existing) or `'Current'` (new current fellows).
+Added `site_id` column for current cohort support. See fellows table above for full schema. The `status` column uses `'Alumni'` (292 graduates) or `'Current'` (active fellows). The `site_id` is set for current fellows, null for alumni.
 
 ### events
 Cohort meetings, workshops, and sessions.
@@ -296,7 +293,7 @@ Per-fellow attendance records for each event.
 |--------|------|-------------|
 | id | uuid | Primary key |
 | event_id | uuid | FK → events.id |
-| fellow_id | uuid | FK → fellows.id |
+| fellow_id | text | FK → fellows.id |
 | status | text | present, absent, excused, late |
 | notes | text | Optional notes |
 | recorded_by | uuid | FK → auth.users.id |
@@ -345,7 +342,7 @@ Individual fellow completion of curriculum items.
 | Column | Type | Description |
 |--------|------|-------------|
 | id | uuid | Primary key |
-| fellow_id | uuid | FK → fellows.id |
+| fellow_id | text | FK → fellows.id |
 | item_id | uuid | FK → curriculum_items.id |
 | completed | boolean | |
 | completed_at | timestamptz | |
@@ -359,7 +356,7 @@ GATHER platform login tracking for engagement metrics.
 | Column | Type | Description |
 |--------|------|-------------|
 | id | uuid | Primary key |
-| fellow_id | uuid | FK → fellows.id |
+| fellow_id | text | FK → fellows.id |
 | activity_date | date | Date of activity |
 | login_count | integer | Logins that day |
 | created_at | timestamptz | |
@@ -386,7 +383,7 @@ Fellow data entries for each ad hoc list.
 |--------|------|-------------|
 | id | uuid | Primary key |
 | list_id | uuid | FK → adhoc_lists.id |
-| fellow_id | uuid | FK → fellows.id |
+| fellow_id | text | FK → fellows.id |
 | data | jsonb | Field values |
 | updated_by | uuid | FK → auth.users.id |
 | updated_at | timestamptz | |

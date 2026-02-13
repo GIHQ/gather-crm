@@ -6,14 +6,22 @@
 
 ## Overview
 
-GATHER is an alumni network CRM for the Goldin Institute, managing 292 fellows across three programs:
+GATHER is a fellowship management platform for the Goldin Institute, serving both **alumni** (292 graduates) and **current fellows** (active cohorts at three sites). It manages fellows across five programs:
+
+**Alumni Programs:**
 - **CPF** - Chicago Peace Fellows (Chicago-based)
 - **GGF** - Goldin Global Fellows English (International)
 - **ESP** - Goldin Global Fellows Español (Spanish-speaking International)
 
-The system serves dual purposes:
+**Current Cohort Programs (2026):**
+- **CPF** - Chicago (USA) — 10-20 fellows
+- **DAR** - Dar es Salaam (Tanzania) — 10-20 fellows
+- **MOS** - Mosquera (Colombia) — 10-20 fellows
+
+The system serves three purposes:
 1. **Internal Staff Tool** - CRM for tracking interactions, managing relationships, sending communications
 2. **Public Alumni Directory** - Fellows can find and connect with each other
+3. **Current Cohort Management** - Track attendance, curriculum progress, health scores, and ad hoc data for active fellows
 
 ---
 
@@ -47,16 +55,17 @@ The system serves dual purposes:
 
 ```
 fellows
-├── id (UUID, PK)
+├── id (text, PK) — e.g., 'P001', 'CF-CHI-001'
 ├── first_name, last_name
 ├── email, phone, alternate_emails[]
-├── program (CPF/GGF/ESP)
-├── cohort_year
+├── program (CPF/GGF/ESP/DAR/MOS)
+├── cohort (text)
 ├── city, country
 ├── organization, job_title
 ├── biography
 ├── photo_url
-├── status ('Alumni')
+├── status ('Alumni' or 'Current')
+├── site_id (FK → sites, nullable — set for current fellows)
 ├── user_id (FK → auth.users, nullable)
 ├── working_on (text)
 └── created_at, updated_at
@@ -141,6 +150,50 @@ stream_tokens (Community Platform)
 ├── user_id (UUID, PK, FK → auth.users)
 ├── token, expires_at
 └── created_at
+
+sites (Current Cohort)
+├── id (UUID, PK)
+├── name, city, country
+├── program (CPF/DAR/MOS)
+├── cohort_year (integer)
+└── created_at
+
+events (Current Cohort)
+├── id (UUID, PK)
+├── site_id (FK → sites)
+├── title, description, location, meeting_link
+├── start_time, end_time, notes
+├── created_by (FK → auth.users)
+└── created_at
+
+event_attendance (Current Cohort)
+├── id (UUID, PK)
+├── event_id (FK → events)
+├── fellow_id (text, FK → fellows)
+├── status (present/absent/excused/late)
+├── notes, recorded_by
+└── created_at — UNIQUE(event_id, fellow_id)
+
+curricula / curriculum_chapters / curriculum_items (Current Cohort)
+├── Hierarchical: curricula → chapters → items
+├── Items have type (page/assignment/discussion) and due_date
+└── Per-site curriculum definitions
+
+fellow_curriculum_progress (Current Cohort)
+├── fellow_id (text, FK → fellows)
+├── item_id (FK → curriculum_items)
+├── completed, completed_at
+└── UNIQUE(fellow_id, item_id)
+
+fellow_platform_activity (Current Cohort)
+├── fellow_id (text, FK → fellows)
+├── activity_date, login_count
+└── UNIQUE(fellow_id, activity_date)
+
+adhoc_lists / adhoc_list_entries (Current Cohort)
+├── Custom data collection per site
+├── Fields defined as JSONB schema
+└── Per-fellow entries with JSONB data
 ```
 
 ### Storage Buckets
@@ -185,6 +238,7 @@ gather-crm/
 │   ├── DATABASE_SCHEMA.md      # Full schema with all columns
 │   ├── STYLE_GUIDE.md          # Colors, fonts, component patterns
 │   ├── SESSION_HANDOFF.md      # Current state for new sessions
+│   ├── CURRENT_COHORT_SPEC.md  # Current cohort management spec
 │   ├── GATHER_COMMUNITY_PLAN.md # Community platform roadmap
 │   ├── TEAM_MANAGEMENT_SPEC.md # Team members + directory spec
 │   ├── PROFILE_CLAIMING_SPEC.md # Identity matching + claiming
@@ -200,7 +254,9 @@ gather-crm/
     ├── 009_profile_claims.sql            # Profile claim requests table
     ├── 010_community_tables.sql          # Announcements, resources, newsletters
     ├── 012_app_settings.sql              # App settings key-value table
-    └── 014_auto_link_team_members.sql    # Auto-link users on signup
+    ├── 014_auto_link_team_members.sql    # Auto-link users on signup
+    ├── 015_content_translations.sql      # Translation cache table
+    └── 016_current_cohort_tables.sql     # Current cohort: sites, events, attendance, curricula, etc.
 ```
 
 ---
@@ -249,6 +305,10 @@ No build step - Netlify serves files directly.
 4. **RLS for security** - Row Level Security policies enforce permissions at database level.
 
 5. **Composable services** - GetStream for social, Buttondown for email. Easy to swap if needed.
+
+6. **Unified fellows table** - Current fellows and alumni share the same `fellows` table, distinguished by `status` ('Current' vs 'Alumni'). Current fellows have a `site_id` linking to their program site. At year-end, fellows transition to alumni by setting `status = 'Alumni'` and `site_id = NULL`.
+
+7. **Client-side health scores** - Fellow health scores (0-100) are computed in the browser from attendance, curriculum progress, platform activity, and interaction data. No stored score column — always fresh.
 
 ---
 

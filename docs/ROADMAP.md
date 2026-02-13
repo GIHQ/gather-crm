@@ -76,7 +76,43 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 
 ---
 
-## Phase 3: Analytics & Insights
+## Phase 3: Current Cohort Management
+*Active fellow tracking across three sites — in progress*
+
+### Phase 3a: Foundation ✅
+| Feature | Status |
+|---------|--------|
+| Spec document (CURRENT_COHORT_SPEC.md) | ✅ Done |
+| Database migration — 11 new tables (016_current_cohort_tables.sql) | ✅ Done |
+| Sites seed data (Chicago/CPF, Dar es Salaam/DAR, Mosquera/MOS) | ✅ Done |
+| Navigation: "Cohorts" menu item (team+ access) | ✅ Done |
+| Cohort Dashboard page (3 site cards with metrics) | ✅ Done |
+| Site Detail page with Directory tab | ✅ Done |
+| Events tab with event creation + attendance taking | ✅ Done |
+| Attendance modal (P/L/E/A per fellow, bulk actions) | ✅ Done |
+| Health tab with per-fellow health scores (0-100) | ✅ Done |
+| DAR + MOS program badge colors (emerald + violet) | ✅ Done |
+
+### Phase 3b: Curriculum & Engagement (Next)
+| Feature | Status |
+|---------|--------|
+| Curriculum management UI (chapters + items) | 🔲 Not started |
+| Fellow curriculum progress tracking | 🔲 Not started |
+| Health score: add curriculum completion factor | 🔲 Not started |
+| GATHER platform login tracking integration | 🔲 Not started |
+| Health dashboard trend sparklines | 🔲 Not started |
+
+### Phase 3c: Ad Hoc Lists & Polish
+| Feature | Status |
+|---------|--------|
+| Ad hoc list creation UI (custom field definitions) | 🔲 Not started |
+| Data entry grid for ad hoc lists | 🔲 Not started |
+| Combined alumni + current cohort dashboard | 🔲 Not started |
+| Year-end transition workflow (Current → Alumni) | 🔲 Not started |
+
+---
+
+## Phase 4: Analytics & Insights
 
 | Feature | Status |
 |---------|--------|
@@ -88,7 +124,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 
 ---
 
-## Phase 4: Scale & Polish
+## Phase 5: Scale & Polish
 
 | Feature | Status |
 |---------|--------|
@@ -142,6 +178,9 @@ Service worker (sw.js) already has push/notification handlers. To complete:
 | Feb 2026 | Magic link only (drop OAuth) | Simpler auth flow; fellows have diverse email providers; avoids Google consent screen issues |
 | Feb 2026 | Multi-layer auth recovery | PKCE exchange unreliable on mobile Safari; added getSession() fallbacks at 3 points + manual recovery UX |
 | Feb 2026 | Supabase Pro upgrade | Higher rate limits, custom domain support, better for production |
+| Feb 2026 | Unified fellows table for current + alumni | Current fellows use same `fellows` table with `status = 'Current'` and `site_id` FK; simplifies transition to alumni at year-end |
+| Feb 2026 | Client-side health scores | Computed from attendance + curriculum + activity + interactions; no stored column avoids stale data |
+| Feb 2026 | DAR/MOS program codes | Current cohort sites use CPF (Chicago), DAR (Dar es Salaam), MOS (Mosquera) as program identifiers |
 
 ---
 
