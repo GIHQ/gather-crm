@@ -176,7 +176,7 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     autoRefreshToken: true,
     storageKey: 'gather-auth',
     storage: window.localStorage,
-    flowType: 'pkce',
+    flowType: 'implicit',
     detectSessionInUrl: true,
   }
 });
@@ -714,22 +714,24 @@ function AppProvider({ children }) {
 
   // Check Supabase auth state on load
   useEffect(() => {
-    // Detect if this is a magic link callback (PKCE code in URL)
-    const urlParams = new URLSearchParams(window.location.search);
-    const isAuthCallback = urlParams.has('code') || window.location.hash.includes('access_token');
+    // Detect if this is a magic link callback (implicit flow: token in hash)
+    const isAuthCallback = window.location.hash.includes('access_token') || new URLSearchParams(window.location.search).has('code');
 
-    // Clean up auth params from URL (prevents issues on reload)
     if (isAuthCallback) {
-      console.log('Auth callback detected - waiting for session exchange');
+      console.log('Auth callback detected — implicit flow, token in URL hash');
+      // Clean URL after a short delay (Supabase reads hash synchronously on client init)
+      // This prevents stale tokens from causing issues on reload
+      setTimeout(() => {
+        window.history.replaceState({}, '', window.location.origin + window.location.pathname);
+      }, 1000);
     }
 
-    // Failsafe: ensure loading never gets stuck (longer timeout for auth callbacks)
+    // Failsafe: ensure loading never gets stuck
     const loadingTimeout = setTimeout(async () => {
       console.warn('Loading timeout - forcing load complete');
       if (isAuthCallback) {
-        // PKCE exchange may have silently failed — try getSession() as last resort
+        // Try explicit getSession() as last resort
         try {
-          console.log('Auth callback timeout — trying explicit getSession() recovery');
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
             console.log('Session recovered via getSession():', session.user.email);
@@ -751,13 +753,11 @@ function AppProvider({ children }) {
         } catch (e) {
           console.error('getSession() recovery failed:', e);
         }
-        // Auth callback truly failed
         setAuthError('login_failed');
-        // Clean the URL so they don't get stuck in a retry loop
         window.history.replaceState({}, '', window.location.origin + window.location.pathname);
       }
       setLoading(false);
-    }, isAuthCallback ? 12000 : 5000);
+    }, isAuthCallback ? 8000 : 5000);
 
     // Load non-auth settings immediately
     const loadSettings = () => {
@@ -840,9 +840,8 @@ function AppProvider({ children }) {
         setLoading(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
         if (isAuthCallback) {
-          // Magic link callback — PKCE code exchange is in progress
-          // Do NOT restore guest or set loading=false here
-          // The SIGNED_IN event will fire when the exchange completes
+          // Magic link callback — implicit flow token being processed
+          // Supabase should fire SIGNED_IN momentarily as it reads the hash
           console.log('Auth callback in progress — waiting for SIGNED_IN event');
           return; // Let the loading timeout be the only fallback
         }
