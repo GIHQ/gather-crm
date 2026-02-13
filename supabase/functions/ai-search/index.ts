@@ -41,10 +41,15 @@ serve(async (req) => {
       supabase.from("focus_tags").select("id, name, category_id"),
     ]);
 
-    const fellows = fellowsRes.data || [];
-    const fellowTags = tagsRes.data || [];
-    const categories = categoriesRes.data || [];
-    const focusTags = focusTagsRes.data || [];
+    if (fellowsRes.error) console.error("Fellows query error:", fellowsRes.error);
+    if (tagsRes.error) console.error("Tags query error:", tagsRes.error);
+    if (categoriesRes.error) console.error("Categories query error:", categoriesRes.error);
+    if (focusTagsRes.error) console.error("Focus tags query error:", focusTagsRes.error);
+
+    const fellows = Array.isArray(fellowsRes.data) ? fellowsRes.data : [];
+    const fellowTags = Array.isArray(tagsRes.data) ? tagsRes.data : [];
+    const categories = Array.isArray(categoriesRes.data) ? categoriesRes.data : [];
+    const focusTags = Array.isArray(focusTagsRes.data) ? focusTagsRes.data : [];
 
     // Build tag lookup
     const tagMap: Record<string, { name: string; category: string }> = {};
