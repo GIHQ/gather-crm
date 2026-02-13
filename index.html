@@ -277,6 +277,16 @@ async function batchTranslate(texts, targetLang) {
           body: JSON.stringify({ texts: uncached, targetLang: targetLang, sourceLang: 'en' })
         }
       );
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`Translation failed (${response.status}):`, errText);
+        if (response.status === 401) {
+          console.error('Translation 401: JWT verification may be enabled on the translate Edge Function. Disable it in Supabase Dashboard > Edge Functions > translate.');
+        }
+        return {};
+      }
+
       const data = await response.json();
 
       if (data.data?.translations) {
@@ -692,6 +702,16 @@ function AppProvider({ children }) {
     // Load translations
     if (langCode !== 'en') {
       const trans = await batchTranslate(UI_STRINGS, langCode);
+      if (Object.keys(trans).length === 0) {
+        // Translation failed - revert to English
+        setLanguage('en');
+        localStorage.setItem('gather_language', 'en');
+        document.documentElement.dir = 'ltr';
+        document.documentElement.lang = 'en';
+        setTranslations({});
+        alert('Translation service is temporarily unavailable. Please try again later.');
+        return;
+      }
       setTranslations(trans);
     } else {
       setTranslations({});

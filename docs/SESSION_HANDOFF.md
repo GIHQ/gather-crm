@@ -128,7 +128,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - **Community Platform Phase 2b** — Discovery features (enhanced search, fellow spotlight, push notifications)
 
 ### Known Issues
-- Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment for `search-news` and `stream-token`
+- Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment for `translate`, `search-news`, and `stream-token`
 - 18 fellows still missing focus area tags (sparse bios) — run `node scripts/assign-focus-areas.js` to assign via Claude AI
 - `user_roles` table is legacy/dead — code fallback removed Feb 13, table can be dropped from Supabase when convenient
 
