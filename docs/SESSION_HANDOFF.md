@@ -52,9 +52,27 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ---
 
-## Current State (Updated Feb 13, 2026)
+## Current State (Updated Feb 14, 2026)
 
 ### Recently Completed
+- **Birthday & Gender Fields (Feb 14):**
+  - Migration `017_birthday_gender.sql`: adds `gender` (text), `birthday` (date), `hide_birthday_year` (boolean) to fellows table
+  - Profile edit form: gender dropdown (Female/Male/Non-binary/Other), date picker, "Hide my birth year" checkbox
+  - Profile overview: displays gender and birthday (respects year-hiding preference)
+  - AI search: gender included in pipe-delimited fellow data for GATHER.ai queries
+  - **To activate**: Run `migrations/017_birthday_gender.sql` in Supabase SQL Editor
+- **Daily Automated News Scan (Feb 14):**
+  - Migration `018_news_scan_cron.sql`: pg_cron job runs daily at 6 AM UTC (midnight CST)
+  - Scans 25 fellows/day across all 5 platforms (Google News, LinkedIn, Twitter, Facebook, Instagram)
+  - Cycles through all 292 fellows every ~12 days
+  - Uses SerpAPI Developer plan (~3,900 searches/month of 5,000 limit)
+  - Custom search terms from `app_settings` table included automatically
+  - **Email alerts**: search-news Edge Function now emails `travis@goldininstitute.org` (stored in `app_settings` as `news_alert_email`) via Buttondown when new mentions are found — includes summary of which fellows were mentioned on which platforms
+  - **To activate**: Run `migrations/018_news_scan_cron.sql` in SQL Editor ✅ DONE, redeploy `search-news` Edge Function ✅ DONE
+- **AI Search Rate Limit Handling (Feb 14):**
+  - Edge function returns 429 status with friendly message instead of generic 500
+  - Both dashboard and GatherAI page show "please wait 60 seconds" on rate limit
+  - Anthropic API tier upgrade pending (applied for organization status + higher tier)
 - **Current Cohort Management System (Feb 13):**
   - New feature: manage current fellows across three program sites (Chicago, Dar es Salaam, Mosquera)
   - **Database migration** (`016_current_cohort_tables.sql`): 11 new tables — sites, events, event_attendance, curricula, curriculum_chapters, curriculum_items, fellow_curriculum_progress, fellow_platform_activity, adhoc_lists, adhoc_list_entries + `site_id` column on fellows
@@ -165,8 +183,10 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Auth session persistence fixed (explicit Supabase auth options with `storageKey: 'gather-auth'`)
 - **Translation system fully working** — Edge Function proxies Google Translate API (JWT verification OFF), `<T>` component + `t()` function for all dynamic content, `content_translations` DB cache table, language selector in header
 - Notification settings UI fixed: toggle contrast + overflow on mobile
-- **News scanner fully working** — scans all 292 fellows in batches of 5
+- **News scanner fully working** — scans all 292 fellows in batches of 5, daily cron job active (25/day, all 5 platforms)
+- News alert emails sent to travis@goldininstitute.org when mentions found (via Buttondown)
 - Custom search terms for news scanner (stored in `app_settings` table)
+- `news_alert_email` setting in `app_settings` controls who receives scan alerts
 - `is_admin()` SECURITY DEFINER function created
 - **Focus area tags assigned to 274/292 fellows** (94% coverage)
 - GetStream account created, API keys stored in Supabase + Netlify
@@ -187,11 +207,17 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 **Supabase rate limit:** If users hit the OTP rate limit during testing, increase it in Supabase Dashboard → Authentication → Rate Limits → "Email" limit (e.g., 5 per 60s).
 
+### Pending / Next Session
+- **Anthropic API tier upgrade** — applied for organization status + higher tier; currently hitting 10k tokens/min rate limit on Haiku after one query
+- **Populate birthday & gender data** — migration 017 deployed; fellows need to fill in their profiles
+- **Verify news scan cron** — first run at 6 AM UTC Feb 15; check with `SELECT * FROM cron.job;` and `SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5;`
+
 ### Known Issues
 - Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment for `translate`, `search-news`, and `stream-token`
 - 18 fellows still missing focus area tags (sparse bios) — run `node scripts/assign-focus-areas.js` to assign via Claude AI
 - `user_roles` table is legacy/dead — code fallback removed Feb 13, table can be dropped from Supabase when convenient
 - Supabase OTP rate limit can block re-login after repeated attempts — consider increasing rate limit in Supabase Dashboard > Authentication > Rate Limits
+- Anthropic API rate limit (10k input tokens/min on Haiku) — AI search shows friendly "wait 60 seconds" message; upgrade pending
 
 ### Recently Fixed Bugs
 - **iPhone Safari magic link → guest mode (Feb 13)** — PKCE exchange silently failing on mobile Safari. Ultimately resolved by switching to OTP verification codes (Feb 14), eliminating all redirect-based auth.
@@ -247,11 +273,13 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ### Edge Function Deployment
 - User (Travis) deploys Edge Functions via **Supabase dashboard** (no CLI installed)
 - JWT Verification settings per function:
-  - `search-news`: OFF (uses anon key)
+  - `search-news`: OFF (uses anon key, called by pg_cron daily)
+  - `ai-search`: OFF (uses anon key)
   - `stream-token`: OFF (uses anon key, validates auth internally)
   - `translate`: OFF (proxies Google Translate API, no user data)
   - `send-newsletter`: needs deploying (Buttondown API proxy, checks staff auth internally)
-- News scanner processes fellows in **batches of 5** from the frontend to avoid compute/timeout limits
+- News scanner processes fellows in **batches of 5** from the frontend (manual scan) or **25/day** via pg_cron (automated)
+- **pg_cron daily job** (`daily-news-scan`): runs at 6 AM UTC, scans 25 fellows across all 5 platforms, sends email alert on hits
 
 ### RLS Patterns
 - Use `auth.uid() IS NOT NULL` for authenticated checks (NOT `auth.role() = 'authenticated'`)
@@ -347,6 +375,8 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `migrations/015_content_translations.sql` | Translation cache table (run in SQL Editor ✅) |
 | `migrations/015_login_events.sql` | Login activity tracking table |
 | `migrations/016_current_cohort_tables.sql` | Current cohort: sites, events, attendance, curricula, ad hoc lists |
+| `migrations/017_birthday_gender.sql` | Birthday, gender, hide_birthday_year columns on fellows |
+| `migrations/018_news_scan_cron.sql` | Daily pg_cron job for automated news scanning + alert email setting |
 | `docs/CURRENT_COHORT_SPEC.md` | Current cohort management specification |
 | `scripts/assign-focus-areas.js` | AI-powered focus area assignment (Node.js, needs API keys) |
 | `scripts/assign-focus-areas.sql` | SQL keyword-based focus area assignment (paste into Supabase SQL editor) |
