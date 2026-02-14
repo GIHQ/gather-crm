@@ -687,6 +687,7 @@ const AppContext = createContext();
 function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(ROLES.VIEWER);
+  const [sessionReady, setSessionReady] = useState(false); // true when Supabase auth session is confirmed (not just cached user)
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [needsProfileClaim, setNeedsProfileClaim] = useState(false);
   const [potentialMatches, setPotentialMatches] = useState({ fellows: [], teamMembers: [] });
@@ -741,6 +742,7 @@ function AppProvider({ children }) {
       // Use cached role if available so user isn't stuck as VIEWER
       const fallbackRole = localStorage.getItem('gather_user_role');
       if (fallbackRole) setUserRole(fallbackRole);
+      setSessionReady(true); // Timeout fallback — allow data fetch with whatever session exists
       setLoading(false);
     }, 15000);
 
@@ -825,6 +827,7 @@ function AppProvider({ children }) {
           }).then(() => {}).catch(() => {});
         }
 
+        setSessionReady(true); // Auth session confirmed — safe to fetch data
         clearTimeout(loadingTimeout);
         setLoading(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
@@ -845,6 +848,7 @@ function AppProvider({ children }) {
             const role = await determineUserRole(recoveredSession.user.email, recoveredSession.user.id);
             setUserRole(role);
             localStorage.setItem('gather_user_role', role);
+            setSessionReady(true); // Auth session recovered — safe to fetch data
             clearTimeout(loadingTimeout);
             setLoading(false);
             return;
@@ -860,11 +864,13 @@ function AppProvider({ children }) {
             if (parsedUser.email === 'guest@gathertracker.app') {
               setUser(parsedUser);
               setUserRole(ROLES.VIEWER);
+              setSessionReady(true); // Guest can view with anon key
             }
           } catch (e) {
             console.error('Error parsing saved user:', e);
           }
         }
+        setSessionReady(true); // Auth check complete even if no session
         clearTimeout(loadingTimeout);
         setLoading(false);
       } else if (event === 'SIGNED_OUT') {
@@ -1069,18 +1075,18 @@ function AppProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (user && isOnboarded) {
+    if (user && isOnboarded && sessionReady) {
       fetchData();
-      
+
       // Real-time subscription
       const sub = supabase
         .channel('all-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions' }, fetchData)
         .subscribe();
-      
+
       return () => sub.unsubscribe();
     }
-  }, [user, isOnboarded, fetchData]);
+  }, [user, isOnboarded, sessionReady, fetchData]);
 
   return (
     <TranslationContext.Provider value={translationCtx}>
