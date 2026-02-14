@@ -69,49 +69,34 @@ serve(async (req) => {
       if (tag) fellowTagMap[ft.fellow_id].push(`${tag.name} (${tag.category})`);
     });
 
-    // Build compact fellow summaries for Claude
+    // Build compact fellow summaries — minimal tokens, pipe-delimited
     const fellowSummaries = fellows.map((f: any) => {
       const tags = fellowTagMap[f.id] || [];
       const parts = [
-        `ID:${f.id}`,
+        f.id,
         `${f.first_name} ${f.last_name}`,
         f.program,
         f.cohort ? `'${String(f.cohort).slice(-2)}` : "",
-        f.city && f.country ? `${f.city}, ${f.country}` : (f.city || f.country || ""),
-        f.organization ? `Org: ${f.organization}` : "",
-        f.job_title ? `Title: ${f.job_title}` : "",
-        tags.length > 0 ? `Tags: ${tags.join(", ")}` : "",
-        f.community_area ? `Neighborhood: ${f.community_area}` : "",
-        f.languages ? `Languages: ${f.languages}` : "",
-      ].filter(Boolean);
-      return parts.join(" | ");
+        f.city && f.country ? `${f.city},${f.country}` : (f.city || f.country || ""),
+        f.organization || "",
+        f.job_title || "",
+        tags.length > 0 ? tags.map(t => t.split(" (")[0]).join(",") : "",
+        f.community_area || "",
+        f.languages || "",
+      ];
+      return parts.join("|");
     }).join("\n");
 
-    // Build the system prompt
-    const systemPrompt = `You are an AI assistant for GATHER, an alumni network CRM for the Goldin Institute. You help staff find and connect with fellows in their network of ${fellows.length} alumni across 3 programs:
-- CPF (Chicago Peace Fellows) — Chicago-based community leaders
-- GGF (Goldin Global Fellows) — International peacebuilders
-- ESP (Español/Global Spanish) — Spanish-speaking fellows
+    // Build the system prompt — fellow data is pipe-delimited:
+    // id|name|program|cohort|city,country|org|title|tags|neighborhood|languages
+    const systemPrompt = `You are GATHER.ai, an AI assistant for the Goldin Institute alumni network (${fellows.length} fellows). Programs: CPF (Chicago Peace Fellows), GGF (Goldin Global Fellows), ESP (Global Spanish).
 
-You have access to the full fellow database below. When the user asks a question:
-1. Search through the fellows to find relevant matches
-2. Return 3-8 of the most relevant fellows with clear reasoning
-3. Be conversational and helpful — suggest connections, introductions, or outreach ideas
-4. If the query is vague, ask clarifying questions
-5. You can also answer general questions about the network (stats, trends, etc.)
+Find relevant fellows and respond in JSON:
+{"message":"your response","fellows":[{"id":"uuid","name":"Full Name","reason":"why"}]}
 
-IMPORTANT: Always return your response in this JSON format:
-{
-  "message": "Your conversational response to the user (markdown OK)",
-  "fellows": [
-    { "id": "uuid", "name": "Full Name", "reason": "Why they match" }
-  ]
-}
+Return 3-8 matches. Be conversational. If vague, ask clarifying questions. Empty fellows array for general chat.
 
-If no fellows match, return an empty fellows array with a helpful message.
-If the user is having a general conversation (greeting, follow-up question), you can return just a message with empty fellows array.
-
-FELLOW DATABASE:
+Fellow data (id|name|program|cohort|city,country|org|title|tags|neighborhood|languages):
 ${fellowSummaries}`;
 
     // Build messages for Claude (support multi-turn conversation)
@@ -123,18 +108,25 @@ ${fellowSummaries}`;
       { role: "user", content: query },
     ];
 
-    // Call Claude API
+    // Call Claude API with Haiku (higher rate limits) and prompt caching
     const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
+        "anthropic-beta": "prompt-caching-2024-07-31",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1024,
-        system: systemPrompt,
+        system: [
+          {
+            type: "text",
+            text: systemPrompt,
+            cache_control: { type: "ephemeral" },
+          }
+        ],
         messages,
       }),
     });
