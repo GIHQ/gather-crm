@@ -1617,18 +1617,24 @@ function LoginScreen({ onLogin, authError }) {
       } catch (e) {}
     }
 
-    // Send OTP verification code email (works for staff and fellows with any email)
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    try {
+      // Send OTP verification code email (works for staff and fellows with any email)
+      const { error } = await supabase.auth.signInWithOtp({ email });
 
-    if (error) {
-      if (error.message?.toLowerCase().includes('rate') || error.status === 429) {
-        alert('Too many login attempts. Please wait a minute before trying again.');
+      if (error) {
+        if (error.message?.toLowerCase().includes('rate') || error.status === 429) {
+          alert('Too many login attempts. Please wait a minute before trying again.');
+        } else {
+          alert('Error sending code: ' + error.message);
+        }
+        setLoading(false);
       } else {
-        alert('Error: ' + error.message);
+        setOtpSent(true);
+        setLoading(false);
       }
-      setLoading(false);
-    } else {
-      setOtpSent(true);
+    } catch (err) {
+      console.error('signInWithOtp failed:', err);
+      alert('Could not send verification code. Please check your connection and try again.');
       setLoading(false);
     }
   };
@@ -1640,16 +1646,38 @@ function LoginScreen({ onLogin, authError }) {
       return;
     }
     setVerifying(true);
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: otpCode,
-      type: 'email'
-    });
-    if (error) {
-      alert('Invalid or expired code. Please try again.');
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: otpCode,
+        type: 'email'
+      });
+      if (error) {
+        alert('Invalid or expired code. Please try again.');
+        setVerifying(false);
+      }
+      // On success, onAuthStateChange SIGNED_IN handler will fire automatically
+    } catch (err) {
+      console.error('verifyOtp failed:', err);
+      alert('Verification failed. Please check your connection and try again.');
       setVerifying(false);
     }
-    // On success, onAuthStateChange SIGNED_IN handler will fire automatically
+  };
+
+  const handleResendCode = async () => {
+    setLoading(true);
+    setOtpCode('');
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      if (error) {
+        alert('Error resending code: ' + error.message);
+      } else {
+        alert('New code sent! Check your email.');
+      }
+    } catch (err) {
+      alert('Could not resend code. Please try again.');
+    }
+    setLoading(false);
   };
 
   return (
@@ -1708,13 +1736,23 @@ function LoginScreen({ onLogin, authError }) {
               >
                 {verifying ? 'Verifying...' : 'Verify Code'}
               </button>
-              <button
-                type="button"
-                onClick={() => { setOtpSent(false); setOtpCode(''); }}
-                className="w-full text-sm text-gray-500 mt-3 py-2"
-              >
-                Use a different email
-              </button>
+              <div className="flex gap-3 mt-3">
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={loading}
+                  className="flex-1 text-sm text-orange-600 font-medium py-2"
+                >
+                  {loading ? 'Sending...' : 'Resend code'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setOtpSent(false); setOtpCode(''); }}
+                  className="flex-1 text-sm text-gray-500 py-2"
+                >
+                  Different email
+                </button>
+              </div>
             </form>
           )}
 
