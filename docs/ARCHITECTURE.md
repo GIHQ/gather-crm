@@ -43,9 +43,9 @@ The system serves three purposes:
 
 ### Authentication
 
-- **Staff & Fellows:** Magic links (email-based, any domain)
+- **Staff & Fellows:** Email OTP verification codes (6-digit code sent to email, entered in-app)
 - **Guests:** "Skip for now" — read-only directory access, no login required
-- Google OAuth removed — magic link is the sole auth method
+- Google OAuth removed — OTP code is the sole auth method (magic links replaced Feb 14)
 
 ---
 

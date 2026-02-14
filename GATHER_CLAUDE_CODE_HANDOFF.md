@@ -89,13 +89,13 @@ INSERT INTO user_roles (email, role) VALUES
 - Check `user_roles` table for explicit role assignment
 - Check `fellows` table by email → assign `fellow` role if found
 - "Skip for now" → `viewer` role (no sensitive data visible)
-- Magic link available for fellows with any email provider
+- Email OTP verification code available for fellows with any email provider
 
 ---
 
 ### TOPIC 2: Login Flow Updates
 
-**Current**: Welcome → Login (Google/Magic Link/Skip) → Onboarding → App
+**Current**: Welcome → Login (Email OTP Code/Skip) → Onboarding → App
 
 **Updated Logic**:
 ```javascript
@@ -386,6 +386,6 @@ claude
 
 ## Questions Resolved
 
-- **Fellow auth**: Magic link (any email provider) or Google OAuth if they have Google account
+- **Fellow auth**: Email OTP verification code (any email provider). Google OAuth removed Feb 13, magic links replaced with OTP Feb 14.
 - **Staff default role**: `team` for @goldininstitute.org and @chicagopeacefellows.org
 - **Skip for now**: `viewer` role (public directory only, no contact info)

@@ -175,8 +175,8 @@ Service worker (sw.js) already has push/notification handlers. To complete:
 | Feb 2026 | Buttondown for email | Simple API, good for newsletters at this volume |
 | Feb 2026 | Lurker-first architecture | 30-50% active engagement realistic; design for passive consumption first |
 | Feb 2026 | Google Translate for i18n | Real-time translation of all dynamic content; DB cache avoids repeated API calls; supports 100+ languages for global fellows |
-| Feb 2026 | Magic link only (drop OAuth) | Simpler auth flow; fellows have diverse email providers; avoids Google consent screen issues |
-| Feb 2026 | Multi-layer auth recovery | PKCE exchange unreliable on mobile Safari; added getSession() fallbacks at 3 points + manual recovery UX |
+| Feb 2026 | Email OTP codes (drop OAuth + magic links) | Simpler auth flow; fellows have diverse email providers; avoids Google consent screen issues; OTP codes eliminate iPhone Safari redirect failures that plagued magic links |
+| Feb 2026 | OTP over magic links | PKCE exchange unreliable on mobile Safari; implicit flow had redirect issues on PWA; OTP codes are entirely in-app — no redirects needed |
 | Feb 2026 | Supabase Pro upgrade | Higher rate limits, custom domain support, better for production |
 | Feb 2026 | Unified fellows table for current + alumni | Current fellows use same `fellows` table with `status = 'Current'` and `site_id` FK; simplifies transition to alumni at year-end |
 | Feb 2026 | Client-side health scores | Computed from attendance + curriculum + activity + interactions; no stored column avoids stale data |

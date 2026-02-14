@@ -6,7 +6,7 @@
 
 ## Quick Context
 
-GATHER is a fellowship management platform for the Goldin Institute managing **292 alumni** across 3 programs (CPF, GGF, ESP) and **current fellows** at 3 sites (Chicago/CPF, Dar es Salaam/DAR, Mosquera/MOS). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan). Auth is magic link only (Google OAuth removed Feb 13).
+GATHER is a fellowship management platform for the Goldin Institute managing **292 alumni** across 3 programs (CPF, GGF, ESP) and **current fellows** at 3 sites (Chicago/CPF, Dar es Salaam/DAR, Mosquera/MOS). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan). Auth is email OTP code only (Google OAuth removed Feb 13, magic links replaced with 6-digit OTP codes Feb 14).
 
 | Resource | URL |
 |----------|-----|
@@ -69,15 +69,17 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   - Spec document: `docs/CURRENT_COHORT_SPEC.md`
   - **Not yet implemented** (Phase 2): Curriculum tracking UI, Ad hoc lists UI, GATHER platform login tracking
   - **To activate**: Run `migrations/016_current_cohort_tables.sql` in Supabase SQL Editor, then add fellows with `status = 'Current'` and appropriate `site_id`
-- **iPhone Safari Magic Link Auth Fix (Feb 13):**
+- **Auth Switched to OTP Verification Codes (Feb 14):**
+  - Replaced magic link (implicit flow) with 6-digit OTP code verification
+  - `signInWithOtp` now sends code-only email (no `emailRedirectTo`)
+  - User enters 6-digit code on login screen, verified via `supabase.auth.verifyOtp()`
+  - Removed all auth callback hash detection and URL cleanup code
+  - Removed `flowType: 'implicit'`, set `detectSessionInUrl: false`
+  - Eliminates iPhone Safari/PWA magic link failures entirely — no redirect needed
+  - Updated Supabase Dashboard Magic Link email template to show `{{ .Token }}` instead of `{{ .ConfirmationURL }}`
+- **iPhone Safari Magic Link Auth Fix (Feb 13) — SUPERSEDED by OTP switch:**
   - PKCE code exchange was silently failing on mobile Safari, leaving users stuck as guest
-  - Added `getSession()` fallback in `INITIAL_SESSION` handler — recovers sessions that `onAuthStateChange` missed
-  - Added `getSession()` retry in auth callback timeout — last-resort recovery before declaring failure
-  - Extended auth callback timeout from 10s to 12s for slower mobile connections
-  - Clear guest localStorage state when user initiates login (prevents stuck-as-guest loop)
-  - Fixed `emailRedirectTo` to include pathname (not just origin) for subpath deployments
-  - Added "I clicked the link — sign me in" manual session recovery button on login screen
-  - Improved error messaging with iPhone-specific tips (long-press → Open in Safari)
+  - Multiple fallback layers were added but ultimately replaced by OTP flow
 - **Auth Error Context Fix (Feb 13):**
   - `authError` state was missing from AppContext, so LoginScreen always received `undefined`
   - Added `authError` to context provider — error banner now displays correctly
@@ -95,11 +97,11 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     - Shared across all users — once translated, never re-translates
     - Keyed by MD5 hash of source text + target language
     - Run in Supabase SQL Editor: `migrations/015_content_translations.sql` ✅ DONE
-- **Auth Simplified to Magic Link Only (Feb 13):**
-  - Removed Google OAuth entirely — magic link is the only sign-in method
+- **Auth Simplified to Email OTP Only (Feb 13–14):**
+  - Removed Google OAuth entirely (Feb 13)
+  - Switched from magic links to 6-digit OTP verification codes (Feb 14)
   - Fixed login button visibility (was hidden behind loading state)
-  - Fixed magic link callback URL handling
-  - Added rate limit UX — shows countdown timer and clear error messaging when rate limited
+  - Added rate limit UX — shows clear error messaging when rate limited
   - Fixed sign out from slide menu (function reference mismatch)
 - **Login Activity Tracking (Feb 13):**
   - `login_events` table tracks all sign-ins (user, timestamp, method)
@@ -180,30 +182,19 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ### In Progress
 - **Community Platform Phase 2b** — Discovery features (enhanced search, fellow spotlight, push notifications)
 
-### AWAITING TEST — iPhone Safari Magic Link (Feb 13 late)
-**Status:** PKCE flow confirmed broken on iPhone Safari. **Switched to implicit flow** — needs re-test.
+### RESOLVED — iPhone Safari Auth (Feb 14)
+**Status:** RESOLVED. Switched from magic links (implicit flow) to **OTP verification codes**. No redirects needed — user enters a 6-digit code directly in the app. This eliminates all iPhone Safari/PWA redirect issues.
 
-**What was done (attempt 1 — FAILED):** Added multi-layer `getSession()` fallbacks + manual session recovery UX. PKCE exchange still failed silently on iPhone. User got stuck on loading screen, then guest mode with no data on reload.
-
-**What was done (attempt 2 — CURRENT):** Switched `flowType` from `'pkce'` to `'implicit'` in Supabase client config (line ~179). Implicit flow puts the access token directly in the URL hash — no server-side code exchange, which is what was failing on iPhone Safari. Also added 1-second URL cleanup to prevent stale tokens on reload.
-
-**To test:** On iPhone Safari: Get Started → enter email → send magic link → click link in email → app should log you in (not guest mode). If it still fails, see Known Issues below.
-
-**IMPORTANT Supabase Dashboard check:** If implicit flow doesn't work, verify that the Supabase project allows implicit grants. Go to: **Supabase Dashboard → Authentication → URL Configuration** and ensure the redirect URL (https://gathertracker.app or whatever the prod URL is) is in the allowed list.
-
-**Supabase rate limit:** User hit the magic link rate limit during testing. To fix: Supabase Dashboard → Authentication → Rate Limits → increase "Email" limit (e.g., to 5 per 60s). Current default is very low.
-
-**If implicit flow ALSO fails:** Add password-based login as fallback (Supabase supports `signInWithPassword` alongside magic links).
+**Supabase rate limit:** If users hit the OTP rate limit during testing, increase it in Supabase Dashboard → Authentication → Rate Limits → "Email" limit (e.g., 5 per 60s).
 
 ### Known Issues
-- **iPhone Safari PWA localStorage isolation** — If user installs GATHER as a PWA (home screen), the PWA and Safari have separate localStorage. Magic link clicked in email opens in Safari, but session doesn't transfer to PWA. Workaround: user can tap "I clicked the link — sign me in" button on login screen, or use Safari instead of PWA.
 - Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment for `translate`, `search-news`, and `stream-token`
 - 18 fellows still missing focus area tags (sparse bios) — run `node scripts/assign-focus-areas.js` to assign via Claude AI
 - `user_roles` table is legacy/dead — code fallback removed Feb 13, table can be dropped from Supabase when convenient
-- Supabase magic link rate limit can block re-login after page reload — consider increasing rate limit in Supabase Dashboard > Authentication > Rate Limits
+- Supabase OTP rate limit can block re-login after repeated attempts — consider increasing rate limit in Supabase Dashboard > Authentication > Rate Limits
 
 ### Recently Fixed Bugs
-- **iPhone Safari magic link → guest mode (Feb 13)** — PKCE exchange silently failing on mobile Safari. User got stuck as guest with no recovery path. Fixed with multi-layer `getSession()` fallbacks, guest state cleanup on login, and manual session recovery button.
+- **iPhone Safari magic link → guest mode (Feb 13)** — PKCE exchange silently failing on mobile Safari. Ultimately resolved by switching to OTP verification codes (Feb 14), eliminating all redirect-based auth.
 - **authError not reaching LoginScreen (Feb 13)** — `authError` was omitted from AppContext value, so the "Login link didn't work" error banner never showed. Added to context provider.
 - **AI search `cohort_year` column error (Feb 13)** — Edge Function system prompt referenced non-existent `cohort_year` column. Fixed to `cohort`.
 - **`<T>` component null crash (Feb 13)** — Dynamic content with null/undefined values passed to `<T>` caused React render errors. Added defensive null checks and safer context access.
@@ -212,7 +203,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - **Sign out button not working (Feb 13)** — Menu sign out called `handleLogout` but the function was named `handleSignOut`. Fixed function reference.
 - **Translation broken for guest users (Feb 13)** — Guest users had no auth token, causing 401. Fixed by ensuring anon key is used as Authorization fallback.
 - **Login button hidden (Feb 13)** — Login button was invisible due to loading state overlap. Fixed visibility.
-- **Magic link callback broken (Feb 13)** — After removing Google OAuth, magic link callback URL wasn't handled correctly. Fixed.
+- **Magic link callback broken (Feb 13)** — After removing Google OAuth, magic link callback URL wasn't handled correctly. Fixed, then superseded by OTP switch (Feb 14).
 - **Legacy user_roles fallback removed (Feb 13)** — Dead code was querying non-existent `user_roles` table on every login. Removed; all role checks now use `team_members` table.
 - **Auth session lost on reload (Feb 12)** — `getSession()` was called before Supabase loaded session from storage, causing false "stale session" detection. Fixed by using `onAuthStateChange` with `INITIAL_SESSION` event.
 - **Interaction save freeze (Feb 12)** — Missing try/catch in `handleSubmit` and `saveQuickLog` caused UI to freeze on errors. Added proper error handling.
@@ -270,14 +261,17 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Auto-link trigger (`014_auto_link_team_members.sql`) handles this automatically on signup/login
 
 ### Auth & Session Handling
-- **Primary auth mechanism:** `onAuthStateChange` listener with `getSession()` fallbacks
+- **Auth method:** Email OTP verification codes (6-digit code sent to email, entered in-app)
+  - `signInWithOtp({ email })` sends the code (no `emailRedirectTo`)
+  - `verifyOtp({ email, token, type: 'email' })` verifies the code
+  - On success, `onAuthStateChange` fires `SIGNED_IN` event automatically
+- **Primary session mechanism:** `onAuthStateChange` listener with `getSession()` fallback
   - Handles `INITIAL_SESSION` (page load), `SIGNED_IN`, `TOKEN_REFRESHED`, and `SIGNED_OUT` events
   - Avoids race condition where `getSession()` returns null before session loads from storage
-  - **Fallback 1:** When `INITIAL_SESSION` fires with null (non-callback), explicitly calls `getSession()` to catch missed sessions (Safari/PWA edge case)
-  - **Fallback 2:** On auth callback timeout (12s), tries `getSession()` before declaring failure
-  - **Fallback 3:** "I clicked the link — sign me in" button on login screen calls `getSession()` manually
-- Supabase client configured with `storageKey: 'gather-auth'`, `flowType: 'pkce'`, `detectSessionInUrl: true`
-- `emailRedirectTo` uses `origin + pathname` (not just origin) for subpath compatibility
+  - **Fallback:** When `INITIAL_SESSION` fires with null, explicitly calls `getSession()` to catch missed sessions (Safari/PWA edge case)
+- Supabase client configured with `storageKey: 'gather-auth'`, `detectSessionInUrl: false`
+- No URL hash/callback handling needed — OTP flow is entirely in-app
+- Supabase Dashboard Magic Link email template updated to show `{{ .Token }}` (the 6-digit code) instead of `{{ .ConfirmationURL }}`
 - Guest users use fake email `guest@gathertracker.app` — preserved in localStorage across sessions
 - Guest state is cleared from localStorage when user initiates a new login (prevents stuck-as-guest)
 - When `SIGNED_OUT` event fires, localStorage is cleared and user sees login screen
@@ -305,7 +299,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - **DB cache:** `content_translations` table — stores translations keyed by `(source_hash, target_lang)`. Shared across all users.
 - **In-memory cache:** `translationCache` Map in frontend — avoids redundant API calls within a session
 - **Error handling:** On translation failure, reverts to English with user alert. Guest users use anon key for auth.
-- Auth: magic link only (Google OAuth removed Feb 13). Rate limit can be adjusted in Supabase Dashboard > Authentication > Rate Limits.
+- Auth: email OTP codes only (Google OAuth removed Feb 13, magic links replaced with OTP Feb 14). Rate limit can be adjusted in Supabase Dashboard > Authentication > Rate Limits.
 
 ### Database Schema vs Docs
 `DATABASE_SCHEMA.md` is now accurate as of Feb 13, 2026. Key fellows columns:
