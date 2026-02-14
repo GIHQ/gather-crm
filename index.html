@@ -4807,6 +4807,8 @@ function GatherAIPage({ onSelectFellow }) {
     setAiLoading(true);
     try {
       const session = await supabase.auth.getSession();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
       const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-search`, {
         method: 'POST',
         headers: {
@@ -4816,7 +4818,9 @@ function GatherAIPage({ onSelectFellow }) {
             : `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({ query, conversation: aiMessages.slice(-6) }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'AI search failed');
       const matchedFellows = (data.fellows || []).map(match => {
@@ -4827,11 +4831,14 @@ function GatherAIPage({ onSelectFellow }) {
     } catch (err) {
       console.error('AI search error:', err);
       const isRateLimit = err.message?.includes('rate') || err.message?.includes('limit') || err.message?.includes('token');
+      const isTimeout = err.name === 'AbortError';
       setAiMessages(prev => [...prev, {
         role: 'assistant',
-        content: isRateLimit
-          ? 'I need a moment to recharge. Please wait about 60 seconds before your next question.'
-          : `Sorry, I had trouble searching: ${err.message}. Please try again.`,
+        content: isTimeout
+          ? 'The search timed out. Please try a shorter or simpler question.'
+          : isRateLimit
+            ? 'I need a moment to recharge. Please wait about 60 seconds before your next question.'
+            : `Sorry, I had trouble searching: ${err.message}. Please try again.`,
         fellows: [],
       }]);
     } finally {
