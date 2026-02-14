@@ -1,6 +1,6 @@
 # GATHER Roadmap
 
-**Last updated:** Feb 13, 2026 (late evening)
+**Last updated:** Feb 14, 2026
 
 This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO Tracker in SESSION_HANDOFF.md.
 
@@ -21,7 +21,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Self-editing profiles | ✅ Done |
 | Admin editing + staff notes | ✅ Done |
 | Interaction logging | ✅ Done |
-| News scanner (SerpAPI) | ✅ Done — scans all 292 fellows in batches |
+| News scanner (SerpAPI) | ✅ Done — daily cron scans 25 fellows/day across 5 platforms, email alerts on hits |
 | Focus areas tab fix (timeout + team member handling) | ✅ Done (Feb 11) |
 | Login activity tracking (login_events table) | ✅ Done (Feb 13) |
 | iPhone Safari auth hardening (getSession fallbacks, session recovery UX) | ✅ Done (Feb 13) |
@@ -128,7 +128,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 
 | Feature | Status |
 |---------|--------|
-| Social media scanning (FB, IG, Twitter, LinkedIn) | 🔲 |
+| Social media scanning (FB, IG, Twitter, LinkedIn) | ✅ Done (Feb 14) — included in daily news scan across all 5 platforms |
 | Multi-language support (translation system) | ✅ Done (Feb 13) — `<T>` component, `t()` function, Google Translate API, DB cache |
 | Offline/PWA caching improvements | 🔲 |
 | Performance optimization | 🔲 |
@@ -191,5 +191,7 @@ Service worker (sw.js) already has push/notification handlers. To complete:
 | GetStream | Maker (free) | $0 | <5 team members, <$10K revenue |
 | Buttondown | Basic | $9/mo | 292 subscribers (free tier caps at 100) |
 | Supabase | Pro | $25/mo | Upgraded for custom domain + higher limits |
+| SerpAPI | Developer | $50/mo | 5,000 searches/month; daily news scan uses ~3,900/month |
+| Anthropic | Tier 1 | ~$5/mo | AI search (Haiku); upgrade pending for higher rate limits |
 | Netlify | Free | $0 | Already using |
-| **Total** | | **$34/mo** | Check if nonprofit discount applies for Supabase |
+| **Total** | | **~$89/mo** | Check if nonprofit discount applies for Supabase |
