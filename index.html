@@ -2893,9 +2893,12 @@ function DashboardPage({ onLogInteraction, onSelectFellow }) {
       }]);
     } catch (err) {
       console.error('AI search error:', err);
+      const isRateLimit = err.message?.includes('rate') || err.message?.includes('limit') || err.message?.includes('Rate');
       setAiMessages(prev => [...prev, {
         role: 'assistant',
-        content: `Sorry, I had trouble searching: ${err.message}. Please try again.`,
+        content: isRateLimit
+          ? 'I need a moment to recharge. Please wait about 60 seconds before your next question.'
+          : `Sorry, I had trouble searching: ${err.message}. Please try again.`,
         fellows: [],
       }]);
     } finally {

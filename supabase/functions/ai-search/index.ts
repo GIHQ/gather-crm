@@ -152,6 +152,16 @@ ${fellowSummaries}`;
 
     if (!claudeResponse.ok) {
       console.error("Claude API error:", JSON.stringify(claudeData));
+      // Pass through rate limit errors with 429 status so frontend can show a friendly message
+      if (claudeResponse.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit reached. Please wait about 60 seconds before trying again." }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
       throw new Error(claudeData.error?.message || `Claude API error (${claudeResponse.status})`);
     }
 
