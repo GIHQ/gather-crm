@@ -420,6 +420,58 @@ serve(async (req) => {
 
     const totalFound = results.reduce((sum, r) => sum + r.activitiesFound, 0);
 
+    // Send email alert if any news was found
+    if (totalFound > 0) {
+      try {
+        // Get alert email from app_settings
+        const { data: alertSetting } = await supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", "news_alert_email")
+          .single();
+
+        const alertEmail = alertSetting?.value;
+        const BUTTONDOWN_API_KEY = Deno.env.get("BUTTONDOWN_API_KEY");
+
+        if (alertEmail && BUTTONDOWN_API_KEY) {
+          // Build a summary of what was found
+          const hitSummary = results
+            .filter(r => r.activitiesFound > 0)
+            .map(r => {
+              const platforms = Object.entries(r.byPlatform)
+                .map(([p, count]) => `${p}: ${count}`)
+                .join(", ");
+              return `• ${r.fellow} — ${r.activitiesFound} mention${r.activitiesFound > 1 ? 's' : ''} (${platforms})`;
+            })
+            .join("\n");
+
+          const emailBody = `# GATHER News Alert\n\nThe daily news scan found **${totalFound} new mention${totalFound > 1 ? 's' : ''}** across ${results.length} fellows.\n\n${hitSummary}\n\n${customTermResults > 0 ? `Plus ${customTermResults} results from custom search terms.\n\n` : ''}[Review in GATHER →](https://gather.goldininstitute.org)\n\n---\n*Automated scan — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}*`;
+
+          await fetch("https://api.buttondown.com/v1/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Token ${BUTTONDOWN_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              subject: `GATHER: ${totalFound} new fellow mention${totalFound > 1 ? 's' : ''} found`,
+              body: emailBody,
+              filters: {
+                filters: [{ field: "email", operator: "is", value: alertEmail }],
+                groups: [],
+                predicate: "and",
+              },
+            }),
+          });
+
+          console.log(`Alert email sent to ${alertEmail} for ${totalFound} mentions`);
+        }
+      } catch (emailErr) {
+        // Don't fail the whole scan if email fails
+        console.error("Failed to send alert email:", emailErr);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
