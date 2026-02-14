@@ -719,11 +719,30 @@ function AppProvider({ children }) {
 
   // Check Supabase auth state on load
   useEffect(() => {
-    // Failsafe: ensure loading never gets stuck
+    // Immediately hydrate user + role from localStorage (prevents flash of guest state on PWA reopen)
+    const cachedUser = localStorage.getItem('gather_user');
+    const cachedRole = localStorage.getItem('gather_user_role');
+    if (cachedUser) {
+      try {
+        const parsedUser = JSON.parse(cachedUser);
+        if (parsedUser.id && parsedUser.email) {
+          setUser(parsedUser);
+          if (cachedRole) setUserRole(cachedRole);
+          console.log('Hydrated from cache:', parsedUser.email, 'role:', cachedRole);
+        }
+      } catch (e) {
+        console.error('Error hydrating cached user:', e);
+      }
+    }
+
+    // Failsafe: ensure loading never gets stuck (15s for slow mobile networks)
     const loadingTimeout = setTimeout(() => {
       console.warn('Loading timeout - forcing load complete');
+      // Use cached role if available so user isn't stuck as VIEWER
+      const fallbackRole = localStorage.getItem('gather_user_role');
+      if (fallbackRole) setUserRole(fallbackRole);
       setLoading(false);
-    }, 5000);
+    }, 15000);
 
     // Load non-auth settings immediately
     const loadSettings = () => {
@@ -874,6 +893,16 @@ function AppProvider({ children }) {
             };
             setUser(userData);
             localStorage.setItem('gather_user', JSON.stringify(userData));
+            // Also restore role (was missing - caused stale guest state on PWA reopen)
+            const savedRole = localStorage.getItem('gather_user_role');
+            if (savedRole) setUserRole(savedRole);
+            // Refresh role from DB in background (non-blocking)
+            determineUserRole(currentSession.user.email, currentSession.user.id)
+              .then(freshRole => {
+                setUserRole(freshRole);
+                localStorage.setItem('gather_user_role', freshRole);
+              })
+              .catch(() => {}); // cached role is fine as fallback
           }
         } catch (e) {
           console.error('Visibility session check failed:', e);
