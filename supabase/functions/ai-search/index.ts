@@ -33,6 +33,7 @@ serve(async (req) => {
 
     // Fetch fellows with their focus tags from DB
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+    const dbStart = Date.now();
 
     const [fellowsRes, tagsRes, categoriesRes, focusTagsRes] = await Promise.all([
       supabase.from("fellows").select("id, first_name, last_name, program, cohort, city, country, region, organization, job_title, biography, community_area, languages, focus_area_1, focus_area_2, focus_area_3").eq("status", "Alumni"),
@@ -51,7 +52,7 @@ serve(async (req) => {
     const categories = Array.isArray(categoriesRes.data) ? categoriesRes.data : [];
     const focusTags = Array.isArray(focusTagsRes.data) ? focusTagsRes.data : [];
 
-    console.log(`Loaded ${fellows.length} fellows, ${fellowTags.length} tags, ${categories.length} categories, ${focusTags.length} focus tags`);
+    console.log(`DB queries took ${Date.now() - dbStart}ms. Loaded ${fellows.length} fellows, ${fellowTags.length} tags, ${categories.length} categories, ${focusTags.length} focus tags`);
 
     // Build tag lookup
     const tagMap: Record<string, { name: string; category: string }> = {};
@@ -109,33 +110,49 @@ ${fellowSummaries}`;
     ];
 
     // Call Claude API with Haiku (higher rate limits) and prompt caching
-    const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "anthropic-beta": "prompt-caching-2024-07-31",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
-        system: [
-          {
-            type: "text",
-            text: systemPrompt,
-            cache_control: { type: "ephemeral" },
-          }
-        ],
-        messages,
-      }),
-    });
+    console.log(`Calling Claude API with ${fellows.length} fellows, prompt length: ${systemPrompt.length} chars`);
+    const abortController = new AbortController();
+    const apiTimeout = setTimeout(() => abortController.abort(), 25000); // 25s timeout
+
+    let claudeResponse;
+    try {
+      claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-beta": "prompt-caching-2024-07-31",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: [
+            {
+              type: "text",
+              text: systemPrompt,
+              cache_control: { type: "ephemeral" },
+            }
+          ],
+          messages,
+        }),
+        signal: abortController.signal,
+      });
+    } catch (fetchErr) {
+      clearTimeout(apiTimeout);
+      if (fetchErr.name === "AbortError") {
+        throw new Error("Claude API timed out after 25 seconds");
+      }
+      throw fetchErr;
+    }
+    clearTimeout(apiTimeout);
 
     const claudeData = await claudeResponse.json();
+    console.log("Claude API status:", claudeResponse.status, "usage:", claudeData.usage);
 
     if (!claudeResponse.ok) {
-      console.error("Claude API error:", claudeData);
-      throw new Error(claudeData.error?.message || "Claude API error");
+      console.error("Claude API error:", JSON.stringify(claudeData));
+      throw new Error(claudeData.error?.message || `Claude API error (${claudeResponse.status})`);
     }
 
     const responseText = claudeData.content?.[0]?.text || "";
