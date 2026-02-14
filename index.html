@@ -3359,6 +3359,9 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
       twitter: fellow.twitter || '',
       website: fellow.website || '',
       languages: fellow.languages || '',
+      gender: fellow.gender || '',
+      birthday: fellow.birthday || '',
+      hide_birthday_year: fellow.hide_birthday_year || false,
     };
     // Admin can edit additional fields
     if (isAdmin) {
@@ -3375,6 +3378,9 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
     setSaving(true);
     // Prepare update data
     const updateData = { ...editData };
+    // Convert empty birthday to null for DB
+    if (!updateData.birthday) updateData.birthday = null;
+    if (!updateData.gender) updateData.gender = null;
     // Convert alternate_emails from comma-separated string back to array (admin only)
     if (isAdmin && typeof updateData.alternate_emails === 'string') {
       updateData.alternate_emails = updateData.alternate_emails
@@ -3658,6 +3664,32 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                   <label className="block text-sm text-gray-500 mb-1">Organization</label>
                   <input type="text" value={editData.organization} onChange={(e) => setEditData(d => ({ ...d, organization: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1">Gender</label>
+                    <select
+                      value={editData.gender}
+                      onChange={(e) => setEditData(d => ({ ...d, gender: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange bg-white"
+                    >
+                      <option value="">Prefer not to say</option>
+                      <option value="Female">Female</option>
+                      <option value="Male">Male</option>
+                      <option value="Non-binary">Non-binary</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1">Birthday</label>
+                    <input type="date" value={editData.birthday} onChange={(e) => setEditData(d => ({ ...d, birthday: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
+                  </div>
+                </div>
+                {editData.birthday && (
+                  <label className="flex items-center gap-2 text-sm text-gray-600 -mt-2">
+                    <input type="checkbox" checked={editData.hide_birthday_year} onChange={(e) => setEditData(d => ({ ...d, hide_birthday_year: e.target.checked }))} className="rounded border-gray-300" />
+                    Hide my birth year
+                  </label>
+                )}
                 <div>
                   <label className="block text-sm text-gray-500 mb-1">Email</label>
                   <input type="email" value={editData.email} onChange={(e) => setEditData(d => ({ ...d, email: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-goldin-orange" />
@@ -3831,6 +3863,40 @@ function FellowProfileModal({ fellow, isOpen, onClose, onLogInteraction }) {
                           <div className="flex-1">
                             <p className="text-xs text-gray-500">Languages</p>
                             <p className="text-gray-900 font-medium">{fellow.languages}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {fellow.gender && (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          <div className="w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs text-gray-500">Gender</p>
+                            <p className="text-gray-900 font-medium">{fellow.gender}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {fellow.birthday && (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0A1.75 1.75 0 003 15.546m18 0v2.704M3 15.546v2.704M12 3v6m-3-3h6m-6 6h6a3 3 0 013 3v.546" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs text-gray-500">Birthday</p>
+                            <p className="text-gray-900 font-medium">{(() => {
+                              const d = new Date(fellow.birthday + 'T00:00:00');
+                              if (fellow.hide_birthday_year) {
+                                return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+                              }
+                              return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                            })()}</p>
                           </div>
                         </div>
                       )}

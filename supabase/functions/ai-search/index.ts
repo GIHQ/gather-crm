@@ -36,7 +36,7 @@ serve(async (req) => {
     const dbStart = Date.now();
 
     const [fellowsRes, tagsRes, categoriesRes, focusTagsRes] = await Promise.all([
-      supabase.from("fellows").select("id, first_name, last_name, program, cohort, city, country, region, organization, job_title, biography, community_area, languages, focus_area_1, focus_area_2, focus_area_3").eq("status", "Alumni"),
+      supabase.from("fellows").select("id, first_name, last_name, program, cohort, city, country, region, organization, job_title, biography, community_area, languages, gender, focus_area_1, focus_area_2, focus_area_3").eq("status", "Alumni"),
       supabase.from("fellow_focus_tags").select("fellow_id, tag_id"),
       supabase.from("focus_categories").select("id, name, slug"),
       supabase.from("focus_tags").select("id, name, category_id"),
@@ -84,12 +84,13 @@ serve(async (req) => {
         tags.length > 0 ? tags.map(t => t.split(" (")[0]).join(",") : "",
         f.community_area || "",
         f.languages || "",
+        f.gender || "",
       ];
       return parts.join("|");
     }).join("\n");
 
     // Build the system prompt — fellow data is pipe-delimited:
-    // id|name|program|cohort|city,country|org|title|tags|neighborhood|languages
+    // id|name|program|cohort|city,country|org|title|tags|neighborhood|languages|gender
     const systemPrompt = `You are GATHER.ai, an AI assistant for the Goldin Institute alumni network (${fellows.length} fellows). Programs: CPF (Chicago Peace Fellows), GGF (Goldin Global Fellows), ESP (Global Spanish).
 
 Find relevant fellows and respond in JSON:
@@ -97,7 +98,7 @@ Find relevant fellows and respond in JSON:
 
 Return 3-8 matches. Be conversational. If vague, ask clarifying questions. Empty fellows array for general chat.
 
-Fellow data (id|name|program|cohort|city,country|org|title|tags|neighborhood|languages):
+Fellow data (id|name|program|cohort|city,country|org|title|tags|neighborhood|languages|gender):
 ${fellowSummaries}`;
 
     // Build messages for Claude (support multi-turn conversation)
