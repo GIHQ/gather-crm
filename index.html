@@ -773,22 +773,30 @@ function AppProvider({ children }) {
         setUser(userData);
         localStorage.setItem('gather_user', JSON.stringify(userData));
 
-        // Fetch user role and link user_id
-        const role = await determineUserRole(session.user.email, session.user.id);
-        setUserRole(role);
-        localStorage.setItem('gather_user_role', role);
+        try {
+          // Fetch user role and link user_id
+          const role = await determineUserRole(session.user.email, session.user.id);
+          setUserRole(role);
+          localStorage.setItem('gather_user_role', role);
 
-        // If user got VIEWER role and isn't a Goldin email, check for profile claim
-        const isGoldinEmail = session.user.email?.toLowerCase().endsWith('@goldininstitute.org') ||
-                              session.user.email?.toLowerCase().endsWith('@chicagopeacefellows.org');
-        if (role === ROLES.VIEWER && !isGoldinEmail) {
-          // Find potential matches for this email
-          const matches = await findPotentialMatches(session.user.email);
-          if (matches.fellows.length > 0 || matches.teamMembers.length > 0) {
-            setPotentialMatches(matches);
-            setNeedsProfileClaim(true);
+          // If user got VIEWER role and isn't a Goldin email, check for profile claim
+          const isGoldinEmail = session.user.email?.toLowerCase().endsWith('@goldininstitute.org') ||
+                                session.user.email?.toLowerCase().endsWith('@chicagopeacefellows.org');
+          if (role === ROLES.VIEWER && !isGoldinEmail) {
+            // Find potential matches for this email
+            const matches = await findPotentialMatches(session.user.email);
+            if (matches.fellows.length > 0 || matches.teamMembers.length > 0) {
+              setPotentialMatches(matches);
+              setNeedsProfileClaim(true);
+            }
           }
+        } catch (roleErr) {
+          console.error('Role lookup failed, using cached role:', roleErr);
+          // Fall back to cached role from localStorage
+          const cachedRole = localStorage.getItem('gather_user_role');
+          if (cachedRole) setUserRole(cachedRole);
         }
+
         // Log sign-in event (not token refreshes or session restores)
         if (event === 'SIGNED_IN') {
           supabase.from('login_events').insert({
@@ -852,7 +860,32 @@ function AppProvider({ children }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Re-check session when app returns from background (Safari/PWA loses events)
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (currentSession?.user) {
+            const userData = {
+              id: currentSession.user.id,
+              email: currentSession.user.email,
+              name: currentSession.user.user_metadata?.full_name || currentSession.user.email?.split('@')[0],
+              avatar: currentSession.user.user_metadata?.avatar_url,
+            };
+            setUser(userData);
+            localStorage.setItem('gather_user', JSON.stringify(userData));
+          }
+        } catch (e) {
+          console.error('Visibility session check failed:', e);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const login = async (userData, skipRoleLookup = false) => {
@@ -1647,7 +1680,7 @@ function LoginScreen({ onLogin, authError }) {
     }
     setVerifying(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({
+      const { data, error } = await supabase.auth.verifyOtp({
         email,
         token: otpCode,
         type: 'email'
@@ -1655,8 +1688,17 @@ function LoginScreen({ onLogin, authError }) {
       if (error) {
         alert('Invalid or expired code. Please try again.');
         setVerifying(false);
+      } else if (data?.session?.user) {
+        // Explicitly handle success — don't rely solely on onAuthStateChange
+        const sessionUser = data.session.user;
+        const userData = {
+          id: sessionUser.id,
+          email: sessionUser.email,
+          name: sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0],
+        };
+        console.log('OTP verified successfully, calling onLogin for:', userData.email);
+        onLogin(userData);
       }
-      // On success, onAuthStateChange SIGNED_IN handler will fire automatically
     } catch (err) {
       console.error('verifyOtp failed:', err);
       alert('Verification failed. Please check your connection and try again.');
