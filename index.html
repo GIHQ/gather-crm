@@ -946,12 +946,12 @@ function AppProvider({ children }) {
       setUserRole(ROLES.VIEWER);
       localStorage.setItem('gather_user_role', ROLES.VIEWER);
     } else if (userData.email) {
-      const role = await determineUserRole(userData.email);
+      const role = await determineUserRole(userData.email, userData.id || null);
       setUserRole(role);
       localStorage.setItem('gather_user_role', role);
     }
   };
-  
+
 
   const completeOnboarding = (notifSettings) => {
     setNotificationSettings(notifSettings);
@@ -1035,7 +1035,7 @@ function AppProvider({ children }) {
       );
 
       const phase1 = Promise.allSettled([
-        supabase.from('fellows').select('id,first_name,last_name,email,phone,program,cohort,city,country,organization,job_title,biography,photo_url,status,user_id,working_on,site_id,alternate_emails,linkedin,twitter,instagram,facebook,website,tiktok,linkedin_org,twitter_org,instagram_org,facebook_org,website_org,birthday,gender,hide_birthday_year,created_at,updated_at').eq('status', 'Alumni'),
+        supabase.from('fellows').select('id,first_name,last_name,email,phone,program,cohort,city,country,organization,job_title,biography,photo_url,status,user_id,working_on,site_id,alternate_emails,linkedin,twitter,instagram,facebook,website,tiktok,linkedin_org,twitter_org,instagram_org,facebook_org,website_org,birthday,gender,hide_birthday_year,last_contact,last_news_search,created_at,updated_at').eq('status', 'Alumni'),
         supabase.from('team_members').select('*').eq('is_active', true).order('last_name'),
         supabase.from('interactions').select('*').order('created_at', { ascending: false }).limit(50),
       ]);
@@ -1061,7 +1061,7 @@ function AppProvider({ children }) {
       const phase2Results = await Promise.allSettled([
         supabase.from('focus_categories').select('*').order('sort_order'),
         supabase.from('focus_tags').select('*').eq('approved', true).order('name'),
-        supabase.from('activities').select('id,fellow_id,platform,title,url,snippet,discovered_at,dismissed,search_term').eq('dismissed', false).order('discovered_at', { ascending: false }).limit(200),
+        supabase.from('activities').select('id,fellow_id,activity_type,source_name,source_url,source_domain,title,snippet,image_url,published_at,discovered_at,search_query,relevance_score,verified,dismissed,notified').eq('dismissed', false).order('discovered_at', { ascending: false }).limit(200),
         supabase.from('login_events').select('*').order('logged_in_at', { ascending: false }).limit(50),
         supabase.from('fellow_focus_tags').select('fellow_id, tag_id, is_primary'),
       ]);
@@ -1079,7 +1079,7 @@ function AppProvider({ children }) {
     try {
       const phase3Results = await Promise.allSettled([
         supabase.from('sites').select('*').order('name'),
-        supabase.from('fellows').select('id,first_name,last_name,email,phone,program,cohort,city,country,organization,job_title,biography,photo_url,status,user_id,working_on,site_id,alternate_emails,birthday,gender,hide_birthday_year,created_at,updated_at').eq('status', 'Current'),
+        supabase.from('fellows').select('id,first_name,last_name,email,phone,program,cohort,city,country,organization,job_title,biography,photo_url,status,user_id,working_on,site_id,alternate_emails,birthday,gender,hide_birthday_year,last_contact,last_news_search,created_at,updated_at').eq('status', 'Current'),
         supabase.from('events').select('*').order('start_time', { ascending: false }),
         supabase.from('event_attendance').select('*'),
       ]);
