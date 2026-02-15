@@ -194,6 +194,8 @@ gather-crm/
 │       │   └── AuthContext.jsx   # Auth state, role resolution, hasRole()
 │       ├── hooks/               # (empty — available for custom hooks)
 │       ├── components/
+│       │   ├── ui/
+│       │   │   └── Modal.jsx        # Reusable modal + FormField + input class helpers
 │       │   └── layout/
 │       │       ├── AppShell.jsx  # Sidebar + header + main content area
 │       │       └── Sidebar.jsx   # NavLink sidebar with role-based sections
@@ -201,11 +203,11 @@ gather-crm/
 │           ├── LoginPage.jsx         # Email OTP login
 │           ├── DashboardPage.jsx     # Stats + recent activity feeds
 │           ├── CohortsPage.jsx       # Live/archived cohort grid
-│           ├── CohortDetailPage.jsx  # Tabs: Roster, Attendance, Curriculum, Events
+│           ├── CohortDetailPage.jsx  # Tabs + edit settings, roster mgmt, add events
 │           ├── AlumniPage.jsx        # Directory with search + program/country filters
-│           ├── ContactProfilePage.jsx # Full profile with focus tags, CRM, interactions
-│           ├── InteractionsPage.jsx  # Interaction list with search + type filter
-│           ├── ActivitiesPage.jsx    # Activity list with search + type filter
+│           ├── ContactProfilePage.jsx # Profile + edit modal + log interaction
+│           ├── InteractionsPage.jsx  # List + log interaction w/ contact picker
+│           ├── ActivitiesPage.jsx    # List + add activity w/ contact picker
 │           ├── TeamPage.jsx          # Team member cards (admin+)
 │           └── SettingsPage.jsx      # Placeholder (admin+)
 ├── migrations/
@@ -230,12 +232,12 @@ Results:
 
 ## Current State (what's built)
 
-### Working
+### Working — display
 - Auth (email OTP login, role resolution, role-based UI gating)
-- Client-side routing (createBrowserRouter, no reload needed)
+- Client-side routing (createBrowserRouter, key-based remount on nav)
 - Dashboard with stat cards + recent interaction/activity feeds
 - Alumni directory with search, program filter, country filter
-- Contact profiles showing: photo, bio, org, location, focus tags by category, social links, birthday, gender, languages, cohort history, CRM notes, recent interactions
+- Contact profiles: photo, bio, org, location, focus tags by category, social links, birthday, gender, languages, cohort history, staff notes, recent interactions, quick-action buttons (email/call/text/LinkedIn/WhatsApp)
 - Cohorts page with live/archived toggle
 - Cohort detail with 4 tabs: Roster, Attendance (color-coded grid), Curriculum (progress bars), Events
 - Interactions page with full list, search, type filter, contact links
@@ -243,9 +245,21 @@ Results:
 - Team management page with photo cards, roles, contact links
 - Mobile-responsive sidebar with hamburger menu
 
+### Working — CRUD (Phase 1 complete)
+- **Edit contacts** — modal form with all fields (identity, professional, location, social, staff notes). Pencil icon on profile header.
+- **Log interactions** — from contact profile (pre-filled) or from Interactions page (with contact search/picker). Fields: type, date, title, notes.
+- **Log activities** — from Activities page with contact picker. Fields: type, date, title, source URL, source name, snippet.
+- **Edit cohort settings** — gear icon (admin) to update name, program, year, city, country, status.
+- **Manage cohort roster** — "Add Member" with contact picker + role selector. Hover-to-remove on each member card.
+- **Create events** — "Add Event" on Events tab: title, type, start/end time, location, facilitator, required flag.
+- **Reusable Modal component** — `components/ui/Modal.jsx` with FormField, inputClass, selectClass, textareaClass exports.
+
 ### Not yet built
-- **CRUD operations** — all pages are read-only. No create/edit/delete for contacts, interactions, activities, cohorts, events, etc.
+- **Record attendance** — grid is read-only, no click-to-toggle yet
+- **Event planning/debrief** — lifecycle data model documented but tables + UI not built
+- **Manage focus tags** — display works, but no assign/remove UI on contact profiles
 - **Settings page** — still placeholder
+- **Team role management** — display works, no add/remove/change roles
 - **Error boundaries** — convention says every page should have them, none added yet
 - **Cohort permissions** — `cohort_permissions` table exists but no UI
 - **Announcements & resources** — tables exist, no UI
@@ -260,15 +274,15 @@ Results:
 
 ## Roadmap (suggested priority order)
 
-### Phase 1 — Core CRUD (make it usable for daily staff work)
-1. **Edit contact profiles** — inline editing or edit modal for staff to update contact fields
-2. **Log interactions** — "Add interaction" form on contact profile and interactions page
-3. **Log activities** — "Add activity" form on activities page
-4. **Edit cohort settings** — update cohort name, status, dates
-5. **Manage cohort roster** — add/remove members from cohorts
+### Phase 1 — Core CRUD ~~COMPLETE~~
+1. ~~**Edit contact profiles**~~ — edit modal with all fields
+2. ~~**Log interactions**~~ — from contact profile + interactions page with contact picker
+3. ~~**Log activities**~~ — from activities page with contact picker
+4. ~~**Edit cohort settings**~~ — name, program, year, status (admin)
+5. ~~**Manage cohort roster**~~ — add/remove members with role assignment
+6. ~~**Create events**~~ — title, type, time, location, facilitator, required flag (moved up from Phase 2)
 
 ### Phase 2 — Staff workflows & event lifecycle
-6. **Manage events** — create/edit events within a cohort
 7. **Record attendance** — click-to-toggle attendance grid
 8. **Event planning** — pre-event checklists (venue, food, agenda, speakers, room setup, documentation plan) with completion toggles. Default templates from app_settings.
 9. **Event debrief** — post-event evaluation: reflections, attendance verification, photo/video uploads, program book summary, custom fields
