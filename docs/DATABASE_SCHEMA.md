@@ -32,12 +32,17 @@ The main table storing all 292 Goldin Institute fellows.
 | job_title | text | Job title |
 | biography | text | Biography/description |
 | photo_url | text | URL to photo in Supabase Storage |
-| linkedin_url | text | LinkedIn profile |
-| linkedin_org | text | Organization LinkedIn |
-| twitter_org | text | Organization Twitter |
-| instagram_org | text | Organization Instagram |
-| facebook_org | text | Organization Facebook |
-| website_org | text | Organization website |
+| linkedin | text | Personal LinkedIn profile |
+| twitter | text | Personal Twitter/X profile |
+| instagram | text | Personal Instagram profile |
+| facebook | text | Personal Facebook profile |
+| website | text | Personal website |
+| linkedin_org | text | Organization LinkedIn (Migration 019) |
+| twitter_org | text | Organization Twitter/X (Migration 019) |
+| instagram_org | text | Organization Instagram (Migration 019) |
+| facebook_org | text | Organization Facebook (Migration 019) |
+| website_org | text | Organization website (Migration 019) |
+| tiktok | text | TikTok profile (Migration 019) |
 | languages | text | Languages spoken |
 | focus_area_1 | text | Primary focus area (free text) |
 | focus_area_2 | text | Secondary focus area (free text) |
@@ -49,6 +54,9 @@ The main table storing all 292 Goldin Institute fellows.
 | working_on | text | Fellow's current project/focus (community feature) |
 | working_on_updated_at | timestamptz | When working_on was last changed |
 | last_news_search | timestamptz | When fellow was last included in news scan |
+| birthday | date | Date of birth (Migration 017) |
+| gender | text | Gender (Migration 017) |
+| hide_birthday_year | boolean | Privacy flag for hiding birth year (Migration 017) |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
