@@ -76,15 +76,15 @@ export default function LoginPage() {
               <input
                 type="text"
                 value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
                 placeholder="000000"
-                maxLength={6}
+                maxLength={8}
                 required
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm text-center tracking-widest text-lg font-mono focus:outline-none focus:ring-2 focus:ring-goldin/50 focus:border-goldin"
               />
               <button
                 type="submit"
-                disabled={sending || otpCode.length !== 6}
+                disabled={sending || otpCode.length < 6}
                 className="w-full mt-4 py-3 bg-goldin text-white rounded-xl font-semibold text-sm hover:bg-goldin-dark transition-colors disabled:opacity-50"
               >
                 {sending ? 'Verifying...' : 'Verify code'}
