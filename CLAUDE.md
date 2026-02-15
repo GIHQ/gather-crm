@@ -82,6 +82,8 @@ Migration: `migrations/v2/001_foundation.sql` — run in Supabase SQL Editor.
 ### Cohort Management
 - **events** — tied to cohorts, with facilitator/type/required fields
 - **event_attendance** — per-contact attendance (P/L/E/A)
+- **event_planning** — *(planned)* pre-event checklists and logistics per event
+- **event_debrief** — *(planned)* post-event evaluation and documentation per event
 - **curricula** → **curriculum_chapters** → **curriculum_items** — hierarchical curriculum
 - **contact_curriculum_progress** — per-item completion tracking
 - **contact_chapter_notes** — staff notes per contact per chapter
@@ -101,6 +103,39 @@ Migration: `migrations/v2/001_foundation.sql` — run in Supabase SQL Editor.
 - **content_translations** — translation cache
 - **app_errors** — client-side error reporting
 - **profile_claim_requests** — identity verification flow
+
+## Cohort Event Lifecycle
+
+Each cohort event follows a **Planning → Event → Post-Event** lifecycle:
+
+### Planning Phase (pre-event)
+Checklist-style items with completion toggles. Staff prepare logistics before an event:
+- Venue secured
+- Food/catering arranged
+- Documentation plan (who's capturing notes, who's photographing)
+- Agenda drafted and shared
+- Room setup notes (AV, seating layout, materials)
+- Speakers/facilitators confirmed
+- Custom checklist items (staff can add their own per event)
+
+### Event Phase (day-of)
+- Attendance tracking (Present / Late / Excused / Absent)
+- Event metadata: type, facilitator, date/time, location, required flag
+
+### Post-Event Phase (debrief & evaluation)
+Staff complete after each event:
+- "What did you learn?" — facilitator/staff reflections
+- Attendance completion verified (all marked?)
+- Photos/video uploaded (links or file references)
+- Summary written for program book
+- Key takeaways / notes for next session
+- Custom debrief fields (staff can add their own)
+
+### Data Model Vision
+- `event_planning` table: per-event checklist items with `completed` boolean, `assigned_to`, `notes`, `due_date`
+- `event_debrief` table: per-event post-event data with `reflections`, `summary`, `media_urls` (JSONB array), `attendance_verified`, `custom_fields` (JSONB)
+- Both tables reference `events.id` as FK — so every event in a cohort can have planning + debrief data
+- Default checklist templates can be stored in `app_settings` and auto-populated when a new event is created
 
 ## Security Model
 
@@ -232,26 +267,28 @@ Results:
 4. **Edit cohort settings** — update cohort name, status, dates
 5. **Manage cohort roster** — add/remove members from cohorts
 
-### Phase 2 — Staff workflows
+### Phase 2 — Staff workflows & event lifecycle
 6. **Manage events** — create/edit events within a cohort
 7. **Record attendance** — click-to-toggle attendance grid
-8. **Manage focus tags** — assign/remove tags on contact profiles
-9. **Settings page** — app_settings CRUD for admins (thresholds, weights)
-10. **Team role management** — add/remove/change roles on the Team page
+8. **Event planning** — pre-event checklists (venue, food, agenda, speakers, room setup, documentation plan) with completion toggles. Default templates from app_settings.
+9. **Event debrief** — post-event evaluation: reflections, attendance verification, photo/video uploads, program book summary, custom fields
+10. **Manage focus tags** — assign/remove tags on contact profiles
+11. **Settings page** — app_settings CRUD for admins (thresholds, weights, default checklist templates)
+12. **Team role management** — add/remove/change roles on the Team page
 
 ### Phase 3 — Fellow experience
-11. **Fellow self-service profile** — fellows edit their own profile (bio, photo, social, org)
-12. **Profile claim flow** — new users claim an existing contact record
-13. **Announcements** — display announcements to fellows after login
-14. **Resources** — shared documents/links page
+13. **Fellow self-service profile** — fellows edit their own profile (bio, photo, social, org)
+14. **Profile claim flow** — new users claim an existing contact record
+15. **Announcements** — display announcements to fellows after login
+16. **Resources** — shared documents/links page
 
 ### Phase 4 — Analytics & polish
-15. **Engagement scoring** — computed metrics from attendance + interactions + platform activity
-16. **Dashboard analytics** — charts, trends, at-risk alerts
-17. **Data export** — CSV/PDF for contacts, attendance, interactions
-18. **Error boundaries** — wrap every page in an error boundary component
-19. **Pagination / virtual scroll** — for future-proofing beyond 500 contacts
-20. **Ad hoc lists** — custom data collection UI
+17. **Engagement scoring** — computed metrics from attendance + interactions + platform activity
+18. **Dashboard analytics** — charts, trends, at-risk alerts
+19. **Data export** — CSV/PDF for contacts, attendance, interactions
+20. **Error boundaries** — wrap every page in an error boundary component
+21. **Pagination / virtual scroll** — for future-proofing beyond 500 contacts
+22. **Ad hoc lists** — custom data collection UI
 
 ## Design System
 
