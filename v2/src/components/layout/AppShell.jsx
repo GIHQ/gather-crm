@@ -1,48 +1,33 @@
-import { NavLink } from 'react-router-dom'
+import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import Sidebar, { icons } from './Sidebar'
 
 export default function AppShell({ children }) {
-  const { contact, role, signOut, isTeam } = useAuth()
+  const { contact, signOut } = useAuth()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans">
-      {/* Top nav */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <h1 className="text-xl font-bold text-goldin">GATHER</h1>
-            <nav className="flex gap-1">
-              {isTeam && (
-                <NavLink
-                  to="/cohorts"
-                  className={({ isActive }) =>
-                    `px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-goldin/10 text-goldin'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`
-                  }
-                >
-                  Cohorts
-                </NavLink>
-              )}
-              <NavLink
-                to="/alumni"
-                className={({ isActive }) =>
-                  `px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-goldin/10 text-goldin'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`
-                }
-              >
-                Alumni
-              </NavLink>
-            </nav>
-          </div>
+    <div className="min-h-screen bg-gray-50 font-sans flex">
+      {/* Sidebar */}
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
+      {/* Main area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-30 h-14 flex items-center justify-between px-4">
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden text-gray-500 hover:text-gray-700"
+          >
+            {icons.menu}
+          </button>
+
+          {/* Spacer for desktop (sidebar handles logo) */}
+          <div className="hidden lg:block" />
+
+          {/* User area */}
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400 capitalize">{role}</span>
             {contact && (
               <span className="text-sm text-gray-700">
                 {contact.first_name}
@@ -55,13 +40,13 @@ export default function AppShell({ children }) {
               Sign out
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {children}
-      </main>
+        {/* Page content */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }
