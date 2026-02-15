@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --color-goldin: #E87722;
+  --color-goldin-dark: #D56A1C;
+  --color-status-green: #10B981;
+  --color-status-yellow: #F59E0B;
+  --color-status-red: #EF4444;
+}
