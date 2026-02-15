@@ -10,16 +10,18 @@
 cd v2
 npm install
 npm run dev        # http://localhost:5173
+npm run build      # production build → v2/dist/
 ```
 
 ## Tech Stack
 
 | Layer | v1 | v2 |
 |-------|----|----|
-| Frontend | Single HTML + CDN React | Vite + React + Tailwind |
+| Frontend | Single HTML + CDN React | Vite + React 19 + Tailwind v4 |
+| Routing | Hash-based | React Router v7 (`createBrowserRouter` + `RouterProvider`) |
 | Backend | Supabase (pwazurumpzydxyppbvee) | Supabase (ollexkvipnkkyzejmahh) — separate project |
 | Auth | Email OTP | Email OTP (same method, new project) |
-| Hosting | Netlify (gathertracker) | Netlify (gather-crm) |
+| Hosting | Netlify (gathertracker) | Netlify (gather-crm) — SPA `_redirects` configured |
 
 ## Architecture Decisions
 
@@ -37,12 +39,30 @@ npm run dev        # http://localhost:5173
 
 7. **UUIDs everywhere.** v1 used text IDs like 'P001'. v2 uses uuid PKs. The `legacy_id` column on contacts preserves v1 IDs for migration.
 
+## Routing
+
+Routes are defined in `v2/src/main.jsx` using `createBrowserRouter` (React Router v7 data API):
+
+```
+/                    → DashboardPage
+/cohorts             → CohortsPage          (team+)
+/cohorts/:id         → CohortDetailPage     (team+)
+/alumni              → AlumniPage           (all authenticated)
+/contacts/:id        → ContactProfilePage   (all authenticated)
+/interactions        → InteractionsPage     (team+)
+/activities          → ActivitiesPage       (team+)
+/team                → TeamPage             (admin+)
+/settings            → SettingsPage         (admin+)
+```
+
+`App.jsx` is the root layout route — handles auth gating (loading → login → AppShell + `<Outlet />`).
+
 ## Database Schema (v2)
 
 Migration: `migrations/v2/001_foundation.sql` — run in Supabase SQL Editor.
 
 ### Core
-- **contacts** — unified people table (v1 fellows + team_members merged)
+- **contacts** — unified people table (v1 fellows + team_members merged), 52 columns
 - **contact_roles** — permission roles per contact (super_admin, admin, manager, team, fellow, viewer)
 
 ### Cohorts
@@ -51,8 +71,8 @@ Migration: `migrations/v2/001_foundation.sql` — run in Supabase SQL Editor.
 - **cohort_permissions** — per-team-member per-cohort access (edit/view/none)
 
 ### CRM
-- **interactions** — staff touchpoints with contacts
-- **activities** — news/social media mentions
+- **interactions** — staff touchpoints with contacts (type, date, title, notes, private flag)
+- **activities** — news/social media mentions (type, title, source_url, snippet)
 
 ### Focus Areas
 - **focus_categories** — Skills, Populations, Focus Areas, Community Areas
@@ -111,7 +131,7 @@ All stored in `.env.local` (root) and `v2/.env.local` — both gitignored.
 - **v2 Supabase URL:** https://ollexkvipnkkyzejmahh.supabase.co
 - **v2 Anon Key:** in .env.local
 - **v2 DB Password:** in .env.local
-- **v2 Service Role Key:** TBD (not yet provided)
+- **v2 Service Role Key:** in .env.local
 
 ## File Structure
 
@@ -126,16 +146,33 @@ gather-crm/
 │   ├── tailwind.config.js
 │   ├── postcss.config.js
 │   ├── .env.local               # v2 Supabase credentials (gitignored)
+│   ├── migrate-v1-to-v2.mjs    # Data migration script (run locally)
+│   ├── public/
+│   │   └── _redirects           # Netlify SPA routing
 │   └── src/
-│       ├── main.jsx
-│       ├── index.css
-│       ├── App.jsx
+│       ├── main.jsx             # Router + route definitions
+│       ├── index.css            # Tailwind base + custom tokens
+│       ├── App.jsx              # Root layout (auth gate + AppShell + Outlet)
 │       ├── lib/
-│       │   └── supabase.js
+│       │   └── supabase.js      # Supabase client init
 │       ├── contexts/
-│       ├── hooks/
+│       │   └── AuthContext.jsx   # Auth state, role resolution, hasRole()
+│       ├── hooks/               # (empty — available for custom hooks)
 │       ├── components/
+│       │   └── layout/
+│       │       ├── AppShell.jsx  # Sidebar + header + main content area
+│       │       └── Sidebar.jsx   # NavLink sidebar with role-based sections
 │       └── pages/
+│           ├── LoginPage.jsx         # Email OTP login
+│           ├── DashboardPage.jsx     # Stats + recent activity feeds
+│           ├── CohortsPage.jsx       # Live/archived cohort grid
+│           ├── CohortDetailPage.jsx  # Tabs: Roster, Attendance, Curriculum, Events
+│           ├── AlumniPage.jsx        # Directory with search + program/country filters
+│           ├── ContactProfilePage.jsx # Full profile with focus tags, CRM, interactions
+│           ├── InteractionsPage.jsx  # Interaction list with search + type filter
+│           ├── ActivitiesPage.jsx    # Activity list with search + type filter
+│           ├── TeamPage.jsx          # Team member cards (admin+)
+│           └── SettingsPage.jsx      # Placeholder (admin+)
 ├── migrations/
 │   └── v2/
 │       └── 001_foundation.sql   # Complete v2 schema
@@ -144,15 +181,77 @@ gather-crm/
 └── supabase/functions/          # v1 edge functions (reference only)
 ```
 
-## v1 Data Migration Notes
+## v1 Data Migration
 
-When v2 is ready, a migration script will:
-1. Map v1 `fellows` (307 alumni) → v2 `contacts` with `legacy_id` preserving P001/CF-CHI-001 IDs
-2. Map v1 `team_members` (11 staff) → v2 `contacts` + `contact_roles`
-3. Staff who are also fellows → one contact record, two roles
-4. Carry over ALL fields including birthday, gender, org social links, tiktok, languages, community_area
-5. Map v1 `sites` → v2 `cohorts` (with status='archived' for past years)
-6. Map all interactions, activities, focus tags, events, attendance, etc.
+**Status: COMPLETE.** Script at `v2/migrate-v1-to-v2.mjs`. Run locally with `node migrate-v1-to-v2.mjs`.
+
+Results:
+- 307 fellows migrated (292 updated existing, 15 inserted new) with all fields: photos, bios, social links, focus areas, etc.
+- 12 team member roles assigned
+- 3 cohorts matched, 5 cohort memberships created
+- 19 interactions migrated
+- 164 focus tags mapped, 720 contact-tag assignments
+- Legacy IDs preserved in `legacy_id` column
+
+## Current State (what's built)
+
+### Working
+- Auth (email OTP login, role resolution, role-based UI gating)
+- Client-side routing (createBrowserRouter, no reload needed)
+- Dashboard with stat cards + recent interaction/activity feeds
+- Alumni directory with search, program filter, country filter
+- Contact profiles showing: photo, bio, org, location, focus tags by category, social links, birthday, gender, languages, cohort history, CRM notes, recent interactions
+- Cohorts page with live/archived toggle
+- Cohort detail with 4 tabs: Roster, Attendance (color-coded grid), Curriculum (progress bars), Events
+- Interactions page with full list, search, type filter, contact links
+- Activities page with full list, search, type filter, source links, DOMPurify sanitization
+- Team management page with photo cards, roles, contact links
+- Mobile-responsive sidebar with hamburger menu
+
+### Not yet built
+- **CRUD operations** — all pages are read-only. No create/edit/delete for contacts, interactions, activities, cohorts, events, etc.
+- **Settings page** — still placeholder
+- **Error boundaries** — convention says every page should have them, none added yet
+- **Cohort permissions** — `cohort_permissions` table exists but no UI
+- **Announcements & resources** — tables exist, no UI
+- **Ad hoc lists** — tables exist, no UI
+- **Profile claim flow** — `profile_claim_requests` table exists, no UI
+- **Login event tracking** — `login_events` table exists, not wired up
+- **App error reporting** — `app_errors` table exists, not wired up
+- **Fellow self-service** — fellows can log in but can't edit their own profile
+- **Engagement scoring** — no computed engagement metrics yet
+- **Data export** — no CSV/PDF export capability
+- **Pagination** — pages load all records (fine for 307 contacts, won't scale)
+
+## Roadmap (suggested priority order)
+
+### Phase 1 — Core CRUD (make it usable for daily staff work)
+1. **Edit contact profiles** — inline editing or edit modal for staff to update contact fields
+2. **Log interactions** — "Add interaction" form on contact profile and interactions page
+3. **Log activities** — "Add activity" form on activities page
+4. **Edit cohort settings** — update cohort name, status, dates
+5. **Manage cohort roster** — add/remove members from cohorts
+
+### Phase 2 — Staff workflows
+6. **Manage events** — create/edit events within a cohort
+7. **Record attendance** — click-to-toggle attendance grid
+8. **Manage focus tags** — assign/remove tags on contact profiles
+9. **Settings page** — app_settings CRUD for admins (thresholds, weights)
+10. **Team role management** — add/remove/change roles on the Team page
+
+### Phase 3 — Fellow experience
+11. **Fellow self-service profile** — fellows edit their own profile (bio, photo, social, org)
+12. **Profile claim flow** — new users claim an existing contact record
+13. **Announcements** — display announcements to fellows after login
+14. **Resources** — shared documents/links page
+
+### Phase 4 — Analytics & polish
+15. **Engagement scoring** — computed metrics from attendance + interactions + platform activity
+16. **Dashboard analytics** — charts, trends, at-risk alerts
+17. **Data export** — CSV/PDF for contacts, attendance, interactions
+18. **Error boundaries** — wrap every page in an error boundary component
+19. **Pagination / virtual scroll** — for future-proofing beyond 500 contacts
+20. **Ad hoc lists** — custom data collection UI
 
 ## Design System
 
@@ -181,3 +280,5 @@ When v2 is ready, a migration script will:
 - Sanitize external content (news snippets) with DOMPurify before rendering
 - Error boundaries on every page
 - Loading/error/empty states for every data-fetching component
+- Routes defined in `main.jsx`, not in `App.jsx`
+- Auth gating in page components via `hasRole()`, not route-level guards
