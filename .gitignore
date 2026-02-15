@@ -21,5 +21,9 @@ node_modules/
 .env.local
 .env.*.local
 
+# Python
+__pycache__/
+*.pyc
+
 # Embedded repos
 GatherCRM/
