@@ -18,10 +18,13 @@ export const PROGRAM_LABELS = {
 }
 
 // Format a program badge label with optional year: "CPF '24"
+// Only appends year if the value is a 4-digit number (or coercible to one).
+// The contacts.cohort field often has text like "English" or "Español" — skip those.
 export function programLabel(program, year) {
   const label = PROGRAM_LABELS[program] || (program ? program.substring(0, 3).toUpperCase() : '???')
-  if (year) {
-    return `${label} '${String(year).slice(-2)}`
+  const num = Number(year)
+  if (num >= 2000 && num <= 2099) {
+    return `${label} '${String(num).slice(-2)}`
   }
   return label
 }
