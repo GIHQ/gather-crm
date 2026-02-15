@@ -5,13 +5,15 @@ import { supabase } from '../lib/supabase'
 export default function AlumniPage() {
   const [contacts, setContacts] = useState([])
   const [search, setSearch] = useState('')
+  const [programFilter, setProgramFilter] = useState('')
+  const [countryFilter, setCountryFilter] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function fetchAlumni() {
       const { data, error } = await supabase
         .from('contacts')
-        .select('id, first_name, last_name, email, photo_url, program, cohort, status, organization, city, country')
+        .select('id, first_name, last_name, email, photo_url, program, cohort, status, organization, city, country, job_title, focus_area_1, biography')
         .eq('is_active', true)
         .order('last_name')
 
@@ -23,38 +25,66 @@ export default function AlumniPage() {
     fetchAlumni()
   }, [])
 
-  const filtered = search
-    ? contacts.filter(c => {
-        const q = search.toLowerCase()
-        return (
-          c.first_name?.toLowerCase().includes(q) ||
-          c.last_name?.toLowerCase().includes(q) ||
-          c.organization?.toLowerCase().includes(q) ||
-          c.city?.toLowerCase().includes(q)
-        )
-      })
-    : contacts
+  // Derive filter options from data
+  const programs = [...new Set(contacts.map(c => c.program).filter(Boolean))].sort()
+  const countries = [...new Set(contacts.map(c => c.country).filter(Boolean))].sort()
+
+  const filtered = contacts.filter(c => {
+    if (programFilter && c.program !== programFilter) return false
+    if (countryFilter && c.country !== countryFilter) return false
+    if (search) {
+      const q = search.toLowerCase()
+      return (
+        c.first_name?.toLowerCase().includes(q) ||
+        c.last_name?.toLowerCase().includes(q) ||
+        c.organization?.toLowerCase().includes(q) ||
+        c.city?.toLowerCase().includes(q) ||
+        c.country?.toLowerCase().includes(q) ||
+        c.focus_area_1?.toLowerCase().includes(q)
+      )
+    }
+    return true
+  })
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Alumni Directory</h2>
-        <span className="text-sm text-gray-400">{contacts.length} contacts</span>
+        <span className="text-sm text-gray-400">{filtered.length} of {contacts.length} contacts</span>
       </div>
 
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search by name, organization, or city..."
-        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm mb-6 focus:outline-none focus:ring-2 focus:ring-goldin/50 focus:border-goldin"
-      />
+      {/* Search + filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, org, city, country, or focus area..."
+          className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-goldin/50 focus:border-goldin"
+        />
+        <select
+          value={programFilter}
+          onChange={(e) => setProgramFilter(e.target.value)}
+          className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-goldin/50 focus:border-goldin"
+        >
+          <option value="">All Programs</option>
+          {programs.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select
+          value={countryFilter}
+          onChange={(e) => setCountryFilter(e.target.value)}
+          className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-goldin/50 focus:border-goldin"
+        >
+          <option value="">All Countries</option>
+          {countries.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
 
       {loading ? (
         <div className="text-center py-20 text-gray-400">Loading alumni...</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
-          {search ? 'No matches found.' : 'No alumni yet.'}
+          {search || programFilter || countryFilter ? 'No matches found.' : 'No alumni yet.'}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -71,12 +101,14 @@ const PROGRAM_COLORS = {
   CPF: 'bg-blue-500',
   GGF: 'bg-orange-500',
   ESP: 'bg-purple-500',
+  DAR: 'bg-emerald-600',
+  MOS: 'bg-violet-600',
 }
 
 function ContactCard({ contact }) {
   return (
-    <Link to={`/contacts/${contact.id}`} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow flex items-center gap-3">
-      <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+    <Link to={`/contacts/${contact.id}`} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow flex items-start gap-3">
+      <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
         {contact.photo_url ? (
           <img src={contact.photo_url} alt="" className="w-full h-full object-cover" />
         ) : (
@@ -85,7 +117,7 @@ function ContactCard({ contact }) {
           </div>
         )}
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="font-medium text-gray-900 text-sm truncate">
             {contact.first_name} {contact.last_name}
@@ -96,11 +128,20 @@ function ContactCard({ contact }) {
             </span>
           )}
         </div>
-        {contact.organization && (
-          <p className="text-xs text-gray-500 truncate">{contact.organization}</p>
+        {(contact.job_title || contact.organization) && (
+          <p className="text-xs text-gray-500 truncate">
+            {contact.job_title && contact.organization
+              ? `${contact.job_title} at ${contact.organization}`
+              : contact.organization || contact.job_title}
+          </p>
         )}
         {contact.city && (
           <p className="text-xs text-gray-400 truncate">{contact.city}{contact.country ? `, ${contact.country}` : ''}</p>
+        )}
+        {contact.focus_area_1 && (
+          <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-goldin/10 text-goldin truncate max-w-full">
+            {contact.focus_area_1}
+          </span>
         )}
       </div>
     </Link>
