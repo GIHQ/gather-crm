@@ -76,14 +76,8 @@ async function fetchAll(client, table, options = {}) {
 // ─────────────────────────────────────────────────
 // 1. FELLOWS → CONTACTS
 // ─────────────────────────────────────────────────
-async function migrateFellows() {
-  logSection('Fellows → Contacts')
-  const fellows = await fetchAll(v1, 'fellows')
-  log(`Found ${fellows.length} fellows in v1`)
-
-  if (fellows.length === 0) return
-
-  const contacts = fellows.map(f => ({
+function buildContactFields(f) {
+  return {
     legacy_id: f.id,
     first_name: f.first_name,
     last_name: f.last_name,
@@ -127,53 +121,81 @@ async function migrateFellows() {
     focus_area_2: f.focus_area_2 || null,
     focus_area_3: f.focus_area_3 || null,
     is_active: true,
-  }))
-
-  // Insert in batches of 100
-  let inserted = 0
-  for (let i = 0; i < contacts.length; i += 100) {
-    const batch = contacts.slice(i, i + 100)
-    const { data, error } = await v2
-      .from('contacts')
-      .upsert(batch, { onConflict: 'legacy_id', ignoreDuplicates: false })
-      .select('id, legacy_id')
-
-    if (error) {
-      console.error(`  ERROR inserting fellows batch ${i}:`, error.message)
-      // Try one-by-one for the failed batch
-      for (const c of batch) {
-        const { data: single, error: singleErr } = await v2
-          .from('contacts')
-          .upsert(c, { onConflict: 'legacy_id', ignoreDuplicates: false })
-          .select('id, legacy_id')
-        if (singleErr) {
-          console.error(`    SKIP ${c.first_name} ${c.last_name}: ${singleErr.message}`)
-        } else if (single?.[0]) {
-          fellowIdMap.set(single[0].legacy_id, single[0].id)
-          inserted++
-        }
-      }
-    } else if (data) {
-      for (const row of data) {
-        fellowIdMap.set(row.legacy_id, row.id)
-      }
-      inserted += data.length
-    }
   }
+}
 
-  // Also fetch any already-existing contacts with legacy_ids to fill the map
-  const { data: existing } = await v2
+async function migrateFellows() {
+  logSection('Fellows → Contacts')
+  const fellows = await fetchAll(v1, 'fellows')
+  log(`Found ${fellows.length} fellows in v1`)
+
+  if (fellows.length === 0) return
+
+  // Load all existing v2 contacts to match by email or name
+  const { data: existingContacts } = await v2
     .from('contacts')
-    .select('id, legacy_id')
-    .not('legacy_id', 'is', null)
-  if (existing) {
-    for (const row of existing) {
-      fellowIdMap.set(row.legacy_id, row.id)
+    .select('id, email, first_name, last_name, legacy_id')
+  const existing = existingContacts || []
+
+  // Build lookup maps for matching
+  const byEmail = new Map()
+  const byName = new Map()
+  for (const c of existing) {
+    if (c.email) byEmail.set(c.email.toLowerCase(), c)
+    byName.set(`${c.first_name}||${c.last_name}`.toLowerCase(), c)
+    if (c.legacy_id) fellowIdMap.set(c.legacy_id, c.id)
+  }
+
+  let updated = 0
+  let inserted = 0
+  let skipped = 0
+
+  for (const f of fellows) {
+    // Already mapped from a previous run?
+    if (fellowIdMap.has(f.id)) {
+      skipped++
+      continue
+    }
+
+    const fields = buildContactFields(f)
+
+    // Try to match existing contact by email, then by name
+    const match =
+      (f.email && byEmail.get(f.email.toLowerCase())) ||
+      byName.get(`${f.first_name}||${f.last_name}`.toLowerCase())
+
+    if (match) {
+      // Update existing contact with all v1 data
+      const { error } = await v2
+        .from('contacts')
+        .update(fields)
+        .eq('id', match.id)
+      if (error) {
+        console.error(`    ERR updating ${f.first_name} ${f.last_name}: ${error.message}`)
+      } else {
+        fellowIdMap.set(f.id, match.id)
+        updated++
+      }
+    } else {
+      // Insert new contact
+      const { data, error } = await v2
+        .from('contacts')
+        .insert(fields)
+        .select('id')
+        .single()
+      if (error) {
+        console.error(`    ERR inserting ${f.first_name} ${f.last_name}: ${error.message}`)
+      } else {
+        fellowIdMap.set(f.id, data.id)
+        inserted++
+      }
     }
   }
 
-  stats.fellows = inserted
-  log(`Migrated ${inserted} fellows → contacts (${fellowIdMap.size} in ID map)`)
+  stats.fellowsUpdated = updated
+  stats.fellowsInserted = inserted
+  stats.fellowsSkipped = skipped
+  log(`Updated ${updated}, inserted ${inserted}, skipped ${skipped} (${fellowIdMap.size} in ID map)`)
 }
 
 // ─────────────────────────────────────────────────
