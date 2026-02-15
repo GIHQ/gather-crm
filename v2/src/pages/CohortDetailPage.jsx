@@ -762,11 +762,21 @@ function CurriculumTab({ cohortId }) {
 // Events Tab
 // ---------------------------------------------------------------------------
 
+const TYPE_LABELS = {
+  workshop: 'Workshop',
+  social: 'Social',
+  orientation: 'Orientation',
+  field_trip: 'Field Trip',
+  guest_speaker: 'Guest Speaker',
+  other: 'Other',
+}
+
 function EventsTab({ cohortId }) {
   const { isAdmin } = useAuth()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
+  const [expandedEvent, setExpandedEvent] = useState(null)
 
   async function fetchEvents() {
     const { data } = await supabase
@@ -783,15 +793,6 @@ function EventsTab({ cohortId }) {
   }, [cohortId])
 
   if (loading) return <div className="text-gray-400 py-8">Loading events...</div>
-
-  const TYPE_LABELS = {
-    workshop: 'Workshop',
-    social: 'Social',
-    orientation: 'Orientation',
-    field_trip: 'Field Trip',
-    guest_speaker: 'Guest Speaker',
-    other: 'Other',
-  }
 
   return (
     <div>
@@ -814,38 +815,14 @@ function EventsTab({ cohortId }) {
         <div className="text-gray-400 py-8 text-center">No events yet.</div>
       ) : (
         <div className="space-y-2">
-          {events.map(e => {
-            const d = new Date(e.start_time)
-            const isPast = d < new Date()
-            return (
-              <div key={e.id} className={`bg-white rounded-xl border border-gray-200 p-4 ${isPast ? 'opacity-60' : ''}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                        {TYPE_LABELS[e.event_type] || e.event_type}
-                      </span>
-                      {e.is_required && <span className="text-xs text-goldin font-medium">Required</span>}
-                    </div>
-                    <h4 className="font-medium text-gray-900">{e.title}</h4>
-                    {e.description && <p className="text-sm text-gray-500 mt-1">{e.description}</p>}
-                  </div>
-                  <div className="text-right text-sm text-gray-500 whitespace-nowrap">
-                    <div>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                    {d.getHours() > 0 && (
-                      <div className="text-xs">{d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
-                    )}
-                  </div>
-                </div>
-                {(e.location || e.facilitator) && (
-                  <div className="flex gap-4 mt-2 text-xs text-gray-400">
-                    {e.location && <span>{e.location}</span>}
-                    {e.facilitator && <span>Facilitator: {e.facilitator}</span>}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {events.map(e => (
+            <EventCard
+              key={e.id}
+              event={e}
+              expanded={expandedEvent === e.id}
+              onToggleExpand={() => setExpandedEvent(expandedEvent === e.id ? null : e.id)}
+            />
+          ))}
         </div>
       )}
 
@@ -856,6 +833,221 @@ function EventsTab({ cohortId }) {
           onClose={() => setAddOpen(false)}
           onSaved={() => fetchEvents()}
         />
+      )}
+    </div>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
+// Event Card with expandable Planning checklist
+// ---------------------------------------------------------------------------
+
+function EventCard({ event: e, expanded, onToggleExpand }) {
+  const d = new Date(e.start_time)
+  const isPast = d < new Date()
+
+  return (
+    <div className={`bg-white rounded-xl border border-gray-200 ${isPast && !expanded ? 'opacity-60' : ''}`}>
+      <div className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                {TYPE_LABELS[e.event_type] || e.event_type}
+              </span>
+              {e.is_required && <span className="text-xs text-goldin font-medium">Required</span>}
+            </div>
+            <h4 className="font-medium text-gray-900">{e.title}</h4>
+            {e.description && <p className="text-sm text-gray-500 mt-1">{e.description}</p>}
+          </div>
+          <div className="text-right text-sm text-gray-500 whitespace-nowrap ml-4">
+            <div>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+            {d.getHours() > 0 && (
+              <div className="text-xs">{d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
+            )}
+          </div>
+        </div>
+        {(e.location || e.facilitator) && (
+          <div className="flex gap-4 mt-2 text-xs text-gray-400">
+            {e.location && <span>{e.location}</span>}
+            {e.facilitator && <span>Facilitator: {e.facilitator}</span>}
+          </div>
+        )}
+
+        {/* Planning toggle button */}
+        <button
+          onClick={onToggleExpand}
+          className="mt-3 inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-goldin transition-colors"
+        >
+          <svg className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+          Planning Checklist
+        </button>
+      </div>
+
+      {/* Expanded planning checklist */}
+      {expanded && (
+        <div className="border-t border-gray-100">
+          <EventPlanningChecklist eventId={e.id} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
+// Event Planning Checklist
+// ---------------------------------------------------------------------------
+
+function EventPlanningChecklist({ eventId }) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [newItemText, setNewItemText] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  async function fetchItems() {
+    const { data } = await supabase
+      .from('event_planning')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('sort_order')
+      .order('created_at')
+    setItems(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchItems()
+  }, [eventId])
+
+  async function toggleItem(item) {
+    const nowCompleted = !item.completed
+    const { error } = await supabase
+      .from('event_planning')
+      .update({
+        completed: nowCompleted,
+        completed_at: nowCompleted ? new Date().toISOString() : null,
+      })
+      .eq('id', item.id)
+
+    if (!error) {
+      setItems(prev => prev.map(i =>
+        i.id === item.id
+          ? { ...i, completed: nowCompleted, completed_at: nowCompleted ? new Date().toISOString() : null }
+          : i
+      ))
+    }
+  }
+
+  async function addItem(e) {
+    e.preventDefault()
+    if (!newItemText.trim()) return
+    setAdding(true)
+
+    const maxSort = items.reduce((max, i) => Math.max(max, i.sort_order || 0), 0)
+    const { error } = await supabase
+      .from('event_planning')
+      .insert({
+        event_id: eventId,
+        item_text: newItemText.trim(),
+        sort_order: maxSort + 1,
+      })
+
+    setAdding(false)
+    if (!error) {
+      setNewItemText('')
+      fetchItems()
+    }
+  }
+
+  async function deleteItem(itemId) {
+    const { error } = await supabase
+      .from('event_planning')
+      .delete()
+      .eq('id', itemId)
+    if (!error) {
+      setItems(prev => prev.filter(i => i.id !== itemId))
+    }
+  }
+
+  if (loading) {
+    return <div className="px-4 py-3 text-xs text-gray-400">Loading checklist...</div>
+  }
+
+  const completedCount = items.filter(i => i.completed).length
+  const totalCount = items.length
+
+  return (
+    <div className="px-4 py-3">
+      {totalCount > 0 && (
+        <div className="flex items-center gap-2 mb-2">
+          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${completedCount === totalCount ? 'bg-status-green' : 'bg-goldin'}`}
+              style={{ width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-gray-400 whitespace-nowrap">{completedCount}/{totalCount}</span>
+        </div>
+      )}
+
+      {/* Checklist items */}
+      <div className="space-y-1">
+        {items.map(item => (
+          <div key={item.id} className="flex items-center gap-2 group">
+            <button
+              onClick={() => toggleItem(item)}
+              className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                item.completed
+                  ? 'bg-status-green border-status-green text-white'
+                  : 'border-gray-300 hover:border-goldin'
+              }`}
+            >
+              {item.completed && (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              )}
+            </button>
+            <span className={`text-sm flex-1 ${item.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+              {item.item_text}
+            </span>
+            <button
+              onClick={() => deleteItem(item.id)}
+              className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-0.5 transition-all"
+              title="Remove item"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Add new item */}
+      <form onSubmit={addItem} className="flex items-center gap-2 mt-2">
+        <input
+          type="text"
+          value={newItemText}
+          onChange={(e) => setNewItemText(e.target.value)}
+          placeholder="Add checklist item..."
+          className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-goldin/50 focus:border-goldin"
+        />
+        <button
+          type="submit"
+          disabled={adding || !newItemText.trim()}
+          className="px-2.5 py-1 text-xs font-medium text-goldin hover:bg-goldin/10 rounded-lg disabled:opacity-30 transition-colors"
+        >
+          Add
+        </button>
+      </form>
+
+      {totalCount === 0 && (
+        <p className="text-[11px] text-gray-400 mt-1">No planning items yet. Add items above or they'll be auto-created for new events.</p>
       )}
     </div>
   )
@@ -896,7 +1088,7 @@ function AddEventModal({ cohortId, onClose, onSaved }) {
     setSaving(true)
     setError(null)
 
-    const { error: err } = await supabase
+    const { data: inserted, error: err } = await supabase
       .from('events')
       .insert({
         cohort_id: cohortId,
@@ -909,15 +1101,38 @@ function AddEventModal({ cohortId, onClose, onSaved }) {
         facilitator: form.facilitator || null,
         is_required: form.is_required,
       })
-
-    setSaving(false)
+      .select('id')
+      .single()
 
     if (err) {
+      setSaving(false)
       setError(err.message)
-    } else {
-      onSaved()
-      onClose()
+      return
     }
+
+    // Auto-seed planning checklist from template
+    try {
+      const { data: setting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'event_planning_template')
+        .single()
+
+      if (setting?.value && Array.isArray(setting.value) && setting.value.length > 0) {
+        const planningItems = setting.value.map(t => ({
+          event_id: inserted.id,
+          item_text: t.item_text,
+          sort_order: t.sort_order || 0,
+        }))
+        await supabase.from('event_planning').insert(planningItems)
+      }
+    } catch {
+      // Template seeding is best-effort — don't block event creation
+    }
+
+    setSaving(false)
+    onSaved()
+    onClose()
   }
 
   return (

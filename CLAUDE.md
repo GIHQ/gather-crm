@@ -212,7 +212,8 @@ gather-crm/
 │           └── SettingsPage.jsx      # Placeholder (admin+)
 ├── migrations/
 │   └── v2/
-│       └── 001_foundation.sql   # Complete v2 schema
+│       ├── 001_foundation.sql   # Complete v2 schema
+│       └── 002_event_planning.sql # Event planning checklist table + template
 ├── index.html                   # v1 (DO NOT MODIFY)
 ├── docs/                        # v1 docs (reference only)
 └── supabase/functions/          # v1 edge functions (reference only)
@@ -253,10 +254,11 @@ Results:
 - **Manage cohort roster** — "Add Member" with contact picker + role selector. Hover-to-remove on each member card.
 - **Create events** — "Add Event" on Events tab: title, type, start/end time, location, facilitator, required flag.
 - **Reusable Modal component** — `components/ui/Modal.jsx` with FormField, inputClass, selectClass, textareaClass exports.
+- **Event planning checklists** — expandable planning panel on each event card. Toggle items complete/incomplete, add custom items, delete items. New events auto-seeded from `app_settings` template (venue, food, agenda, speakers, room setup, documentation).
 
 ### Not yet built
 - **Record attendance** — grid is read-only, no click-to-toggle yet
-- **Event planning/debrief** — lifecycle data model documented but tables + UI not built
+- **Event debrief** — post-event evaluation tables + UI not built
 - **Manage focus tags** — display works, but no assign/remove UI on contact profiles
 - **Settings page** — still placeholder
 - **Team role management** — display works, no add/remove/change roles
@@ -284,7 +286,7 @@ Results:
 
 ### Phase 2 — Staff workflows & event lifecycle
 7. **Record attendance** — click-to-toggle attendance grid
-8. **Event planning** — pre-event checklists (venue, food, agenda, speakers, room setup, documentation plan) with completion toggles. Default templates from app_settings.
+8. ~~**Event planning**~~ — pre-event checklists with completion toggles, auto-seeded from app_settings template
 9. **Event debrief** — post-event evaluation: reflections, attendance verification, photo/video uploads, program book summary, custom fields
 10. **Manage focus tags** — assign/remove tags on contact profiles
 11. **Settings page** — app_settings CRUD for admins (thresholds, weights, default checklist templates)
