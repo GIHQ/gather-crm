@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { programLabel, programColor } from '../lib/programs'
 
 export default function CohortsPage() {
   const { hasRole } = useAuth()
@@ -79,22 +80,13 @@ export default function CohortsPage() {
   )
 }
 
-const PROGRAM_COLORS = {
-  CPF: 'bg-blue-500',
-  DAR: 'bg-emerald-600',
-  MOS: 'bg-violet-600',
-  GGF: 'bg-orange-500',
-  ESP: 'bg-purple-500',
-}
-
 function CohortCard({ cohort }) {
   return (
     <Link to={`/cohorts/${cohort.id}`} className="bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
       <div className="flex items-center gap-2 mb-3">
-        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold text-white ${PROGRAM_COLORS[cohort.program] || 'bg-gray-500'}`}>
-          {cohort.program}
+        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold text-white ${programColor(cohort.program)}`}>
+          {programLabel(cohort.program, cohort.cohort_year)}
         </span>
-        <span className="text-xs text-gray-400">{cohort.cohort_year}</span>
       </div>
       <h3 className="font-semibold text-gray-900">{cohort.name}</h3>
       <p className="text-sm text-gray-500 mt-1">

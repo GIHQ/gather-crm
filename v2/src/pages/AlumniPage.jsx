@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { programLabel, programColor } from '../lib/programs'
 
 export default function AlumniPage() {
   const [contacts, setContacts] = useState([])
@@ -97,14 +98,6 @@ export default function AlumniPage() {
   )
 }
 
-const PROGRAM_COLORS = {
-  CPF: 'bg-blue-500',
-  GGF: 'bg-orange-500',
-  ESP: 'bg-purple-500',
-  DAR: 'bg-emerald-600',
-  MOS: 'bg-violet-600',
-}
-
 function ContactCard({ contact }) {
   return (
     <Link to={`/contacts/${contact.id}`} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow flex items-start gap-3">
@@ -123,8 +116,8 @@ function ContactCard({ contact }) {
             {contact.first_name} {contact.last_name}
           </span>
           {contact.program && (
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-white flex-shrink-0 ${PROGRAM_COLORS[contact.program] || 'bg-gray-500'}`}>
-              {contact.program}
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-white flex-shrink-0 ${programColor(contact.program)}`}>
+              {programLabel(contact.program, contact.cohort)}
             </span>
           )}
         </div>
