@@ -6,7 +6,7 @@
 
 ## Quick Context
 
-GATHER is a fellowship management platform for the Goldin Institute managing **292 alumni** across 3 programs (CPF, GGF, ESP) and **current fellows** at 3 sites (Chicago/CPF, Dar es Salaam/DAR, Mosquera/MOS). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan). Auth is email OTP code only (Google OAuth removed Feb 13, magic links replaced with 6-digit OTP codes Feb 14).
+GATHER is a fellowship management platform for the Goldin Institute managing **307 alumni** across 3 programs (CPF, GGF, ESP) and **current fellows** at 3 sites (Chicago/CPF, Dar es Salaam/DAR, Mosquera/MOS). It's a mobile-first PWA built as a single HTML file with React, hosted on Netlify, backed by Supabase (Pro plan). Auth is email OTP code only (Google OAuth removed Feb 13, magic links replaced with 6-digit OTP codes Feb 14).
 
 | Resource | URL |
 |----------|-----|
@@ -52,9 +52,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ---
 
-## Current State (Updated Feb 14, 2026)
+## Current State (Updated Feb 15, 2026)
 
 ### Recently Completed
+- **Historical Data Import (Feb 15):**
+  - Ran `scripts/import-historical-data.py --apply` — enriched **195 fellows** from 3 Excel files (Global Alumni Directory, CPF Tracker, GGF Tracker)
+  - Fields populated: 195 birthdays, 110 org Facebook, 63 org Instagram, 42 org Twitter/X, 41 personal Facebook, 27 LinkedIn, 26 websites, 23 personal Instagram, 19 gender, 15 personal Twitter/X, 9 org websites, 3 org LinkedIn
+  - Migration `019_personal_org_social_links.sql` deployed: adds `linkedin_org`, `twitter_org`, `instagram_org`, `facebook_org`, `website_org`, `tiktok` columns to fellows table
+  - Migration `017_birthday_gender.sql` deployed: adds `birthday`, `gender`, `hide_birthday_year` columns
+  - Script only fills blanks — never overwrites existing data
+  - 3 Excel emails not matched in DB (expected — slight name/email mismatches)
 - **Birthday & Gender Fields (Feb 14):**
   - Migration `017_birthday_gender.sql`: adds `gender` (text), `birthday` (date), `hide_birthday_year` (boolean) to fellows table
   - Profile edit form: gender dropdown (Female/Male/Non-binary/Other), date picker, "Hide my birth year" checkbox
@@ -64,7 +71,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - **Daily Automated News Scan (Feb 14):**
   - Migration `018_news_scan_cron.sql`: pg_cron job runs daily at 6 AM UTC (midnight CST)
   - Scans 25 fellows/day across all 5 platforms (Google News, LinkedIn, Twitter, Facebook, Instagram)
-  - Cycles through all 292 fellows every ~12 days
+  - Cycles through all 307 fellows every ~12 days
   - Uses SerpAPI Developer plan (~3,900 searches/month of 5,000 limit)
   - Custom search terms from `app_settings` table included automatically
   - **Email alerts**: search-news Edge Function now emails `travis@goldininstitute.org` (stored in `app_settings` as `news_alert_email`) via Buttondown when new mentions are found — includes summary of which fellows were mentioned on which platforms
@@ -183,15 +190,15 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Auth session persistence fixed (explicit Supabase auth options with `storageKey: 'gather-auth'`)
 - **Translation system fully working** — Edge Function proxies Google Translate API (JWT verification OFF), `<T>` component + `t()` function for all dynamic content, `content_translations` DB cache table, language selector in header
 - Notification settings UI fixed: toggle contrast + overflow on mobile
-- **News scanner fully working** — scans all 292 fellows in batches of 5, daily cron job active (25/day, all 5 platforms)
+- **News scanner fully working** — scans all 307 fellows in batches of 5, daily cron job active (25/day, all 5 platforms)
 - News alert emails sent to travis@goldininstitute.org when mentions found (via Buttondown)
 - Custom search terms for news scanner (stored in `app_settings` table)
 - `news_alert_email` setting in `app_settings` controls who receives scan alerts
 - `is_admin()` SECURITY DEFINER function created
-- **Focus area tags assigned to 274/292 fellows** (94% coverage)
+- **Focus area tags assigned to 274/307 fellows** (94% coverage)
 - GetStream account created, API keys stored in Supabase + Netlify
 - Buttondown account created, API key stored in Supabase
-- All 292 fellow photos uploaded and linked
+- All 307 fellow photos uploaded and linked
 - Focus Areas system working (Skills, Populations, Focus Areas, Community Areas)
 - Team Management page (admin+ can manage staff accounts)
 - **11 team members imported** with full bios, photos, fellowship links
@@ -209,8 +216,8 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ### Pending / Next Session
 - **Anthropic API tier upgrade** — applied for organization status + higher tier; currently hitting 10k tokens/min rate limit on Haiku after one query
-- **Populate birthday & gender data** — migration 017 deployed; fellows need to fill in their profiles
 - **Verify news scan cron** — first run at 6 AM UTC Feb 15; check with `SELECT * FROM cron.job;` and `SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5;`
+- ~~**Populate birthday & gender data**~~ — ✅ DONE (Feb 15) via historical data import script; 195 fellows enriched
 
 ### Known Issues
 - Edge Function JWT verification must be OFF (toggle in dashboard) after any redeployment for `translate`, `search-news`, and `stream-token`
@@ -246,7 +253,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - [x] Build Community tab components ✅
 - [x] Restructure menu: Community (feed), Library (resources), Broadcast (messaging) ✅
 - [x] Fix auth flow: auto-link team_members, route protection, stale session handling ✅
-- [x] Import 292 fellow emails to Buttondown ✅ (script + CSV export ready)
+- [x] Import 307 fellow emails to Buttondown ✅ (script + CSV export ready)
 - [x] Wire newsletter composer to Buttondown API (create Edge Function) ✅
 - [ ] Test end-to-end newsletter sending (requires: deploy Edge Function, set API key, run import)
 
@@ -377,6 +384,8 @@ SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, SER
 | `migrations/016_current_cohort_tables.sql` | Current cohort: sites, events, attendance, curricula, ad hoc lists |
 | `migrations/017_birthday_gender.sql` | Birthday, gender, hide_birthday_year columns on fellows |
 | `migrations/018_news_scan_cron.sql` | Daily pg_cron job for automated news scanning + alert email setting |
+| `migrations/019_personal_org_social_links.sql` | Org social link columns (linkedin_org, twitter_org, etc.) + tiktok |
+| `scripts/import-historical-data.py` | Historical data import from Excel → Supabase (birthdays, social links, gender) |
 | `docs/CURRENT_COHORT_SPEC.md` | Current cohort management specification |
 | `scripts/assign-focus-areas.js` | AI-powered focus area assignment (Node.js, needs API keys) |
 | `scripts/assign-focus-areas.sql` | SQL keyword-based focus area assignment (paste into Supabase SQL editor) |

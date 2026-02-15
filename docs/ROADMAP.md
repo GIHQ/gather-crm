@@ -1,6 +1,6 @@
 # GATHER Roadmap
 
-**Last updated:** Feb 14, 2026
+**Last updated:** Feb 15, 2026
 
 This document tracks the big-picture vision for GATHER. For immediate tasks, see the TODO Tracker in SESSION_HANDOFF.md.
 
@@ -11,8 +11,8 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 
 | Feature | Status |
 |---------|--------|
-| Fellow database (292 fellows, 3 programs) | ✅ Done |
-| Photo management (all 292 uploaded) | ✅ Done |
+| Fellow database (307 fellows, 3 programs) | ✅ Done |
+| Photo management (all 307 uploaded) | ✅ Done |
 | Focus areas system (Skills, Populations, Focus, Community) | ✅ Done |
 | Magic link auth (Google OAuth removed Feb 13) | ✅ Done |
 | 6-tier permission system | ✅ Done |
@@ -44,7 +44,7 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | "Broadcast" tab for staff | ✅ Done |
 | Menu restructure (removed desktop links) | ✅ Done |
 | Auth flow fixes (auto-link, route protection, stale sessions) | ✅ Done |
-| Import 292 fellow emails to Buttondown | ✅ Done — import script + CSV export ready |
+| Import 307 fellow emails to Buttondown | ✅ Done — import script + CSV export ready |
 | Wire newsletter to Buttondown API (Edge Function) | ✅ Done — send-newsletter Edge Function |
 
 ### Phase 2b: Discovery (In Progress)
@@ -128,6 +128,8 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 
 | Feature | Status |
 |---------|--------|
+| Historical data import (birthdays, social links, gender) | ✅ Done (Feb 15) — 195 fellows enriched from Excel trackers via `scripts/import-historical-data.py` |
+| Org social link columns (linkedin_org, twitter_org, etc.) | ✅ Done (Feb 15) — migration 019; personal vs org social links separated |
 | Social media scanning (FB, IG, Twitter, LinkedIn) | ✅ Done (Feb 14) — included in daily news scan across all 5 platforms |
 | Multi-language support (translation system) | ✅ Done (Feb 13) — `<T>` component, `t()` function, Google Translate API, DB cache |
 | Offline/PWA caching improvements | 🔲 |
@@ -171,7 +173,7 @@ Service worker (sw.js) already has push/notification handlers. To complete:
 |------|----------|-----------|
 | Jan 2026 | Single HTML file | Simplicity for small team, appropriate at current scale |
 | Jan 2026 | Supabase over Firebase | Better Postgres features, RLS, Edge Functions |
-| Feb 2026 | GetStream for community | Real-time feeds without building from scratch; free Maker tier covers 292 MAU |
+| Feb 2026 | GetStream for community | Real-time feeds without building from scratch; free Maker tier covers 307 MAU |
 | Feb 2026 | Buttondown for email | Simple API, good for newsletters at this volume |
 | Feb 2026 | Lurker-first architecture | 30-50% active engagement realistic; design for passive consumption first |
 | Feb 2026 | Google Translate for i18n | Real-time translation of all dynamic content; DB cache avoids repeated API calls; supports 100+ languages for global fellows |
@@ -189,7 +191,7 @@ Service worker (sw.js) already has push/notification handlers. To complete:
 | Service | Tier | Monthly Cost | Notes |
 |---------|------|-------------|-------|
 | GetStream | Maker (free) | $0 | <5 team members, <$10K revenue |
-| Buttondown | Basic | $9/mo | 292 subscribers (free tier caps at 100) |
+| Buttondown | Basic | $9/mo | 307 subscribers (free tier caps at 100) |
 | Supabase | Pro | $25/mo | Upgraded for custom domain + higher limits |
 | SerpAPI | Developer | $50/mo | 5,000 searches/month; daily news scan uses ~3,900/month |
 | Anthropic | Tier 1 | ~$5/mo | AI search (Haiku); upgrade pending for higher rate limits |
