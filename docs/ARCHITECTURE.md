@@ -1,12 +1,12 @@
 # GATHER Architecture
 
-> **Last Updated:** February 13, 2026
+> **Last Updated:** February 15, 2026
 > **Maintainer:** Goldin Institute
 > **Live Site:** https://gathertracker.netlify.app
 
 ## Overview
 
-GATHER is a fellowship management platform for the Goldin Institute, serving both **alumni** (292 graduates) and **current fellows** (active cohorts at three sites). It manages fellows across five programs:
+GATHER is a fellowship management platform for the Goldin Institute, serving both **alumni** (307 graduates) and **current fellows** (active cohorts at three sites). It manages fellows across five programs:
 
 **Alumni Programs:**
 - **CPF** - Chicago Peace Fellows (Chicago-based)
@@ -68,7 +68,21 @@ fellows
 ├── site_id (FK → sites, nullable — set for current fellows)
 ├── user_id (FK → auth.users, nullable)
 ├── working_on (text)
+├── last_contact (timestamptz — updated on interaction log)
+├── last_news_search (timestamptz — last included in news scan)
+├── birthday (date), gender (text), hide_birthday_year (boolean)
 └── created_at, updated_at
+
+activities
+├── id (UUID, PK)
+├── fellow_id (FK → fellows)
+├── activity_type (news_mention, linkedin_mention, twitter_mention, etc.)
+├── source_name, source_url, source_domain
+├── title, snippet, image_url
+├── published_at, discovered_at (DEFAULT NOW())
+├── search_query, relevance_score
+├── verified, dismissed, notified
+└── created_at, updated_at — UNIQUE(fellow_id, source_url)
 
 interactions
 ├── id (UUID, PK)
@@ -219,8 +233,10 @@ Six-tier role hierarchy:
 **Role lookup flow (determineUserRole):**
 1. Check `team_members` table (email OR alternate_emails) → returns staff role
 2. Check `fellows` table (email OR alternate_emails) → returns `fellow` role
-3. Fall back to `viewer` for unrecognized emails
-4. Guest users (skip login) get `viewer` role with no auth session
+3. Check email domain (`@goldininstitute.org` or `@chicagopeacefellows.org`) → auto-grant `team` role
+4. Fall back to `viewer` for unrecognized emails
+5. Guest users (skip login) get `viewer` role with no auth session
+6. 5-second timeout prevents hanging on slow networks; falls back to domain check
 
 ---
 
@@ -245,7 +261,8 @@ gather-crm/
 │   └── SETUP_GUIDE.md          # Development setup
 ├── supabase/
 │   └── functions/
-│       ├── search-news/     # News scanner Edge Function
+│       ├── ai-search/       # Claude AI-powered fellow search
+│       ├── search-news/     # News scanner Edge Function (daily cron + manual)
 │       ├── send-newsletter/ # Buttondown newsletter sending
 │       ├── stream-token/    # GetStream token minting
 │       └── translate/       # Translation proxy (Google Translate API)
@@ -256,7 +273,11 @@ gather-crm/
     ├── 012_app_settings.sql              # App settings key-value table
     ├── 014_auto_link_team_members.sql    # Auto-link users on signup
     ├── 015_content_translations.sql      # Translation cache table
-    └── 016_current_cohort_tables.sql     # Current cohort: sites, events, attendance, curricula, etc.
+    ├── 015_login_events.sql             # Login activity tracking
+    ├── 016_current_cohort_tables.sql     # Current cohort: sites, events, attendance, curricula, etc.
+    ├── 017_birthday_gender.sql           # Birthday, gender, hide_birthday_year
+    ├── 018_news_scan_cron.sql            # Daily pg_cron job for news scanning
+    └── 019_personal_org_social_links.sql # Org social links + tiktok
 ```
 
 ---

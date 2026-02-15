@@ -53,6 +53,7 @@ The main table storing all 292 Goldin Institute fellows.
 | staff_notes | text | Internal notes visible only to admins |
 | working_on | text | Fellow's current project/focus (community feature) |
 | working_on_updated_at | timestamptz | When working_on was last changed |
+| last_contact | timestamptz | When fellow was last contacted (updated on interaction log) |
 | last_news_search | timestamptz | When fellow was last included in news scan |
 | birthday | date | Date of birth (Migration 017) |
 | gender | text | Gender (Migration 017) |
@@ -147,6 +148,40 @@ Tracks requests from users to claim an existing profile when their email isn't r
 5. Admin reviews in Team Management page
 6. If approved: alternate_emails updated on target profile
 7. User can now log in and access their profile
+
+### activities
+Web/social media mentions and news about fellows, discovered through automated scanning (SerpAPI) or manual scans.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| fellow_id | uuid | FK → fellows.id |
+| activity_type | text | 'news_mention', 'linkedin_mention', 'twitter_mention', 'facebook_mention', 'instagram_mention' |
+| source_name | text | e.g., "Chicago Tribune", "LinkedIn", "Twitter" |
+| source_url | text | Link to the article/post |
+| source_domain | text | e.g., "chicagotribune.com" |
+| title | text | Headline or post title |
+| snippet | text | Excerpt or description |
+| image_url | text | Thumbnail if available |
+| published_at | timestamptz | When the article was published |
+| discovered_at | timestamptz | When we found it (DEFAULT NOW()) |
+| search_query | text | What search query found this |
+| relevance_score | decimal | How confident we are this is about the fellow (0-1) |
+| verified | boolean | Staff confirmed it's about this fellow (DEFAULT FALSE) |
+| dismissed | boolean | Staff marked as not relevant (DEFAULT FALSE) |
+| notified | boolean | Fellow/staff has been notified (DEFAULT FALSE) |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**Unique constraint:** `(fellow_id, source_url)` — prevents duplicate URLs per fellow.
+
+**Indexes:**
+- `idx_activities_fellow_id` — fellow_id
+- `idx_activities_discovered_at` — discovered_at DESC
+- `idx_activities_type` — activity_type
+- `idx_activities_verified` — verified WHERE verified = true
+
+> **Important:** Column names are `activity_type`, `source_url`, `source_name`, `search_query` — NOT `platform`, `url`, `search_term`. The `discovered_at` column is auto-populated (DEFAULT NOW()); `published_at` is the original article date.
 
 ### app_settings
 Key-value store for shared application configuration (e.g., news scanner search terms).

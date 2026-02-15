@@ -55,6 +55,14 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ## Current State (Updated Feb 15, 2026)
 
 ### Recently Completed
+- **Dashboard & News Feed Fix (Feb 15):**
+  - **Problem:** Dashboard showed 0% network health and all fellows as "Overdue" after the progressive loading optimization. News tab showed "No news mentions found" despite the cron job running.
+  - **Root cause:** The progressive loading commit (`c3107cf`) changed `select('*')` to explicit column lists but omitted `last_contact` from the fellows query. Also, the activities query used incorrect column names (`platform`/`url`/`search_term` instead of `activity_type`/`source_url`/`search_query`), causing the entire query to fail silently.
+  - **Fixes applied:**
+    1. Added `last_contact` and `last_news_search` to both fellows queries (Alumni in phase 1, Current in phase 3)
+    2. Fixed activities query to use correct column names matching the `activities` table schema (`activity_type`, `source_name`, `source_url`, `source_domain`, `image_url`, `published_at`, `discovered_at`, `search_query`, `relevance_score`, `verified`, `notified`)
+    3. Fixed `login()` function to pass `userData.id` to `determineUserRole()` for proper user_id linking during OTP login
+  - **News scan cron verified:** First run succeeded at 6:00 AM UTC Feb 15 (`status: succeeded` in `cron.job_run_details`). No mentions found for the first batch of 25 fellows, which is normal — scan will cycle through all 307 fellows over ~12 days.
 - **iPhone Mobile Load Performance Fix (Feb 15):**
   - **Problem:** iPhone web app wouldn't load — timed out after ~10 seconds, showed title/frameworks but no data. Closing and reopening didn't fix it.
   - **Root cause:** `fetchData()` used `Promise.all()` with no timeout on 6 simultaneous Supabase queries; `determineUserRole()` had no timeout; Service Worker network-first strategy waited for slow network before serving cached HTML; `select('*')` fetched all columns including large text fields.
@@ -231,7 +239,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 ### Pending / Next Session
 - **Anthropic API tier upgrade** — applied for organization status + higher tier; currently hitting 10k tokens/min rate limit on Haiku after one query
-- **Verify news scan cron** — first run at 6 AM UTC Feb 15; check with `SELECT * FROM cron.job;` and `SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5;`
+- ~~**Verify news scan cron**~~ — ✅ VERIFIED (Feb 15). First run succeeded at 6:00 AM UTC. Job ID 1, `status: succeeded`. Check ongoing with `SELECT * FROM cron.job_run_details WHERE jobid = 1 ORDER BY start_time DESC LIMIT 5;`
 - ~~**Populate birthday & gender data**~~ — ✅ DONE (Feb 15) via historical data import script; 195 fellows enriched
 
 ### Known Issues
@@ -242,6 +250,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Anthropic API rate limit (10k input tokens/min on Haiku) — AI search shows friendly "wait 60 seconds" message; upgrade pending
 
 ### Recently Fixed Bugs
+- **Dashboard 0% health + empty news tab (Feb 15)** — Progressive loading optimization omitted `last_contact` from fellows query, making all fellows show as "Overdue" (0% health). Activities query used wrong column names (`platform`/`url`/`search_term` instead of `activity_type`/`source_url`/`search_query`), causing news tab to fail silently. Login function also wasn't passing `userId` to `determineUserRole()` during OTP login. All three issues fixed.
 - **iPhone mobile load timeout (Feb 15)** — App timed out after ~10s on iPhone, showing title but no data. Root cause: `fetchData()` used `Promise.all()` with no timeout, `determineUserRole()` had no timeout, SW used network-first strategy. Fixed with progressive 3-phase loading, 5s/8s timeouts, `Promise.allSettled()`, optimized queries, and stale-while-revalidate SW strategy.
 - **iPhone Safari magic link → guest mode (Feb 13)** — PKCE exchange silently failing on mobile Safari. Ultimately resolved by switching to OTP verification codes (Feb 14), eliminating all redirect-based auth.
 - **authError not reaching LoginScreen (Feb 13)** — `authError` was omitted from AppContext value, so the "Login link didn't work" error banner never showed. Added to context provider.
@@ -353,13 +362,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Auth: email OTP codes only (Google OAuth removed Feb 13, magic links replaced with OTP Feb 14). Rate limit can be adjusted in Supabase Dashboard > Authentication > Rate Limits.
 
 ### Database Schema vs Docs
-`DATABASE_SCHEMA.md` is now accurate as of Feb 13, 2026. Key fellows columns:
+`DATABASE_SCHEMA.md` is now accurate as of Feb 15, 2026. Key fellows columns:
 - `id` is **text** type (not uuid) — e.g., 'P001', 'CF-CHI-001'
 - `status` uses `'Alumni'` or `'Current'` — CHECK constraint enforces this
 - `site_id` (uuid, nullable) — FK to `sites` table, set for current fellows only
+- `last_contact` (timestamptz) — updated when interactions are logged; used by dashboard health metrics
+- `last_news_search` (timestamptz) — when fellow was last included in news scan rotation
 - `biography` (not `bio`), `job_title` (not `title`), `cohort` (not `cohort_year`)
 - All `fellow_id` foreign keys in cohort tables are `text` type to match `fellows.id`
 - `user_roles` table is marked LEGACY — superseded by `team_members` for all role checks
+- **Activities table columns:** `activity_type`, `source_name`, `source_url`, `source_domain`, `title`, `snippet`, `image_url`, `published_at`, `discovered_at`, `search_query`, `relevance_score`, `verified`, `dismissed`, `notified` — NOT `platform`/`url`/`search_term`
 
 ---
 

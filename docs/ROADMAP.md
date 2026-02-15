@@ -12,16 +12,17 @@ This document tracks the big-picture vision for GATHER. For immediate tasks, see
 | Feature | Status |
 |---------|--------|
 | Fellow database (307 fellows, 3 programs) | ✅ Done |
+| Dashboard health metrics + news feed | ✅ Done — fixed missing `last_contact` in query + corrected activities column names (Feb 15) |
 | Photo management (all 307 uploaded) | ✅ Done |
 | Focus areas system (Skills, Populations, Focus, Community) | ✅ Done |
-| Magic link auth (Google OAuth removed Feb 13) | ✅ Done |
+| Email OTP auth (Google OAuth removed Feb 13, magic links → OTP Feb 14) | ✅ Done |
 | 6-tier permission system | ✅ Done |
 | Staff directory (team_members table, 11 staff imported) | ✅ Done |
 | Profile claiming flow | ✅ Done |
 | Self-editing profiles | ✅ Done |
 | Admin editing + staff notes | ✅ Done |
 | Interaction logging | ✅ Done |
-| News scanner (SerpAPI) | ✅ Done — daily cron scans 25 fellows/day across 5 platforms, email alerts on hits |
+| News scanner (SerpAPI) | ✅ Done — daily cron scans 25 fellows/day across 5 platforms, email alerts on hits, cron verified working Feb 15 |
 | Focus areas tab fix (timeout + team member handling) | ✅ Done (Feb 11) |
 | Login activity tracking (login_events table) | ✅ Done (Feb 13) |
 | iPhone Safari auth hardening (getSession fallbacks, session recovery UX) | ✅ Done (Feb 13) |
