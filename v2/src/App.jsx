@@ -1,16 +1,7 @@
-import { Routes, Route } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import AppShell from './components/layout/AppShell'
 import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import CohortsPage from './pages/CohortsPage'
-import CohortDetailPage from './pages/CohortDetailPage'
-import AlumniPage from './pages/AlumniPage'
-import ContactProfilePage from './pages/ContactProfilePage'
-import InteractionsPage from './pages/InteractionsPage'
-import ActivitiesPage from './pages/ActivitiesPage'
-import TeamPage from './pages/TeamPage'
-import SettingsPage from './pages/SettingsPage'
 
 export default function App() {
   const { loading, user } = useAuth()
@@ -32,17 +23,7 @@ export default function App() {
 
   return (
     <AppShell>
-      <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/cohorts" element={<CohortsPage />} />
-        <Route path="/cohorts/:id" element={<CohortDetailPage />} />
-        <Route path="/alumni" element={<AlumniPage />} />
-        <Route path="/contacts/:id" element={<ContactProfilePage />} />
-        <Route path="/interactions" element={<InteractionsPage />} />
-        <Route path="/activities" element={<ActivitiesPage />} />
-        <Route path="/team" element={<TeamPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-      </Routes>
+      <Outlet />
     </AppShell>
   )
 }
