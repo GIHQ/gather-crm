@@ -27,7 +27,10 @@ export function AuthProvider({ children }) {
 
         if (session?.user) {
           setUser(session.user)
-          await resolveRole(session.user.email)
+          // Only resolve role on initial load or new sign-in, not token refreshes
+          if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+            await resolveRole(session.user.email)
+          }
         } else {
           setUser(null)
           setContact(null)
