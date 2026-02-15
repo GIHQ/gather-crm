@@ -189,7 +189,8 @@ gather-crm/
 │       ├── index.css            # Tailwind base + custom tokens
 │       ├── App.jsx              # Root layout (auth gate + AppShell + Outlet)
 │       ├── lib/
-│       │   └── supabase.js      # Supabase client init
+│       │   ├── supabase.js      # Supabase client init
+│       │   └── programs.js      # Program colors, labels, programLabel() helper
 │       ├── contexts/
 │       │   └── AuthContext.jsx   # Auth state, role resolution, hasRole()
 │       ├── hooks/               # (empty — available for custom hooks)
@@ -314,11 +315,12 @@ Results:
 | Goldin Orange Dark | `#D56A1C` |
 | Font | DM Sans |
 | Radius | rounded-xl to rounded-2xl |
-| CPF (Chicago) | Blue `bg-blue-500` |
+| CPF (Chicago) | Blue `bg-blue-700` |
 | GGF (Global) | Orange `bg-orange-500` |
-| ESP (Spanish) | Purple `bg-purple-500` |
+| ESP (Spanish) | Dark Orange `bg-orange-700` |
 | DAR (Tanzania) | Emerald `bg-emerald-600` |
 | MOS (Colombia) | Violet `bg-violet-600` |
+| Program pill format | `{CODE} '{YY}` e.g. `CPF '24` — shared via `lib/programs.js` |
 | Status Green | `#10B981` (on track) |
 | Status Yellow | `#F59E0B` (needs attention) |
 | Status Red | `#EF4444` (at risk) |

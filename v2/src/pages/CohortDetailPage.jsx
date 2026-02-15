@@ -2,15 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { programLabel, programColor } from '../lib/programs'
 import Modal, { FormField, inputClass, selectClass, textareaClass } from '../components/ui/Modal'
-
-const PROGRAM_COLORS = {
-  CPF: 'bg-blue-500',
-  DAR: 'bg-emerald-600',
-  MOS: 'bg-violet-600',
-  GGF: 'bg-orange-500',
-  ESP: 'bg-purple-500',
-}
 
 const TABS = [
   { id: 'roster', label: 'Roster' },
@@ -58,8 +51,8 @@ export default function CohortDetailPage() {
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link to="/cohorts" className="text-gray-400 hover:text-gray-600 text-sm">&larr; Cohorts</Link>
-        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold text-white ${PROGRAM_COLORS[cohort.program] || 'bg-gray-500'}`}>
-          {cohort.program}
+        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold text-white ${programColor(cohort.program)}`}>
+          {programLabel(cohort.program, cohort.cohort_year)}
         </span>
         <h2 className="text-2xl font-bold text-gray-900">{cohort.name}</h2>
         {cohort.status === 'archived' && (

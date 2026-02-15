@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { programLabel, programColor } from '../lib/programs'
 import Modal, { FormField, inputClass, selectClass, textareaClass } from '../components/ui/Modal'
 
 export default function ContactProfilePage() {
@@ -122,9 +123,9 @@ export default function ContactProfilePage() {
                 <Link
                   key={c.id}
                   to={`/cohorts/${c.id}`}
-                  className={`px-2 py-0.5 rounded-full text-xs font-semibold text-white ${PROGRAM_COLORS[c.program] || 'bg-gray-500'}`}
+                  className={`px-2 py-0.5 rounded-full text-xs font-semibold text-white ${programColor(c.program)}`}
                 >
-                  {c.program} {c.cohort_year}
+                  {programLabel(c.program, c.cohort_year)}
                 </Link>
               ))}
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -658,14 +659,6 @@ function AddInteractionModal({ contactId, contactName, onClose, onSaved }) {
 // ---------------------------------------------------------------------------
 // Shared constants & helpers
 // ---------------------------------------------------------------------------
-
-const PROGRAM_COLORS = {
-  CPF: 'bg-blue-500',
-  GGF: 'bg-orange-500',
-  ESP: 'bg-purple-500',
-  DAR: 'bg-emerald-600',
-  MOS: 'bg-violet-600',
-}
 
 const INTERACTION_COLORS = {
   email: 'bg-blue-50 text-blue-700',
