@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function AlumniPage() {
@@ -10,8 +11,7 @@ export default function AlumniPage() {
     async function fetchAlumni() {
       const { data, error } = await supabase
         .from('contacts')
-        .select('id, first_name, last_name, email, photo_url, program, cohort, organization, city, country')
-        .eq('status', 'Alumni')
+        .select('id, first_name, last_name, email, photo_url, program, cohort, status, organization, city, country')
         .eq('is_active', true)
         .order('last_name')
 
@@ -75,7 +75,7 @@ const PROGRAM_COLORS = {
 
 function ContactCard({ contact }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer flex items-center gap-3">
+    <Link to={`/contacts/${contact.id}`} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow flex items-center gap-3">
       <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
         {contact.photo_url ? (
           <img src={contact.photo_url} alt="" className="w-full h-full object-cover" />
@@ -103,6 +103,6 @@ function ContactCard({ contact }) {
           <p className="text-xs text-gray-400 truncate">{contact.city}{contact.country ? `, ${contact.country}` : ''}</p>
         )}
       </div>
-    </div>
+    </Link>
   )
 }

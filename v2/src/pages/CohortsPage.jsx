@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -88,7 +89,7 @@ const PROGRAM_COLORS = {
 
 function CohortCard({ cohort }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-md transition-shadow cursor-pointer">
+    <Link to={`/cohorts/${cohort.id}`} className="bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
       <div className="flex items-center gap-2 mb-3">
         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold text-white ${PROGRAM_COLORS[cohort.program] || 'bg-gray-500'}`}>
           {cohort.program}
@@ -99,6 +100,6 @@ function CohortCard({ cohort }) {
       <p className="text-sm text-gray-500 mt-1">
         {cohort.city}, {cohort.country}
       </p>
-    </div>
+    </Link>
   )
 }

@@ -3,7 +3,9 @@ import { useAuth } from './contexts/AuthContext'
 import AppShell from './components/layout/AppShell'
 import LoginPage from './pages/LoginPage'
 import CohortsPage from './pages/CohortsPage'
+import CohortDetailPage from './pages/CohortDetailPage'
 import AlumniPage from './pages/AlumniPage'
+import ContactProfilePage from './pages/ContactProfilePage'
 
 export default function App() {
   const { loading, user } = useAuth()
@@ -28,7 +30,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/cohorts" replace />} />
         <Route path="/cohorts" element={<CohortsPage />} />
+        <Route path="/cohorts/:id" element={<CohortDetailPage />} />
         <Route path="/alumni" element={<AlumniPage />} />
+        <Route path="/contacts/:id" element={<ContactProfilePage />} />
       </Routes>
     </AppShell>
   )
