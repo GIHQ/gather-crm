@@ -1,10 +1,11 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import AppShell from './components/layout/AppShell'
 import LoginPage from './pages/LoginPage'
 
 export default function App() {
   const { loading, user } = useAuth()
+  const location = useLocation()
 
   if (loading) {
     return (
@@ -23,7 +24,9 @@ export default function App() {
 
   return (
     <AppShell>
-      <Outlet />
+      <div key={location.pathname}>
+        <Outlet />
+      </div>
     </AppShell>
   )
 }

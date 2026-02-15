@@ -30,7 +30,7 @@ export default function ContactProfilePage() {
           : Promise.resolve({ data: [] }),
         supabase
           .from('contact_focus_tags')
-          .select('focus_tags (id, label, focus_categories (id, name))')
+          .select('focus_tags (id, name, focus_categories (id, name))')
           .eq('contact_id', id),
       ])
 
@@ -38,7 +38,6 @@ export default function ContactProfilePage() {
       setCohorts((cohortsRes.data || []).map(r => ({ ...r.cohorts, role: r.role })))
       setInteractions(interactionsRes.data || [])
 
-      // Group focus tags by category
       const tags = (tagsRes.data || [])
         .map(t => t.focus_tags)
         .filter(Boolean)
@@ -57,10 +56,10 @@ export default function ContactProfilePage() {
   for (const tag of focusTags) {
     const catName = tag.focus_categories?.name || 'Other'
     if (!tagsByCategory[catName]) tagsByCategory[catName] = []
-    tagsByCategory[catName].push(tag.label)
+    tagsByCategory[catName].push(tag.name)
   }
 
-  // Collect legacy focus areas
+  // Collect legacy focus areas as fallback
   const legacyFocusAreas = [contact.focus_area_1, contact.focus_area_2, contact.focus_area_3].filter(Boolean)
 
   return (
@@ -116,6 +115,38 @@ export default function ContactProfilePage() {
           </div>
         </div>
 
+        {/* Quick actions */}
+        <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100">
+          {contact.email && (
+            <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+              Email
+            </a>
+          )}
+          {contact.phone && (
+            <>
+              <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs font-medium hover:bg-green-100 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>
+                Call
+              </a>
+              <a href={`sms:${contact.phone}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 text-xs font-medium hover:bg-purple-100 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
+                Text
+              </a>
+            </>
+          )}
+          {contact.linkedin && (
+            <a href={contact.linkedin.startsWith('http') ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 text-xs font-medium hover:bg-sky-100 transition-colors">
+              LinkedIn
+            </a>
+          )}
+          {contact.whatsapp && (
+            <a href={`https://wa.me/${contact.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors">
+              WhatsApp
+            </a>
+          )}
+        </div>
+
         {/* Bio */}
         {contact.biography && (
           <p className="text-sm text-gray-600 mt-4 leading-relaxed">{contact.biography}</p>
@@ -153,7 +184,7 @@ export default function ContactProfilePage() {
       <div className="grid gap-6 md:grid-cols-2">
         {/* Contact info */}
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Contact</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Contact Info</h3>
           <div className="space-y-2">
             {contact.email && <InfoRow label="Email" value={contact.email} href={`mailto:${contact.email}`} />}
             {contact.work_email && <InfoRow label="Work Email" value={contact.work_email} href={`mailto:${contact.work_email}`} />}
@@ -180,20 +211,21 @@ export default function ContactProfilePage() {
           </div>
         </div>
 
-        {/* CRM (staff only) */}
+        {/* Staff notes (staff only) */}
         {isTeam && (
           <div className="bg-white rounded-2xl border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">CRM</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Staff Notes</h3>
+            <p className="text-[10px] text-gray-400 -mt-2 mb-3">Internal notes visible only to staff</p>
             <div className="space-y-2">
               {contact.working_on && (
                 <div>
-                  <span className="text-xs text-gray-400">Working on</span>
+                  <span className="text-xs text-gray-400">Currently working on</span>
                   <p className="text-sm text-gray-700">{contact.working_on}</p>
                 </div>
               )}
               {contact.staff_notes && (
                 <div>
-                  <span className="text-xs text-gray-400">Staff notes</span>
+                  <span className="text-xs text-gray-400">Notes</span>
                   <p className="text-sm text-gray-700">{contact.staff_notes}</p>
                 </div>
               )}
@@ -201,7 +233,7 @@ export default function ContactProfilePage() {
                 <InfoRow label="Last contact" value={new Date(contact.last_contact).toLocaleDateString()} />
               )}
               {!contact.working_on && !contact.staff_notes && !contact.last_contact && (
-                <p className="text-xs text-gray-400">No CRM data yet.</p>
+                <p className="text-xs text-gray-400">No staff notes yet.</p>
               )}
             </div>
           </div>
