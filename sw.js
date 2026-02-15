@@ -1,5 +1,5 @@
 // GATHER PWA Service Worker
-const CACHE_NAME = 'gather-v4.2.0';
+const CACHE_NAME = 'gather-v4.3.0';
 const OFFLINE_URL = '/index.html';
 
 // Assets to cache on install
@@ -48,28 +48,39 @@ self.addEventListener('fetch', (event) => {
   // Skip Supabase API calls (always fetch fresh)
   if (event.request.url.includes('supabase.co')) return;
 
-  // For HTML files and navigation - always try network first
+  // For HTML files and navigation - stale-while-revalidate with 3s network timeout
+  // Serves cached version immediately on slow networks, then updates cache in background
   const isHTML = event.request.url.endsWith('.html') ||
                  event.request.mode === 'navigate' ||
                  event.request.headers.get('accept')?.includes('text/html');
 
   if (isHTML) {
     event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          // Cache the fresh response
+      caches.match(event.request).then((cachedResponse) => {
+        // Race: serve cache immediately OR wait up to 3s for network
+        const networkFetch = fetch(event.request).then((networkResponse) => {
+          // Update cache with fresh response
           if (networkResponse && networkResponse.status === 200) {
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME)
               .then((cache) => cache.put(event.request, responseToCache));
           }
           return networkResponse;
-        })
-        .catch(() => {
-          // Network failed, try cache
-          return caches.match(event.request)
-            .then((cachedResponse) => cachedResponse || caches.match(OFFLINE_URL));
-        })
+        });
+
+        if (cachedResponse) {
+          // Have cache: serve it immediately, update in background
+          // But if network is fast (< 3s), prefer fresh response
+          const timeoutPromise = new Promise((resolve) =>
+            setTimeout(() => resolve(cachedResponse), 3000)
+          );
+          return Promise.race([networkFetch, timeoutPromise])
+            .catch(() => cachedResponse);
+        }
+
+        // No cache: must wait for network (first visit)
+        return networkFetch.catch(() => caches.match(OFFLINE_URL));
+      })
     );
     return;
   }

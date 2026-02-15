@@ -517,52 +517,65 @@ async function determineUserRole(email, userId = null) {
 
   const lowerEmail = email.toLowerCase();
 
+  // 5-second timeout to prevent hanging on slow mobile networks
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Role lookup timeout')), 5000)
+  );
+
   try {
-    // 1. Check team_members table first (staff) - check email OR alternate_emails
-    const { data: teamMembers } = await supabase
-      .from('team_members')
-      .select('id, role, user_id, email')
-      .eq('is_active', true)
-      .or(`email.eq.${lowerEmail},alternate_emails.cs.{${lowerEmail}}`);
-
-    const teamMember = teamMembers?.[0];
-    if (teamMember) {
-      // Link user_id on first login if not already set
-      if (userId && !teamMember.user_id) {
-        await supabase
+    const result = await Promise.race([
+      (async () => {
+        // 1. Check team_members table first (staff) - check email OR alternate_emails
+        const { data: teamMembers } = await supabase
           .from('team_members')
-          .update({ user_id: userId, updated_at: new Date().toISOString() })
-          .eq('id', teamMember.id);
-      }
-      return teamMember.role;
-    }
+          .select('id, role, user_id, email')
+          .eq('is_active', true)
+          .or(`email.eq.${lowerEmail},alternate_emails.cs.{${lowerEmail}}`);
 
-    // 2. Check if user is a fellow - check email OR alternate_emails
-    const { data: fellows } = await supabase
-      .from('fellows')
-      .select('id, user_id')
-      .or(`email.eq.${lowerEmail},alternate_emails.cs.{${lowerEmail}}`);
+        const teamMember = teamMembers?.[0];
+        if (teamMember) {
+          // Link user_id on first login if not already set (non-blocking)
+          if (userId && !teamMember.user_id) {
+            supabase
+              .from('team_members')
+              .update({ user_id: userId, updated_at: new Date().toISOString() })
+              .eq('id', teamMember.id)
+              .then(() => {}).catch(() => {});
+          }
+          return teamMember.role;
+        }
 
-    const fellowData = fellows?.[0];
-    if (fellowData) {
-      // Link user_id on first login if not already set
-      if (userId && !fellowData.user_id) {
-        await supabase
+        // 2. Check if user is a fellow - check email OR alternate_emails
+        const { data: fellows } = await supabase
           .from('fellows')
-          .update({ user_id: userId })
-          .eq('id', fellowData.id);
-      }
-      return ROLES.FELLOW;
-    }
+          .select('id, user_id')
+          .or(`email.eq.${lowerEmail},alternate_emails.cs.{${lowerEmail}}`);
 
-    // 4. Check domain for staff (auto-grant team role and create record)
-    if (lowerEmail.endsWith('@goldininstitute.org') ||
-        lowerEmail.endsWith('@chicagopeacefellows.org')) {
-      return ROLES.TEAM;
-    }
+        const fellowData = fellows?.[0];
+        if (fellowData) {
+          // Link user_id on first login if not already set (non-blocking)
+          if (userId && !fellowData.user_id) {
+            supabase
+              .from('fellows')
+              .update({ user_id: userId })
+              .eq('id', fellowData.id)
+              .then(() => {}).catch(() => {});
+          }
+          return ROLES.FELLOW;
+        }
 
-    // 5. Default to viewer
-    return ROLES.VIEWER;
+        // 4. Check domain for staff (auto-grant team role and create record)
+        if (lowerEmail.endsWith('@goldininstitute.org') ||
+            lowerEmail.endsWith('@chicagopeacefellows.org')) {
+          return ROLES.TEAM;
+        }
+
+        // 5. Default to viewer
+        return ROLES.VIEWER;
+      })(),
+      timeoutPromise
+    ]);
+    return result;
   } catch (err) {
     console.error('Error determining user role:', err);
     // Fallback: check domain
@@ -736,7 +749,8 @@ function AppProvider({ children }) {
       }
     }
 
-    // Failsafe: ensure loading never gets stuck (15s for slow mobile networks)
+    // Failsafe: ensure loading never gets stuck (8s — reduced from 15s since individual
+    // operations now have their own timeouts; better to show partial UI than spin forever)
     const loadingTimeout = setTimeout(() => {
       console.warn('Loading timeout - forcing load complete');
       // Use cached role if available so user isn't stuck as VIEWER
@@ -744,7 +758,7 @@ function AppProvider({ children }) {
       if (fallbackRole) setUserRole(fallbackRole);
       setSessionReady(true); // Timeout fallback — allow data fetch with whatever session exists
       setLoading(false);
-    }, 15000);
+    }, 8000);
 
     // Load non-auth settings immediately
     const loadSettings = () => {
@@ -1013,64 +1027,80 @@ function AppProvider({ children }) {
   const canAccess = (requiredRole) => hasPermission(userRole, requiredRole);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
+    // Phase 1: Critical data (fellows + team) — load first so directory renders ASAP
+    // 8-second timeout prevents indefinite hang on slow mobile networks
     try {
-      const [fellowsRes, teamMembersRes, interactionsRes, categoriesRes, tagsRes, activitiesRes] = await Promise.all([
-        supabase.from('fellows').select('*').eq('status', 'Alumni'),
+      const phase1Timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Phase 1 data fetch timeout')), 8000)
+      );
+
+      const phase1 = Promise.allSettled([
+        supabase.from('fellows').select('id,first_name,last_name,email,phone,program,cohort,city,country,organization,job_title,biography,photo_url,status,user_id,working_on,site_id,alternate_emails,linkedin,twitter,instagram,facebook,website,tiktok,linkedin_org,twitter_org,instagram_org,facebook_org,website_org,birthday,gender,hide_birthday_year,created_at,updated_at').eq('status', 'Alumni'),
         supabase.from('team_members').select('*').eq('is_active', true).order('last_name'),
         supabase.from('interactions').select('*').order('created_at', { ascending: false }).limit(50),
-        supabase.from('focus_categories').select('*').order('sort_order'),
-        supabase.from('focus_tags').select('*').eq('approved', true).order('name'),
-        supabase.from('activities').select('*').eq('dismissed', false).order('discovered_at', { ascending: false }).limit(200)
       ]);
 
-      if (fellowsRes.data) setFellows(fellowsRes.data);
-      if (teamMembersRes.data) setTeamMembers(teamMembersRes.data);
-      if (interactionsRes.data) setInteractions(interactionsRes.data);
-      if (categoriesRes.data) setFocusCategories(categoriesRes.data);
-      if (tagsRes.data) setFocusTags(tagsRes.data);
-      if (activitiesRes.data) setActivities(activitiesRes.data);
+      const results = await Promise.race([phase1, phase1Timeout]);
 
-      // Fetch login events separately (non-blocking if table doesn't exist)
-      try {
-        const loginRes = await supabase.from('login_events').select('*').order('logged_in_at', { ascending: false }).limit(50);
-        if (loginRes.data) setLoginEvents(loginRes.data);
-      } catch (e) {
-        console.log('login_events not available yet');
-      }
+      if (results[0].status === 'fulfilled' && results[0].value.data) setFellows(results[0].value.data);
+      if (results[1].status === 'fulfilled' && results[1].value.data) setTeamMembers(results[1].value.data);
+      if (results[2].status === 'fulfilled' && results[2].value.data) setInteractions(results[2].value.data);
 
-      // Fetch fellow_focus_tags separately (non-blocking if table doesn't exist)
-      try {
-        const fellowTagsRes = await supabase.from('fellow_focus_tags').select('fellow_id, tag_id, is_primary');
-        if (fellowTagsRes.data) setFellowFocusTags(fellowTagsRes.data);
-      } catch (e) {
-        console.log('fellow_focus_tags not available yet');
-      }
-
-      // Fetch current cohort data (non-blocking if tables don't exist yet)
-      try {
-        const [sitesRes, currentFellowsRes, eventsRes, attendanceRes] = await Promise.all([
-          supabase.from('sites').select('*').order('name'),
-          supabase.from('fellows').select('*').eq('status', 'Current'),
-          supabase.from('events').select('*').order('start_time', { ascending: false }),
-          supabase.from('event_attendance').select('*'),
-        ]);
-        if (sitesRes.data) setSites(sitesRes.data);
-        if (currentFellowsRes.data) setCurrentFellows(currentFellowsRes.data);
-        if (eventsRes.data) setCohortEvents(eventsRes.data);
-        if (attendanceRes.data) setEventAttendance(attendanceRes.data);
-      } catch (e) {
-        console.log('Current cohort tables not available yet');
-      }
-
-      // If force refresh, also clear service worker cache
-      if (forceRefresh && 'serviceWorker' in navigator) {
-        const caches = await window.caches?.keys();
-        if (caches) {
-          await Promise.all(caches.map(cache => window.caches.delete(cache)));
-        }
-      }
+      // Log any phase 1 failures
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') console.warn(`Phase 1 query ${i} failed:`, r.reason);
+      });
     } catch (err) {
-      console.error('Fetch error:', err);
+      console.error('Phase 1 fetch error (timeout or network):', err);
+      // Continue to phase 2 anyway — partial data is better than none
+    }
+
+    // Phase 2: Secondary data — loaded in background, non-blocking
+    // These don't block the UI from rendering
+    try {
+      const phase2Results = await Promise.allSettled([
+        supabase.from('focus_categories').select('*').order('sort_order'),
+        supabase.from('focus_tags').select('*').eq('approved', true).order('name'),
+        supabase.from('activities').select('id,fellow_id,platform,title,url,snippet,discovered_at,dismissed,search_term').eq('dismissed', false).order('discovered_at', { ascending: false }).limit(200),
+        supabase.from('login_events').select('*').order('logged_in_at', { ascending: false }).limit(50),
+        supabase.from('fellow_focus_tags').select('fellow_id, tag_id, is_primary'),
+      ]);
+
+      if (phase2Results[0].status === 'fulfilled' && phase2Results[0].value.data) setFocusCategories(phase2Results[0].value.data);
+      if (phase2Results[1].status === 'fulfilled' && phase2Results[1].value.data) setFocusTags(phase2Results[1].value.data);
+      if (phase2Results[2].status === 'fulfilled' && phase2Results[2].value.data) setActivities(phase2Results[2].value.data);
+      if (phase2Results[3].status === 'fulfilled' && phase2Results[3].value.data) setLoginEvents(phase2Results[3].value.data);
+      if (phase2Results[4].status === 'fulfilled' && phase2Results[4].value.data) setFellowFocusTags(phase2Results[4].value.data);
+    } catch (e) {
+      console.warn('Phase 2 fetch error:', e);
+    }
+
+    // Phase 3: Cohort data — lowest priority, fully non-blocking
+    try {
+      const phase3Results = await Promise.allSettled([
+        supabase.from('sites').select('*').order('name'),
+        supabase.from('fellows').select('id,first_name,last_name,email,phone,program,cohort,city,country,organization,job_title,biography,photo_url,status,user_id,working_on,site_id,alternate_emails,birthday,gender,hide_birthday_year,created_at,updated_at').eq('status', 'Current'),
+        supabase.from('events').select('*').order('start_time', { ascending: false }),
+        supabase.from('event_attendance').select('*'),
+      ]);
+      if (phase3Results[0].status === 'fulfilled' && phase3Results[0].value.data) setSites(phase3Results[0].value.data);
+      if (phase3Results[1].status === 'fulfilled' && phase3Results[1].value.data) setCurrentFellows(phase3Results[1].value.data);
+      if (phase3Results[2].status === 'fulfilled' && phase3Results[2].value.data) setCohortEvents(phase3Results[2].value.data);
+      if (phase3Results[3].status === 'fulfilled' && phase3Results[3].value.data) setEventAttendance(phase3Results[3].value.data);
+    } catch (e) {
+      console.log('Current cohort tables not available yet');
+    }
+
+    // If force refresh, also clear service worker cache
+    if (forceRefresh && 'serviceWorker' in navigator) {
+      try {
+        const cacheKeys = await window.caches?.keys();
+        if (cacheKeys) {
+          await Promise.all(cacheKeys.map(cache => window.caches.delete(cache)));
+        }
+      } catch (e) {
+        console.warn('Cache clear failed:', e);
+      }
     }
   }, []);
 

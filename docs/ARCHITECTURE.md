@@ -310,6 +310,15 @@ No build step - Netlify serves files directly.
 
 7. **Client-side health scores** - Fellow health scores (0-100) are computed in the browser from attendance, curriculum progress, platform activity, and interaction data. No stored score column — always fresh.
 
+8. **Progressive data loading** - Data fetches are split into 3 priority phases to prevent mobile timeout:
+   - Phase 1 (critical, 8s timeout): Fellows, team members, interactions — directory renders immediately
+   - Phase 2 (background): Focus categories/tags, activities, login events, fellow tags
+   - Phase 3 (lowest priority): Cohort data (sites, current fellows, events, attendance)
+   - All phases use `Promise.allSettled()` so partial failures don't block the UI
+   - `determineUserRole()` has a 5-second timeout with domain-based fallback
+
+9. **Service Worker stale-while-revalidate** - HTML is served from cache immediately (< 3s), then updated in background. Prevents slow mobile networks from blocking app load. Cache-first for static assets.
+
 ---
 
 ## Common Operations

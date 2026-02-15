@@ -55,6 +55,21 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ## Current State (Updated Feb 15, 2026)
 
 ### Recently Completed
+- **iPhone Mobile Load Performance Fix (Feb 15):**
+  - **Problem:** iPhone web app wouldn't load — timed out after ~10 seconds, showed title/frameworks but no data. Closing and reopening didn't fix it.
+  - **Root cause:** `fetchData()` used `Promise.all()` with no timeout on 6 simultaneous Supabase queries; `determineUserRole()` had no timeout; Service Worker network-first strategy waited for slow network before serving cached HTML; `select('*')` fetched all columns including large text fields.
+  - **Fixes applied:**
+    1. `determineUserRole()`: Added 5-second timeout via `Promise.race()`, made user_id linking non-blocking (fire-and-forget)
+    2. `fetchData()`: Restructured into 3 progressive phases:
+       - **Phase 1** (critical, 8s timeout): Fellows + team members + interactions — directory renders ASAP
+       - **Phase 2** (background): Focus categories/tags + activities + login events + fellow tags
+       - **Phase 3** (lowest priority): Cohort data (sites, current fellows, events, attendance)
+    3. Switched all phases from `Promise.all()` to `Promise.allSettled()` — partial failures no longer block entire load
+    4. Optimized fellows query: explicit column list instead of `select('*')` to reduce payload
+    5. Service Worker: Changed HTML strategy from network-first to **stale-while-revalidate with 3s timeout** — serves cached version immediately on slow networks, updates in background
+    6. Reduced global loading failsafe from 15s to 8s (individual operations now have their own timeouts)
+  - **Impact:** App loads in ~2-3s on mobile instead of timing out at 10s+; cached users see content almost instantly
+  - Service Worker version bumped to `gather-v4.3.0`
 - **Historical Data Import (Feb 15):**
   - Ran `scripts/import-historical-data.py --apply` — enriched **195 fellows** from 3 Excel files (Global Alumni Directory, CPF Tracker, GGF Tracker)
   - Fields populated: 195 birthdays, 110 org Facebook, 63 org Instagram, 42 org Twitter/X, 41 personal Facebook, 27 LinkedIn, 26 websites, 23 personal Instagram, 19 gender, 15 personal Twitter/X, 9 org websites, 3 org LinkedIn
@@ -227,6 +242,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 - Anthropic API rate limit (10k input tokens/min on Haiku) — AI search shows friendly "wait 60 seconds" message; upgrade pending
 
 ### Recently Fixed Bugs
+- **iPhone mobile load timeout (Feb 15)** — App timed out after ~10s on iPhone, showing title but no data. Root cause: `fetchData()` used `Promise.all()` with no timeout, `determineUserRole()` had no timeout, SW used network-first strategy. Fixed with progressive 3-phase loading, 5s/8s timeouts, `Promise.allSettled()`, optimized queries, and stale-while-revalidate SW strategy.
 - **iPhone Safari magic link → guest mode (Feb 13)** — PKCE exchange silently failing on mobile Safari. Ultimately resolved by switching to OTP verification codes (Feb 14), eliminating all redirect-based auth.
 - **authError not reaching LoginScreen (Feb 13)** — `authError` was omitted from AppContext value, so the "Login link didn't work" error banner never showed. Added to context provider.
 - **AI search `cohort_year` column error (Feb 13)** — Edge Function system prompt referenced non-existent `cohort_year` column. Fixed to `cohort`.
