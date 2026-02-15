@@ -134,15 +134,24 @@ const { useState, useEffect, useMemo, useCallback, useRef, createContext, useCon
 //   OnboardingSetupScreen   - Initial app setup flow
 //
 // PAGES (Main navigation destinations):
-//   DashboardPage           - Home dashboard with stats & activity
-//   DirectoryPage           - Fellow directory with search/filter
-//   ActivityPage            - Activity feed and history
-//   SearchPage              - Global search across fellows
-//   CommunityPage           - Community feed with announcements
-//   LibraryPage             - Shared resources/documents
-//   BroadcastPage           - In-app announcements & email newsletters
-//   SettingsPage            - User settings and preferences
-//   TeamManagementPage      - Admin page for managing staff accounts
+//   DashboardPage           - Home dashboard with stats & activity (team+)
+//
+//   ALUMNI section:
+//   DirectoryPage           - Alumni directory with search/filter (public)
+//   CommunityPage           - Community feed with announcements (public)
+//   LibraryPage             - Shared resources/documents (public)
+//   GatherAIPage            - AI-powered fellow search (public)
+//
+//   FELLOWS section:
+//   CohortDashboardPage     - Current cohort overview across sites (team+)
+//   CohortSiteDetailPage    - Individual site detail with events/attendance (team+)
+//
+//   ADMIN section:
+//   ActivityPage            - Activity feed and interaction history (admin+)
+//   BroadcastPage           - In-app announcements & email newsletters (admin+)
+//   TeamManagementPage      - Staff account management (admin+)
+//
+//   SettingsPage            - User settings and preferences (all users)
 //
 // MODALS:
 //   FellowProfileModal      - Detailed fellow profile view
@@ -2561,31 +2570,73 @@ function Header({ onMenuOpen, pageTitle, onAddInteraction }) {
 function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
   const { user, userRole, logout, notificationSettings, canAccess, t } = useContext(AppContext);
   const roleConfig = ROLE_CONFIG[userRole] || ROLE_CONFIG[ROLES.VIEWER];
-  
-  // Menu items with optional role requirements
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '🏠', minRole: ROLES.TEAM },
-    { id: 'cohorts', label: 'Cohorts', icon: '🎓', minRole: ROLES.TEAM },
-    { id: 'directory', label: 'Directory', icon: '👥' }, // Public
-    { id: 'community', label: 'Community', icon: '📢' }, // Public - Feed only
-    { id: 'library', label: 'Library', icon: '📚' }, // Public - Resources
-    { id: 'gather-ai', label: 'GATHER.ai', icon: '✨' }, // Public - AI Search
-    { id: 'activity', label: 'Activity', icon: '📋', minRole: ROLES.TEAM },
-    { id: 'broadcast', label: 'Broadcast', icon: '📣', minRole: ROLES.TEAM },
-  ].filter(item => !item.minRole || canAccess(item.minRole));
+
+  const isStaff = canAccess(ROLES.TEAM);
+  const isAdmin = canAccess(ROLES.ADMIN);
+
+  // Menu sections with grouped items
+  const menuSections = [
+    // Dashboard - top-level for staff
+    ...(isStaff ? [{
+      items: [
+        { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
+      ]
+    }] : []),
+    // Alumni section - network directory and community
+    {
+      label: 'ALUMNI',
+      items: [
+        { id: 'directory', label: 'Directory', icon: '👥' },
+        { id: 'community', label: 'Community', icon: '📢' },
+        { id: 'library', label: 'Library', icon: '📚' },
+        { id: 'gather-ai', label: 'GATHER.ai', icon: '✨' },
+      ]
+    },
+    // Fellows section - active cohort management (staff only)
+    ...(isStaff ? [{
+      label: 'FELLOWS',
+      items: [
+        { id: 'cohorts', label: 'Cohorts', icon: '🎓' },
+      ]
+    }] : []),
+    // Admin section - admin-only tools
+    ...(isAdmin ? [{
+      label: 'ADMIN',
+      items: [
+        { id: 'activity', label: 'Activity', icon: '📋' },
+        { id: 'broadcast', label: 'Broadcast', icon: '📣' },
+        { id: 'team-management', label: 'Team', icon: '👤' },
+      ]
+    }] : []),
+  ];
+
+  const renderMenuItem = (item) => (
+    <button
+      key={item.id}
+      onClick={() => { onNavigate(item.id); onClose(); }}
+      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition ${
+        currentPage === item.id
+          ? 'bg-goldin-orange/10 text-goldin-orange'
+          : 'text-gray-700 hover:bg-gray-100'
+      }`}
+    >
+      <span className="text-xl">{item.icon}</span>
+      <span className="font-medium">{t(item.label)}</span>
+    </button>
+  );
 
   return (
     <>
       {/* Backdrop */}
-      <div 
+      <div
         className={`fixed inset-0 bg-black/40 z-50 transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
       />
-      
+
       {/* Menu */}
       <div className={`slide-menu fixed inset-y-0 left-0 w-72 bg-white z-50 shadow-2xl ${isOpen ? 'open' : ''}`}>
         <div className="safe-top" />
-        
+
         {/* User */}
         <div className="p-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
@@ -2601,41 +2652,37 @@ function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
             </div>
           </div>
         </div>
-        
-        {/* Nav */}
-        <nav className="p-3">
-          {menuItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => { onNavigate(item.id); onClose(); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition ${
-                currentPage === item.id 
-                  ? 'bg-goldin-orange/10 text-goldin-orange' 
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <span className="text-xl">{item.icon}</span>
-              <span className="font-medium">{t(item.label)}</span>
-            </button>
+
+        {/* Nav sections */}
+        <nav className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+          {menuSections.map((section, idx) => (
+            <div key={idx}>
+              {section.label && (
+                <div className={`px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 tracking-wider ${idx > 0 ? 'mt-1 border-t border-gray-100 pt-4' : ''}`}>
+                  {t(section.label)}
+                </div>
+              )}
+              {section.items.map(renderMenuItem)}
+            </div>
           ))}
         </nav>
-        
+
         <div className="border-t border-gray-100 mx-3" />
-        
-        {/* Settings */}
+
+        {/* Settings & Sign Out */}
         <nav className="p-3">
           <button
             onClick={() => { onNavigate('settings'); onClose(); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition ${
-              currentPage === 'settings' 
-                ? 'bg-goldin-orange/10 text-goldin-orange' 
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition ${
+              currentPage === 'settings'
+                ? 'bg-goldin-orange/10 text-goldin-orange'
                 : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
             <span className="text-xl">⚙️</span>
-            <span className="font-medium">Settings</span>
+            <span className="font-medium">{t('Settings')}</span>
           </button>
-          
+
           <button
             onClick={async () => {
               if (confirm('Are you sure you want to sign out?')) {
@@ -2643,13 +2690,13 @@ function SlideMenu({ isOpen, onClose, currentPage, onNavigate }) {
                 onClose();
               }
             }}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition"
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-red-600 hover:bg-red-50 transition"
           >
             <span className="text-xl">🚪</span>
-            <span className="font-medium">Sign Out</span>
+            <span className="font-medium">{t('Sign Out')}</span>
           </button>
         </nav>
-        
+
         {/* Version */}
         <div className="absolute bottom-0 left-0 right-0 p-4 text-center text-xs text-gray-400 safe-bottom">
           GATHER v2.0 • Goldin Institute
@@ -8950,10 +8997,13 @@ function MainApp() {
     }
   }, [user, isOnboarded]);
 
-  // Route protection - redirect guests from team-only pages
+  // Route protection - redirect unauthorized users
   useEffect(() => {
-    const teamOnlyPages = ['dashboard', 'activity', 'broadcast', 'team-management', 'cohorts', 'cohort-detail'];
-    if (teamOnlyPages.includes(currentPage) && !canAccess(ROLES.TEAM)) {
+    const adminOnlyPages = ['activity', 'broadcast', 'team-management'];
+    const teamOnlyPages = ['dashboard', 'cohorts', 'cohort-detail'];
+    if (adminOnlyPages.includes(currentPage) && !canAccess(ROLES.ADMIN)) {
+      setCurrentPage('directory');
+    } else if (teamOnlyPages.includes(currentPage) && !canAccess(ROLES.TEAM)) {
       setCurrentPage('directory');
     }
   }, [currentPage, userRole, canAccess]);
@@ -9021,9 +9071,9 @@ function MainApp() {
   // Page titles
   const pageTitles = {
     dashboard: 'Dashboard',
-    cohorts: 'Current Cohorts',
-    'cohort-detail': 'Cohort',
-    directory: 'Directory',
+    cohorts: 'Fellows',
+    'cohort-detail': 'Fellows',
+    directory: 'Alumni',
     community: 'Community',
     library: 'Library',
     'gather-ai': 'GATHER.ai',
@@ -9094,7 +9144,7 @@ function MainApp() {
         {currentPage === 'activity' && <ActivityPage onSelectFellow={handleSelectFellow} />}
         {currentPage === 'broadcast' && <BroadcastPage />}
         {currentPage === 'settings' && <SettingsPage onNavigate={setCurrentPage} />}
-        {currentPage === 'team-management' && <TeamManagementPage onBack={() => setCurrentPage('settings')} />}
+        {currentPage === 'team-management' && <TeamManagementPage onBack={() => setCurrentPage('dashboard')} />}
       </main>
       
       <FellowProfileModal 
