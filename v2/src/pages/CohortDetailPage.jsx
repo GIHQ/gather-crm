@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import Modal, { FormField, inputClass, selectClass, textareaClass } from '../components/ui/Modal'
 
 const PROGRAM_COLORS = {
   CPF: 'bg-blue-500',
@@ -20,21 +21,23 @@ const TABS = [
 
 export default function CohortDetailPage() {
   const { id } = useParams()
-  const { hasRole } = useAuth()
+  const { hasRole, isAdmin } = useAuth()
   const [cohort, setCohort] = useState(null)
   const [tab, setTab] = useState('roster')
   const [loading, setLoading] = useState(true)
+  const [editOpen, setEditOpen] = useState(false)
+
+  async function fetchCohort() {
+    const { data } = await supabase
+      .from('cohorts')
+      .select('*')
+      .eq('id', id)
+      .single()
+    setCohort(data)
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function fetchCohort() {
-      const { data } = await supabase
-        .from('cohorts')
-        .select('*')
-        .eq('id', id)
-        .single()
-      setCohort(data)
-      setLoading(false)
-    }
     fetchCohort()
   }, [id])
 
@@ -62,6 +65,18 @@ export default function CohortDetailPage() {
         {cohort.status === 'archived' && (
           <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">Archived</span>
         )}
+        {isAdmin && (
+          <button
+            onClick={() => setEditOpen(true)}
+            className="ml-auto text-gray-400 hover:text-goldin p-1"
+            title="Edit cohort settings"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.431.992a7.723 7.723 0 010 .255c-.007.378.138.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -86,38 +101,161 @@ export default function CohortDetailPage() {
       {tab === 'attendance' && <AttendanceTab cohortId={id} program={cohort.program} />}
       {tab === 'curriculum' && <CurriculumTab cohortId={id} />}
       {tab === 'events' && <EventsTab cohortId={id} />}
+
+      {/* Edit Cohort Modal */}
+      {editOpen && (
+        <EditCohortModal
+          cohort={cohort}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => fetchCohort()}
+        />
+      )}
     </div>
   )
 }
 
 
 // ---------------------------------------------------------------------------
-// Roster Tab
+// Edit Cohort Modal
+// ---------------------------------------------------------------------------
+
+function EditCohortModal({ cohort, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    name: cohort.name || '',
+    program: cohort.program || '',
+    city: cohort.city || '',
+    country: cohort.country || '',
+    cohort_year: cohort.cohort_year || new Date().getFullYear(),
+    status: cohort.status || 'live',
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  function handleChange(field) {
+    return (e) => setForm(prev => ({ ...prev, [field]: e.target.value }))
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+
+    const { error: err } = await supabase
+      .from('cohorts')
+      .update({
+        name: form.name,
+        program: form.program,
+        city: form.city || null,
+        country: form.country || null,
+        cohort_year: parseInt(form.cohort_year),
+        status: form.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', cohort.id)
+
+    setSaving(false)
+
+    if (err) {
+      setError(err.message)
+    } else {
+      onSaved()
+      onClose()
+    }
+  }
+
+  return (
+    <Modal open={true} onClose={onClose} title="Edit Cohort Settings">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>
+        )}
+
+        <FormField label="Cohort Name">
+          <input className={inputClass} value={form.name} onChange={handleChange('name')} required />
+        </FormField>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Program">
+            <select className={selectClass} value={form.program} onChange={handleChange('program')} required>
+              <option value="CPF">CPF (Chicago)</option>
+              <option value="GGF">GGF (Global)</option>
+              <option value="ESP">ESP (Spanish)</option>
+              <option value="DAR">DAR (Tanzania)</option>
+              <option value="MOS">MOS (Colombia)</option>
+            </select>
+          </FormField>
+          <FormField label="Year">
+            <input type="number" className={inputClass} value={form.cohort_year} onChange={handleChange('cohort_year')} min={2000} max={2100} required />
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="City">
+            <input className={inputClass} value={form.city} onChange={handleChange('city')} />
+          </FormField>
+          <FormField label="Country">
+            <input className={inputClass} value={form.country} onChange={handleChange('country')} />
+          </FormField>
+        </div>
+
+        <FormField label="Status">
+          <select className={selectClass} value={form.status} onChange={handleChange('status')}>
+            <option value="live">Live</option>
+            <option value="archived">Archived</option>
+          </select>
+        </FormField>
+
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+          <button type="submit" disabled={saving} className="px-5 py-2 bg-goldin text-white text-sm font-medium rounded-lg hover:bg-goldin-dark disabled:opacity-50 transition-colors">
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
+// Roster Tab (with add/remove members)
 // ---------------------------------------------------------------------------
 
 function RosterTab({ cohortId }) {
+  const { isAdmin } = useAuth()
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [addOpen, setAddOpen] = useState(false)
+
+  async function fetchMembers() {
+    const { data } = await supabase
+      .from('cohort_members')
+      .select(`
+        id, role,
+        contacts (
+          id, first_name, last_name, email, photo_url,
+          organization, city, country, phone
+        )
+      `)
+      .eq('cohort_id', cohortId)
+      .order('role')
+
+    if (data) setMembers(data)
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function fetch() {
-      const { data } = await supabase
-        .from('cohort_members')
-        .select(`
-          role,
-          contacts (
-            id, first_name, last_name, email, photo_url,
-            organization, city, country, phone
-          )
-        `)
-        .eq('cohort_id', cohortId)
-        .order('role')
-
-      if (data) setMembers(data)
-      setLoading(false)
-    }
-    fetch()
+    fetchMembers()
   }, [cohortId])
+
+  async function handleRemove(membershipId, contactName) {
+    if (!confirm(`Remove ${contactName} from this cohort?`)) return
+    const { error } = await supabase
+      .from('cohort_members')
+      .delete()
+      .eq('id', membershipId)
+    if (!error) fetchMembers()
+  }
 
   if (loading) return <div className="text-gray-400 py-8">Loading roster...</div>
 
@@ -128,6 +266,17 @@ function RosterTab({ cohortId }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <span className="text-sm text-gray-500">{fellows.length} fellows, {staff.length} staff</span>
+        {isAdmin && (
+          <button
+            onClick={() => setAddOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-goldin text-white text-xs font-medium hover:bg-goldin-dark transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Member
+          </button>
+        )}
       </div>
 
       {staff.length > 0 && (
@@ -135,7 +284,14 @@ function RosterTab({ cohortId }) {
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Staff</h3>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {staff.map(m => (
-              <MemberCard key={m.contacts.id} contact={m.contacts} role={m.role} />
+              <MemberCard
+                key={m.contacts.id}
+                contact={m.contacts}
+                role={m.role}
+                membershipId={m.id}
+                canRemove={isAdmin}
+                onRemove={handleRemove}
+              />
             ))}
           </div>
         </div>
@@ -147,43 +303,209 @@ function RosterTab({ cohortId }) {
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {fellows.map(m => (
-            <MemberCard key={m.contacts.id} contact={m.contacts} role={m.role} />
+            <MemberCard
+              key={m.contacts.id}
+              contact={m.contacts}
+              role={m.role}
+              membershipId={m.id}
+              canRemove={isAdmin}
+              onRemove={handleRemove}
+            />
           ))}
         </div>
+      )}
+
+      {/* Add Member Modal */}
+      {addOpen && (
+        <AddMemberModal
+          cohortId={cohortId}
+          existingMemberIds={members.map(m => m.contacts.id)}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => fetchMembers()}
+        />
       )}
     </div>
   )
 }
 
-function MemberCard({ contact, role }) {
+function MemberCard({ contact, role, membershipId, canRemove, onRemove }) {
   return (
-    <Link
-      to={`/contacts/${contact.id}`}
-      className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-md transition-shadow flex items-center gap-3"
-    >
-      <div className="w-9 h-9 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
-        {contact.photo_url ? (
-          <img src={contact.photo_url} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs font-semibold">
-            {contact.first_name?.[0]}{contact.last_name?.[0]}
-          </div>
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900 text-sm truncate">
-            {contact.first_name} {contact.last_name}
-          </span>
-          {role !== 'fellow' && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 capitalize">{role}</span>
+    <div className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-md transition-shadow flex items-center gap-3 group">
+      <Link to={`/contacts/${contact.id}`} className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-9 h-9 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+          {contact.photo_url ? (
+            <img src={contact.photo_url} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs font-semibold">
+              {contact.first_name?.[0]}{contact.last_name?.[0]}
+            </div>
           )}
         </div>
-        {contact.organization && (
-          <p className="text-xs text-gray-500 truncate">{contact.organization}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-gray-900 text-sm truncate hover:text-goldin">
+              {contact.first_name} {contact.last_name}
+            </span>
+            {role !== 'fellow' && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 capitalize">{role}</span>
+            )}
+          </div>
+          {contact.organization && (
+            <p className="text-xs text-gray-500 truncate">{contact.organization}</p>
+          )}
+        </div>
+      </Link>
+      {canRemove && (
+        <button
+          onClick={() => onRemove(membershipId, `${contact.first_name} ${contact.last_name}`)}
+          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1 transition-all"
+          title="Remove from cohort"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
+// Add Member Modal
+// ---------------------------------------------------------------------------
+
+function AddMemberModal({ cohortId, existingMemberIds, onClose, onSaved }) {
+  const [contacts, setContacts] = useState([])
+  const [contactSearch, setContactSearch] = useState('')
+  const [selectedContact, setSelectedContact] = useState(null)
+  const [role, setRole] = useState('fellow')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    async function fetch() {
+      const { data } = await supabase
+        .from('contacts')
+        .select('id, first_name, last_name, photo_url')
+        .order('first_name')
+        .limit(500)
+      // Exclude already-assigned members
+      setContacts((data || []).filter(c => !existingMemberIds.includes(c.id)))
+    }
+    fetch()
+  }, [])
+
+  const filteredContacts = contactSearch
+    ? contacts.filter(c => {
+        const q = contactSearch.toLowerCase()
+        return `${c.first_name} ${c.last_name}`.toLowerCase().includes(q)
+      }).slice(0, 8)
+    : []
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!selectedContact) {
+      setError('Please select a contact')
+      return
+    }
+    setSaving(true)
+    setError(null)
+
+    const { error: err } = await supabase
+      .from('cohort_members')
+      .insert({
+        cohort_id: cohortId,
+        contact_id: selectedContact.id,
+        role,
+      })
+
+    setSaving(false)
+
+    if (err) {
+      setError(err.message)
+    } else {
+      onSaved()
+      onClose()
+    }
+  }
+
+  return (
+    <Modal open={true} onClose={onClose} title="Add Cohort Member">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>
         )}
-      </div>
-    </Link>
+
+        {/* Contact picker */}
+        <FormField label="Contact">
+          {selectedContact ? (
+            <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+              <div className="w-7 h-7 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                {selectedContact.photo_url ? (
+                  <img src={selectedContact.photo_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-[10px] font-semibold">
+                    {selectedContact.first_name?.[0]}{selectedContact.last_name?.[0]}
+                  </div>
+                )}
+              </div>
+              <span className="text-sm font-medium text-gray-900">{selectedContact.first_name} {selectedContact.last_name}</span>
+              <button type="button" onClick={() => setSelectedContact(null)} className="ml-auto text-gray-400 hover:text-gray-600 text-xs">Change</button>
+            </div>
+          ) : (
+            <div className="relative">
+              <input
+                className={inputClass}
+                value={contactSearch}
+                onChange={(e) => setContactSearch(e.target.value)}
+                placeholder="Start typing a name..."
+                autoFocus
+              />
+              {filteredContacts.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                  {filteredContacts.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => { setSelectedContact(c); setContactSearch('') }}
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-left"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                        {c.photo_url ? (
+                          <img src={c.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400 text-[10px] font-semibold">
+                            {c.first_name?.[0]}{c.last_name?.[0]}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-sm text-gray-900">{c.first_name} {c.last_name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </FormField>
+
+        <FormField label="Role">
+          <select className={selectClass} value={role} onChange={(e) => setRole(e.target.value)}>
+            <option value="fellow">Fellow</option>
+            <option value="facilitator">Facilitator</option>
+            <option value="mentor">Mentor</option>
+            <option value="coordinator">Coordinator</option>
+          </select>
+        </FormField>
+
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+          <button type="submit" disabled={saving} className="px-5 py-2 bg-goldin text-white text-sm font-medium rounded-lg hover:bg-goldin-dark disabled:opacity-50 transition-colors">
+            {saving ? 'Adding...' : 'Add Member'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -441,24 +763,26 @@ function CurriculumTab({ cohortId }) {
 // ---------------------------------------------------------------------------
 
 function EventsTab({ cohortId }) {
+  const { isAdmin } = useAuth()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [addOpen, setAddOpen] = useState(false)
+
+  async function fetchEvents() {
+    const { data } = await supabase
+      .from('events')
+      .select('*')
+      .eq('cohort_id', cohortId)
+      .order('start_time', { ascending: false })
+    setEvents(data || [])
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function fetch() {
-      const { data } = await supabase
-        .from('events')
-        .select('*')
-        .eq('cohort_id', cohortId)
-        .order('start_time', { ascending: false })
-      setEvents(data || [])
-      setLoading(false)
-    }
-    fetch()
+    fetchEvents()
   }, [cohortId])
 
   if (loading) return <div className="text-gray-400 py-8">Loading events...</div>
-  if (events.length === 0) return <div className="text-gray-400 py-8 text-center">No events yet.</div>
 
   const TYPE_LABELS = {
     workshop: 'Workshop',
@@ -470,39 +794,196 @@ function EventsTab({ cohortId }) {
   }
 
   return (
-    <div className="space-y-2">
-      {events.map(e => {
-        const d = new Date(e.start_time)
-        const isPast = d < new Date()
-        return (
-          <div key={e.id} className={`bg-white rounded-xl border border-gray-200 p-4 ${isPast ? 'opacity-60' : ''}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                    {TYPE_LABELS[e.event_type] || e.event_type}
-                  </span>
-                  {e.is_required && <span className="text-xs text-goldin font-medium">Required</span>}
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-sm text-gray-500">{events.length} events</span>
+        {isAdmin && (
+          <button
+            onClick={() => setAddOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-goldin text-white text-xs font-medium hover:bg-goldin-dark transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Event
+          </button>
+        )}
+      </div>
+
+      {events.length === 0 ? (
+        <div className="text-gray-400 py-8 text-center">No events yet.</div>
+      ) : (
+        <div className="space-y-2">
+          {events.map(e => {
+            const d = new Date(e.start_time)
+            const isPast = d < new Date()
+            return (
+              <div key={e.id} className={`bg-white rounded-xl border border-gray-200 p-4 ${isPast ? 'opacity-60' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                        {TYPE_LABELS[e.event_type] || e.event_type}
+                      </span>
+                      {e.is_required && <span className="text-xs text-goldin font-medium">Required</span>}
+                    </div>
+                    <h4 className="font-medium text-gray-900">{e.title}</h4>
+                    {e.description && <p className="text-sm text-gray-500 mt-1">{e.description}</p>}
+                  </div>
+                  <div className="text-right text-sm text-gray-500 whitespace-nowrap">
+                    <div>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                    {d.getHours() > 0 && (
+                      <div className="text-xs">{d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
+                    )}
+                  </div>
                 </div>
-                <h4 className="font-medium text-gray-900">{e.title}</h4>
-                {e.description && <p className="text-sm text-gray-500 mt-1">{e.description}</p>}
-              </div>
-              <div className="text-right text-sm text-gray-500 whitespace-nowrap">
-                <div>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                {d.getHours() > 0 && (
-                  <div className="text-xs">{d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
+                {(e.location || e.facilitator) && (
+                  <div className="flex gap-4 mt-2 text-xs text-gray-400">
+                    {e.location && <span>{e.location}</span>}
+                    {e.facilitator && <span>Facilitator: {e.facilitator}</span>}
+                  </div>
                 )}
               </div>
-            </div>
-            {(e.location || e.facilitator) && (
-              <div className="flex gap-4 mt-2 text-xs text-gray-400">
-                {e.location && <span>{e.location}</span>}
-                {e.facilitator && <span>Facilitator: {e.facilitator}</span>}
-              </div>
-            )}
-          </div>
-        )
-      })}
+            )
+          })}
+        </div>
+      )}
+
+      {/* Add Event Modal */}
+      {addOpen && (
+        <AddEventModal
+          cohortId={cohortId}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => fetchEvents()}
+        />
+      )}
     </div>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
+// Add Event Modal
+// ---------------------------------------------------------------------------
+
+function AddEventModal({ cohortId, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    event_type: 'workshop',
+    start_time: '',
+    end_time: '',
+    location: '',
+    facilitator: '',
+    is_required: true,
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  function handleChange(field) {
+    return (e) => {
+      const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value
+      setForm(prev => ({ ...prev, [field]: val }))
+    }
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!form.title || !form.start_time) {
+      setError('Title and start time are required')
+      return
+    }
+    setSaving(true)
+    setError(null)
+
+    const { error: err } = await supabase
+      .from('events')
+      .insert({
+        cohort_id: cohortId,
+        title: form.title,
+        description: form.description || null,
+        event_type: form.event_type,
+        start_time: form.start_time,
+        end_time: form.end_time || null,
+        location: form.location || null,
+        facilitator: form.facilitator || null,
+        is_required: form.is_required,
+      })
+
+    setSaving(false)
+
+    if (err) {
+      setError(err.message)
+    } else {
+      onSaved()
+      onClose()
+    }
+  }
+
+  return (
+    <Modal open={true} onClose={onClose} title="Add Event">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>
+        )}
+
+        <FormField label="Title">
+          <input className={inputClass} value={form.title} onChange={handleChange('title')} required placeholder="e.g. Week 3 Workshop" />
+        </FormField>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Type">
+            <select className={selectClass} value={form.event_type} onChange={handleChange('event_type')}>
+              <option value="workshop">Workshop</option>
+              <option value="social">Social</option>
+              <option value="orientation">Orientation</option>
+              <option value="field_trip">Field Trip</option>
+              <option value="guest_speaker">Guest Speaker</option>
+              <option value="other">Other</option>
+            </select>
+          </FormField>
+          <FormField label="Required">
+            <div className="flex items-center gap-2 h-[38px]">
+              <input
+                type="checkbox"
+                checked={form.is_required}
+                onChange={handleChange('is_required')}
+                className="rounded border-gray-300 text-goldin focus:ring-goldin"
+              />
+              <span className="text-sm text-gray-700">Required for attendance</span>
+            </div>
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Start Time">
+            <input type="datetime-local" className={inputClass} value={form.start_time} onChange={handleChange('start_time')} required />
+          </FormField>
+          <FormField label="End Time">
+            <input type="datetime-local" className={inputClass} value={form.end_time} onChange={handleChange('end_time')} />
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Location">
+            <input className={inputClass} value={form.location} onChange={handleChange('location')} placeholder="e.g. Room 201, Main Building" />
+          </FormField>
+          <FormField label="Facilitator">
+            <input className={inputClass} value={form.facilitator} onChange={handleChange('facilitator')} />
+          </FormField>
+        </div>
+
+        <FormField label="Description">
+          <textarea className={textareaClass} rows={3} value={form.description} onChange={handleChange('description')} placeholder="Event details..." />
+        </FormField>
+
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+          <button type="submit" disabled={saving} className="px-5 py-2 bg-goldin text-white text-sm font-medium rounded-lg hover:bg-goldin-dark disabled:opacity-50 transition-colors">
+            {saving ? 'Creating...' : 'Create Event'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
