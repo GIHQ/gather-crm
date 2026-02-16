@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { programLabel, programColor } from '../lib/programs'
 
 export default function AlumniPage() {
   const [contacts, setContacts] = useState([])
@@ -14,7 +13,7 @@ export default function AlumniPage() {
     async function fetchAlumni() {
       const { data, error } = await supabase
         .from('contacts')
-        .select('id, first_name, last_name, email, photo_url, program, cohort, status, organization, city, country, job_title, focus_area_1, biography')
+        .select('id, first_name, last_name, email, photo_url, program, cohort, status, organization, city, country, job_title, biography')
         .eq('is_active', true)
         .order('last_name')
 
@@ -40,8 +39,7 @@ export default function AlumniPage() {
         c.last_name?.toLowerCase().includes(q) ||
         c.organization?.toLowerCase().includes(q) ||
         c.city?.toLowerCase().includes(q) ||
-        c.country?.toLowerCase().includes(q) ||
-        c.focus_area_1?.toLowerCase().includes(q)
+        c.country?.toLowerCase().includes(q)
       )
     }
     return true
@@ -111,16 +109,9 @@ function ContactCard({ contact }) {
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900 text-sm truncate">
-            {contact.first_name} {contact.last_name}
-          </span>
-          {contact.program && (
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-white flex-shrink-0 ${programColor(contact.program)}`}>
-              {programLabel(contact.program, contact.cohort)}
-            </span>
-          )}
-        </div>
+        <span className="font-medium text-gray-900 text-sm truncate">
+          {contact.first_name} {contact.last_name}
+        </span>
         {(contact.job_title || contact.organization) && (
           <p className="text-xs text-gray-500 truncate">
             {contact.job_title && contact.organization
@@ -130,11 +121,6 @@ function ContactCard({ contact }) {
         )}
         {contact.city && (
           <p className="text-xs text-gray-400 truncate">{contact.city}{contact.country ? `, ${contact.country}` : ''}</p>
-        )}
-        {contact.focus_area_1 && (
-          <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-goldin/10 text-goldin truncate max-w-full">
-            {contact.focus_area_1}
-          </span>
         )}
       </div>
     </Link>
